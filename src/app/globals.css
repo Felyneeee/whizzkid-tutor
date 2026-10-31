@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-brand-50/40 text-slate-800 antialiased;
+  background-image: radial-gradient(circle at 12% 8%, #fff3c466 0, transparent 28%), radial-gradient(circle at 92% 4%, #d9eaff99 0, transparent 30%);
+  background-attachment: fixed;
+}
+
+/* Anti-leak: learning-material viewer */
+.secure-viewer {
+  -webkit-user-select: none;
+  user-select: none;
+}
+@media print {
+  .secure-viewer {
+    display: none !important;
+  }
+}
