@@ -22,4 +22,3 @@ Notifications currently appear in the app. `email` and `sms` values attached to 
 
 Supabase migrations are an unconnected future-backend artifact. `whizzkids.db` is a disconnected SQLite file; MySQL/MariaDB is the active database.
 
-The `lint` script uses Next.js's ESLint integration, but the root package currently does not include ESLint or an ESLint configuration. Install and configure ESLint before relying on that script.
