@@ -2,13 +2,8 @@
 import { useState } from "react";
 import { Alert, Badge, Button, Card, Empty, Field, Input, Modal, PageHeader, Tabs, Textarea } from "@/components/ui";
 import { fmtDateTime } from "@/lib/dates";
+import { downloadPdfDataUrl } from "@/lib/files";
 import { useStore } from "@/lib/store";
-function openDataUrl(data) {
-    // data URLs can't be navigated to by top-level frames in some browsers; convert to a blob first
-    fetch(data)
-        .then((r) => r.blob())
-        .then((b) => window.open(URL.createObjectURL(b), "_blank"));
-}
 export default function Applications() {
     const s = useStore();
     const [tab, setTab] = useState("new");
@@ -46,7 +41,11 @@ export default function Applications() {
               {t.bio && <p className="text-sm text-slate-600">{t.bio}</p>}
               <div className="text-sm">
                 <b>Resume:</b>{" "}
-                {t.resumeData ? (<button className="font-bold text-brand-600 underline" onClick={() => openDataUrl(t.resumeData)}>{t.resumeName}</button>) : (<span className="text-slate-500">{t.resumeName || "not provided"}</span>)}
+                {t.resumeData ? (<button className="font-bold text-brand-600 underline" onClick={() => {
+                    if (!downloadPdfDataUrl(t.resumeName, t.resumeData)) {
+                        window.alert("This resume is not a valid PDF and cannot be downloaded.");
+                    }
+                }}>{t.resumeName}</button>) : (<span className="text-slate-500">{t.resumeName || "not provided"}</span>)}
               </div>
               {t.status === "interview" && t.interviewAt && <Alert kind="info">Interview: {fmtDateTime(t.interviewAt)}</Alert>}
               {t.rejectionReason && <Alert kind="error">{t.rejectionReason}</Alert>}

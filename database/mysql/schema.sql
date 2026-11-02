@@ -3,8 +3,8 @@
 CREATE DATABASE IF NOT EXISTS whizzkids CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE whizzkids;
 
--- Server-owned application state. Changes are serialized under a row lock,
--- while action validation and business rules run in Next.js server routes.
+-- Initialization marker and transaction lock for application data. The legacy
+-- JSON payload is cleared after its one-time import; business records live below.
 CREATE TABLE IF NOT EXISTS application_state (
   id TINYINT UNSIGNED PRIMARY KEY,
   state_json LONGTEXT NOT NULL,
@@ -52,6 +52,14 @@ CREATE TABLE IF NOT EXISTS tutor_profiles (
   interview_at DATETIME NULL, interview_notes TEXT NULL, rejection_reason TEXT NULL,
   birthday DATE NULL, last_greeting_year SMALLINT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS tutor_schedules (
+  tutor_id VARCHAR(64) PRIMARY KEY,
+  days JSON NOT NULL,
+  modalities JSON NOT NULL,
+  updated_at DATETIME NOT NULL,
+  FOREIGN KEY (tutor_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS availability (

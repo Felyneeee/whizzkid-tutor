@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Alert, Badge, Button, Card, Chips, Field, Input, PageHeader, Textarea, peso } from "@/components/ui";
 import { GRADE_BANDS, SUBJECTS } from "@/lib/constants";
-import { readFileAsDataURL } from "@/lib/files";
+import { readFileAsDataURL, readPdfAsDataURL } from "@/lib/files";
 import { useStore } from "@/lib/store";
 export default function TutorProfilePage() {
     const s = useStore();
@@ -19,7 +19,9 @@ export default function TutorProfilePage() {
         if (!file)
             return;
         try {
-            const data = await readFileAsDataURL(file);
+            const data = kind === "photo"
+                ? await readFileAsDataURL(file)
+                : await readPdfAsDataURL(file);
             if (kind === "photo")
                 setPhoto(data);
             else
@@ -51,8 +53,8 @@ export default function TutorProfilePage() {
           <Chips multi options={GRADE_BANDS} value={bands} onChange={setBands}/>
         </Field>
         <Field label="Bio"><Textarea value={f.bio} onChange={set("bio")}/></Field>
-        <Field label="Resume" hint={resume.name}>
-          <Input type="file" accept=".pdf,.doc,.docx" onChange={(e) => up(e.target.files?.[0], "resume")}/>
+        <Field label="Resume (PDF)" hint={resume.name}>
+          <Input type="file" accept=".pdf,application/pdf" onChange={(e) => up(e.target.files?.[0], "resume")}/>
         </Field>
         <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Pay rate (set by admin): {peso(t.hourlyRate)} / hour{t.fixedSalary ? ` + ${peso(t.fixedSalary)} fixed monthly` : ""}</div>
         {msg && <Alert kind={msg.k === "success" ? "success" : "error"}>{msg.t}</Alert>}

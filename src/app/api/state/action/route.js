@@ -4,6 +4,8 @@ import { readApplicationState, stateVisibleToUser } from "@/server/application-s
 import { authenticatedUser } from "@/server/auth";
 import { createBusinessActions } from "@/server/business-actions";
 import { mysqlPool } from "@/server/mysql";
+import { persistRelationalState } from "@/server/relational-state";
+import { isValidPdfDataUrl } from "@/lib/resumes";
 
 export const runtime = "nodejs";
 
@@ -33,6 +35,13 @@ export async function POST(request) {
       await connection.rollback();
       return NextResponse.json({ error: permission.error }, { status: 403 });
     }
+    if (body.action === "saveTutorProfile") {
+      const resumeData = permission.args[1]?.resumeData;
+      if (resumeData && !isValidPdfDataUrl(resumeData)) {
+        await connection.rollback();
+        return NextResponse.json({ error: "Upload a valid PDF resume no larger than 1.5 MB." }, { status: 400 });
+      }
+    }
 
     let nextState = state;
     const actions = createBusinessActions({
@@ -55,9 +64,9 @@ export async function POST(request) {
       await connection.rollback();
       return NextResponse.json({ error: result.error, result }, { status: 409 });
     }
+    await persistRelationalState(connection, nextState, state);
     await connection.execute(
-      "UPDATE application_state SET state_json = ?, revision = revision + 1 WHERE id = 1",
-      [JSON.stringify(nextState)],
+      "UPDATE application_state SET revision = revision + 1 WHERE id = 1",
     );
     await connection.commit();
     return NextResponse.json({ result: result ?? { ok: true }, db: stateVisibleToUser(nextState, user) });

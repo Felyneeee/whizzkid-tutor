@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { hashPassword, issueSession } from "@/server/auth";
 import { mysqlPool } from "@/server/mysql";
+import { isValidPdfDataUrl } from "@/lib/resumes";
 export const runtime = "nodejs";
 export async function POST(request) {
     let connection;
@@ -33,8 +34,8 @@ export async function POST(request) {
         if (!fullName || fullName.length > 200 || !contact || !age || !birthday || !subjects.length || !gradeBands.length) {
             return NextResponse.json({ error: "Complete all required tutor application fields." }, { status: 400 });
         }
-        if (applicantType === "new" && (!resumeData || resumeData.length > 2000000)) {
-            return NextResponse.json({ error: "Upload a resume no larger than 1.5 MB." }, { status: 400 });
+        if ((applicantType === "new" && !resumeData) || (resumeData && !isValidPdfDataUrl(resumeData))) {
+            return NextResponse.json({ error: "Upload a valid PDF resume no larger than 1.5 MB." }, { status: 400 });
         }
         if (photo.length > 2000000) {
             return NextResponse.json({ error: "Profile photo is too large." }, { status: 400 });
@@ -51,21 +52,26 @@ export async function POST(request) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [id, applicantType, applicantType === "new" ? "pending_review" : "pending_verification",
             fullName, photo, age, contact, resumeName, resumeData, bio,
             JSON.stringify(subjects), JSON.stringify(gradeBands), birthday]);
-        const [appStateRows] = await connection.query("SELECT state_json FROM application_state WHERE id = 1 FOR UPDATE");
+        const [appStateRows] = await connection.query("SELECT id FROM application_state WHERE id = 1 FOR UPDATE");
         if (appStateRows.length) {
-            const appState = JSON.parse(appStateRows[0].state_json);
-            const createdAtText = createdAt.toISOString();
+            const createdAtText = createdAt.toISOString().slice(0, 19).replace("T", " ");
             const adminText = `${applicantType === "new" ? "New tutor application" : "Existing tutor registration"} from ${fullName}`;
-            appState.notifications ??= [];
-            for (const admin of appState.users.filter((account) => account.role === "admin")) {
-                appState.notifications.unshift({ id: randomUUID(), userId: admin.id, text: adminText, at: createdAtText, read: false, channels: ["web"] });
+            const [admins] = await connection.query("SELECT id FROM users WHERE role = 'admin'");
+            const notificationRows = admins.map((admin) => [
+                randomUUID(), admin.id, adminText, createdAtText, JSON.stringify(["web"]),
+            ]);
+            notificationRows.push([
+                randomUUID(), id,
+                applicantType === "new" ? "Application received. Status: Pending Review." : "Registration received. Status: Pending Verification.",
+                createdAtText, JSON.stringify(["web"]),
+            ]);
+            for (const row of notificationRows) {
+                await connection.execute(
+                    "INSERT INTO notifications (id, user_id, notification_text, created_at, channels) VALUES (?, ?, ?, ?, ?)",
+                    row,
+                );
             }
-            appState.notifications.unshift({
-                id: randomUUID(), userId: id,
-                text: applicantType === "new" ? "Application received. Status: Pending Review." : "Registration received. Status: Pending Verification.",
-                at: createdAtText, read: false, channels: ["web"],
-            });
-            await connection.execute("UPDATE application_state SET state_json = ?, revision = revision + 1 WHERE id = 1", [JSON.stringify(appState)]);
+            await connection.execute("UPDATE application_state SET revision = revision + 1 WHERE id = 1");
         }
         await connection.commit();
         const user = { id, role: "tutor", email, username, createdAt: createdAt.toISOString() };

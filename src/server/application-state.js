@@ -2,6 +2,11 @@ import "server-only";
 import { buildSeed } from "@/lib/seed";
 import { isBirthdayToday, nowISO, uid } from "@/lib/dates";
 import { mysqlPool } from "@/server/mysql";
+import {
+  hasLegacyRelationalData,
+  loadRelationalState,
+  persistRelationalState,
+} from "@/server/relational-state";
 
 function jsonValue(value, fallback) {
   if (value == null) return fallback;
@@ -19,6 +24,35 @@ function publicUser(row) {
     username: row.username,
     createdAt: new Date(row.created_at).toISOString(),
   };
+}
+
+async function remapLegacyUserIds(connection, state, adminUser) {
+  const [rows] = await connection.query("SELECT id, role, email, username FROM users");
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const byEmail = new Map(rows.map((row) => [`${row.role}:${row.email.toLowerCase()}`, row]));
+  const byUsername = new Map(rows.map((row) => [`${row.role}:${row.username.toLowerCase()}`, row]));
+  const currentAdminId = adminUser?.id ?? rows.find((row) => row.role === "admin")?.id ?? "u_admin";
+  const replacements = new Map([["u_admin", currentAdminId]]);
+
+  for (const legacyUser of state.users ?? []) {
+    const account = byId.get(legacyUser.id)
+      ?? byEmail.get(`${legacyUser.role}:${String(legacyUser.email ?? "").toLowerCase()}`)
+      ?? byUsername.get(`${legacyUser.role}:${String(legacyUser.username ?? "").toLowerCase()}`);
+    if (account) replacements.set(legacyUser.id, account.id);
+  }
+
+  const replaceIds = (value) => {
+    if (typeof value === "string") return replacements.get(value) ?? value;
+    if (Array.isArray(value)) return value.map(replaceIds);
+    if (value && typeof value === "object") {
+      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, replaceIds(item)]));
+    }
+    return value;
+  };
+  const normalized = replaceIds(state);
+  const accountIds = new Set(rows.map((row) => row.id));
+  normalized.users = (normalized.users ?? []).filter((entry) => accountIds.has(entry.id));
+  return normalized;
 }
 
 async function mergeAccountTables(connection, state) {
@@ -73,7 +107,8 @@ export async function readApplicationState(connection, { lock = false, create = 
   const suffix = lock ? " FOR UPDATE" : "";
   const [rows] = await connection.query(`SELECT state_json, revision FROM application_state WHERE id = 1${suffix}`);
   let initialized = rows.length > 0;
-  let state = initialized ? jsonValue(rows[0].state_json, buildSeed()) : buildSeed();
+  const legacyState = initialized ? jsonValue(rows[0].state_json, buildSeed()) : null;
+  let state = legacyState ?? buildSeed();
   state = { ...buildSeed(), ...state };
   for (const [key, empty] of Object.entries(buildSeed())) {
     if (Array.isArray(empty)) {
@@ -82,18 +117,25 @@ export async function readApplicationState(connection, { lock = false, create = 
       state[key] = empty;
     }
   }
+  if (initialized && hasLegacyRelationalData(legacyState)) {
+    state = await remapLegacyUserIds(connection, state);
+  }
   await mergeAccountTables(connection, state);
+  const loaded = await loadRelationalState(connection, state);
+  state = loaded.state;
+
+  if (initialized && hasLegacyRelationalData(legacyState)) {
+    await persistRelationalState(connection, state, loaded.persistedState);
+    await connection.execute(
+      "UPDATE application_state SET state_json = '{}', revision = revision + 1 WHERE id = 1",
+    );
+  }
 
   if (create && !initialized) {
     await connection.execute(
-      "INSERT IGNORE INTO application_state (id, state_json, revision) VALUES (1, ?, 1)",
-      [JSON.stringify(state)],
+      "INSERT IGNORE INTO application_state (id, state_json, revision) VALUES (1, '{}', 1)",
     );
-    const [createdRows] = await connection.query(`SELECT state_json, revision FROM application_state WHERE id = 1${suffix}`);
-    if (createdRows.length) {
-      initialized = true;
-      state = { ...buildSeed(), ...jsonValue(createdRows[0].state_json, state) };
-    }
+    initialized = true;
   }
 
   return { state, initialized };
@@ -143,10 +185,11 @@ export async function readStateForUser(user) {
   try {
     await connection.beginTransaction();
     const result = await readApplicationState(connection, { lock: true });
+    const previousState = structuredClone(result.state);
     if (user.role === "admin" && result.initialized && runBirthdayGreetings(result.state)) {
+      await persistRelationalState(connection, result.state, previousState);
       await connection.execute(
-        "UPDATE application_state SET state_json = ?, revision = revision + 1 WHERE id = 1",
-        [JSON.stringify(result.state)],
+        "UPDATE application_state SET revision = revision + 1 WHERE id = 1",
       );
     }
     await connection.commit();
@@ -166,8 +209,7 @@ export async function initializeApplicationState(importedState, user) {
     const initial = buildSeed();
     await mergeAccountTables(connection, initial);
     const [insertResult] = await connection.execute(
-      "INSERT IGNORE INTO application_state (id, state_json, revision) VALUES (1, ?, 1)",
-      [JSON.stringify(initial)],
+      "INSERT IGNORE INTO application_state (id, state_json, revision) VALUES (1, '{}', 1)",
     );
     if (!insertResult.affectedRows) {
       const current = await readApplicationState(connection, { lock: true });
@@ -191,22 +233,13 @@ export async function initializeApplicationState(importedState, user) {
       return userRecord;
     });
 
-    const legacyAdminId = "u_admin";
-    const replaceAdminId = (value) => {
-      if (value === legacyAdminId) return user.id;
-      if (Array.isArray(value)) return value.map(replaceAdminId);
-      if (value && typeof value === "object") {
-        return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, replaceAdminId(item)]));
-      }
-      return value;
-    };
-    const normalized = replaceAdminId(safeState);
+    const normalized = await remapLegacyUserIds(connection, safeState, user);
     normalized.users = normalized.users.filter((entry) => entry.id !== user.id);
     normalized.users.unshift(user);
     await mergeAccountTables(connection, normalized);
+    await persistRelationalState(connection, normalized, initial);
     await connection.execute(
-      "UPDATE application_state SET state_json = ?, revision = revision + 1 WHERE id = 1",
-      [JSON.stringify(normalized)],
+      "UPDATE application_state SET state_json = '{}', revision = revision + 1 WHERE id = 1",
     );
     await connection.commit();
     return normalized;

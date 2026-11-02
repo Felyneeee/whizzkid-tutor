@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Alert, Button, Card, Chips, Field, Input, Textarea, cn } from "@/components/ui";
 import { GRADE_BANDS, READING_SKILLS, SUBJECTS } from "@/lib/constants";
 import { ageFromBirthday, todayISO } from "@/lib/dates";
-import { readFileAsDataURL } from "@/lib/files";
+import { readFileAsDataURL, readPdfAsDataURL } from "@/lib/files";
 import { useStore } from "@/lib/store";
 export default function RegisterTutor() {
     const s = useStore();
@@ -24,7 +24,9 @@ export default function RegisterTutor() {
         if (!file)
             return;
         try {
-            const data = await readFileAsDataURL(file);
+            const data = kind === "resume"
+                ? await readPdfAsDataURL(file)
+                : await readFileAsDataURL(file);
             if (kind === "resume")
                 setResume({ name: file.name, data });
             else
@@ -111,8 +113,8 @@ export default function RegisterTutor() {
         <Field label="Short bio / experience">
           <Textarea value={f.bio} onChange={set("bio")}/>
         </Field>
-        <Field label={type === "new" ? "Resume (PDF/DOC)" : "Resume (optional)"} hint={resume.name || undefined}>
-          <Input type="file" accept=".pdf,.doc,.docx" onChange={(e) => upload(e.target.files?.[0], "resume")}/>
+        <Field label={type === "new" ? "Resume (PDF)" : "Resume (optional PDF)"} hint={resume.name || undefined}>
+          <Input type="file" accept=".pdf,application/pdf" onChange={(e) => upload(e.target.files?.[0], "resume")}/>
         </Field>
         {err && <Alert kind="error">{err}</Alert>}
         {success && <Alert kind="success">{success}</Alert>}
