@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { buildSeed } from "./seed";
 import { addDays, rangeDates } from "./dates";
 
@@ -62,12 +62,12 @@ export function StoreProvider({ children }) {
   const dbRef = useRef(db);
   const legacyDbRef = useRef(null);
 
-  const acceptState = (next) => {
+  const acceptState = useCallback((next) => {
     dbRef.current = next;
     setDb(next);
-  };
+  }, []);
 
-  const loadState = async (user) => {
+  const loadState = useCallback(async (user) => {
     let response = await requestJson("/api/state");
     if (!response.ok) return response;
     let data = response.payload;
@@ -87,7 +87,7 @@ export function StoreProvider({ children }) {
     }
     acceptState(data.db);
     return { ok: true, payload: data };
-  };
+  }, [acceptState]);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,7 +111,7 @@ export function StoreProvider({ children }) {
     };
     void start();
     return () => { cancelled = true; };
-  }, []);
+  }, [acceptState, loadState]);
 
   const me = useMemo(() => db.users?.find((user) => user.id === meId) ?? null, [db, meId]);
 
@@ -160,7 +160,7 @@ export function StoreProvider({ children }) {
       registerTutor(value) { return register("/api/auth/register/tutor", value); },
       ...actions,
     };
-  }, [db, ready, me]);
+  }, [acceptState, db, loadState, ready, me]);
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }

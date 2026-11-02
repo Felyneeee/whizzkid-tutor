@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import { useState } from "react";
 import { Alert, Badge, Button, Card, Chips, Field, Input, PageHeader, Textarea, peso } from "@/components/ui";
 import { GRADE_BANDS, SUBJECTS } from "@/lib/constants";
@@ -35,7 +36,7 @@ export default function TutorProfilePage() {
       <PageHeader title="My profile" subtitle="Personal and professional information." action={<Badge status={t.status}/>}/>
       <Card className="max-w-3xl space-y-4">
         <div className="flex items-center gap-4">
-          {photo ? <img src={photo} alt="" className="h-20 w-20 rounded-2xl object-cover"/> : <div className="grid h-20 w-20 place-items-center rounded-2xl bg-brand-100 text-3xl">🧑‍🏫</div>}
+          {photo ? <Image src={photo} alt="" width={80} height={80} unoptimized className="h-20 w-20 rounded-2xl object-cover"/> : <div className="grid h-20 w-20 place-items-center rounded-2xl bg-brand-100 text-3xl">🧑‍🏫</div>}
           <Field label="Profile photo">
             <Input type="file" accept="image/*" onChange={(e) => up(e.target.files?.[0], "photo")}/>
           </Field>

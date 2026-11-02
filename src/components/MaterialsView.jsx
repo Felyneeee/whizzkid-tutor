@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import { Eye, Lock, ShieldAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { fmtDateTime } from "@/lib/dates";
@@ -70,7 +71,7 @@ function SecureViewer({ m, viewer, onClose }) {
     return (<Modal open onClose={onClose} title={m.title} wide>
       <div className="secure-viewer relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50" onContextMenu={(e) => e.preventDefault()} onCopy={(e) => e.preventDefault()} onDragStart={(e) => e.preventDefault()}>
         <div className={blurred ? "pointer-events-none blur-xl" : ""}>
-          {m.mime.startsWith("image/") && blob && <img src={blob} alt={m.title} draggable={false} className="mx-auto max-h-[60vh] select-none"/>}
+          {m.mime.startsWith("image/") && blob && <Image src={blob} alt={m.title} width={1200} height={900} unoptimized draggable={false} className="mx-auto h-auto max-h-[60vh] w-auto max-w-full select-none"/>}
           {m.mime === "application/pdf" && blob && <iframe title={m.title} src={`${blob}#toolbar=0&navpanes=0&scrollbar=1`} className="h-[60vh] w-full"/>}
           {m.mime.startsWith("text/") && <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap p-4 text-sm">{text}</pre>}
           {!m.data && <div className="p-8 text-center text-sm text-slate-500">{m.note || "No preview content stored for this demo file."}</div>}

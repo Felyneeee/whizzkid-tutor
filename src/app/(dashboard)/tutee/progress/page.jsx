@@ -17,7 +17,7 @@ export default function TuteeProgressPage() {
         <Stat label="Skills marked mastered" value={mastered} tone="mint"/>
         <Stat label="Latest mastery check" value={latestScore == null ? "—" : `${latestScore}%`} tone="sunny"/>
       </div>
-      {reports.length === 0 ? <Empty>Your tutor's progress updates will appear here after completed sessions.</Empty> : (<div className="space-y-3">
+      {reports.length === 0 ? <Empty>Your tutor&apos;s progress updates will appear here after completed sessions.</Empty> : (<div className="space-y-3">
           {reports.map((report) => (<Card key={report.id}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
