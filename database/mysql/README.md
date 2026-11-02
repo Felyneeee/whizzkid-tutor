@@ -7,6 +7,7 @@ The app stores accounts and business records in relational MySQL/MariaDB tables.
 1. Start **MySQL** in the XAMPP Control Panel. Apache is not needed by Next.js.
 2. Open phpMyAdmin at `http://localhost/phpmyadmin`.
 3. Import [`schema.sql`](schema.sql). It creates the `whizzkids` database and tables, including `application_state` and `tutor_schedules`. Re-import it after an application update to create any newly added tables; existing rows are preserved.
+   For an existing database, also run [`20261102_add_tutor_checked_in_at.sql`](migrations/20261102_add_tutor_checked_in_at.sql) in phpMyAdmin before starting the updated app.
 4. In phpMyAdmin, create a database user named `whizzkids_app` restricted to `localhost`, with a strong password. Grant it only `SELECT`, `INSERT`, `UPDATE`, and `DELETE` on the `whizzkids` database. Do not use the XAMPP `root` account from the app.
 5. Copy the root `.env.example` to `.env.local` and replace `CHANGE_ME` with the database user's password. `.env.local` is ignored by Git. The connection module and `/api/health` endpoint are now in place.
 6. Start the Next.js app with `npm run dev`, then visit `http://localhost:3000/api/health`. A successful connection returns `{"ok":true,"database":"whizzkids"}`.

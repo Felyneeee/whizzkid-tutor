@@ -15,7 +15,7 @@ export default function Purchases() {
     const orders = s.db.purchases.filter((p) => p.tuteeId === id);
     return (<>
       <PageHeader title="Purchases" subtitle="Shirts, workbooks and other miscellaneous fees."/>
-      {done && <div className="mb-4"><Alert kind="success">Order placed! Please settle payment at the center.</Alert></div>}
+      {done && <div className="mb-4"><Alert kind="success">Order placed! Pay at the center. An administrator will mark it paid, then released after handing over the items.</Alert></div>}
       <div className="grid gap-3 md:grid-cols-2">
         {SHOP_ITEMS.map((i) => (<Card key={i.sku} className="flex items-center justify-between !p-4">
             <div>

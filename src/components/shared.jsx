@@ -27,7 +27,7 @@ export function NotificationsView({ userId }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [list.length, userId]);
     return (<>
-      <PageHeader title="Notifications" subtitle="Web notifications — with email and SMS delivery simulated (see channel icons)."/>
+      <PageHeader title="Notifications" subtitle="In-app notifications. Email and SMS channel labels are planned delivery metadata; external messages are not sent."/>
       {list.length === 0 ? (<Empty>You're all caught up.</Empty>) : (<div className="space-y-2">
           {list.map((n) => (<Card key={n.id} className={cn("flex items-start gap-3 !p-4", !n.read && "border-brand-200 bg-brand-50/40")}>
               <div className="flex-1">

@@ -11,9 +11,9 @@ const ADMIN_ACTIONS = new Set([
 
 const TUTEE_ACTIONS = new Set([
   "bookAssessment", "cancelAssessment", "bookPlaygroup", "submitTutorialBooking", "placeOrder",
-  "rateSession", "checkInSession",
+  "rateSession",
 ]);
-const TUTOR_ACTIONS = new Set(["submitAvailability", "submitLeave", "submitProgressReport"]);
+const TUTOR_ACTIONS = new Set(["submitAvailability", "submitLeave", "submitProgressReport", "checkInSession"]);
 const SHARED_ACTIONS = new Set([
   "markNotificationsRead", "markMessageNotificationsRead", "sendMessage", "logMaterialAccess",
   "saveTuteeProfile", "saveTutorProfile", "decideBookingScheduleProposal",
@@ -62,11 +62,16 @@ export function authorizeBusinessAction(state, user, action, args) {
   if (action === "bookAssessment" || action === "bookPlaygroup") safeArgs[0] = user.id;
   if (action === "submitTutorialBooking") safeArgs[0] = { ...(safeArgs[0] || {}), tuteeId: user.id };
   if (action === "placeOrder") safeArgs[0] = user.id;
+  if (action === "placeOrder") {
+    if (!Array.isArray(safeArgs[1]) || safeArgs[1].length < 1 || safeArgs[1].length > 20) return deny("Choose between 1 and 20 order items.");
+    safeArgs[1] = safeArgs[1].map((item) => ({ sku: item?.sku, qty: item?.qty }));
+  }
   if (action === "submitAvailability" || action === "submitLeave") safeArgs[0] = user.id;
+  if (action === "submitProgressReport") safeArgs[2] = user.id;
   if (action === "checkInSession") {
-    safeArgs[1] = user.id;
     const session = state.sessions.find((entry) => entry.id === safeArgs[0]);
-    if (!session || session.tuteeId !== user.id) return deny();
+    if (!session || session.tutorId !== user.id) return deny();
+    safeArgs[1] = user.id;
   }
   if (action === "rateSession") {
     const session = state.sessions.find((entry) => entry.id === safeArgs[0]);

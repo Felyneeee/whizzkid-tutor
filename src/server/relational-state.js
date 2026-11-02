@@ -158,13 +158,15 @@ const tables = [
     toRow: (s) => ({
       id: s.id, booking_id: s.bookingId, tutor_id: s.tutorId, tutee_id: s.tuteeId,
       session_date: s.date, session_time: s.time, modality: s.modality, status: s.status,
-      tutee_checked_in_at: sqlDateTime(s.tuteeCheckedInAt), attended: s.attended ?? null,
+      tutee_checked_in_at: sqlDateTime(s.tuteeCheckedInAt),
+      tutor_checked_in_at: sqlDateTime(s.tutorCheckedInAt), attended: s.attended ?? null,
       rating: s.rating ?? null, feedback: s.feedback ?? null,
     }),
     fromRow: (r) => ({
       id: r.id, bookingId: r.booking_id, tutorId: r.tutor_id, tuteeId: r.tutee_id,
       date: dateOnly(r.session_date), time: r.session_time, modality: r.modality, status: r.status,
       ...(r.tutee_checked_in_at ? { tuteeCheckedInAt: isoDateTime(r.tutee_checked_in_at) } : {}),
+      ...(r.tutor_checked_in_at ? { tutorCheckedInAt: isoDateTime(r.tutor_checked_in_at) } : {}),
       attended: r.attended == null ? null : Boolean(r.attended),
       ...(r.rating == null ? {} : { rating: Number(r.rating) }),
       ...(r.feedback == null ? {} : { feedback: r.feedback }),

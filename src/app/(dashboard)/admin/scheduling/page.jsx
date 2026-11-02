@@ -14,6 +14,8 @@ export default function Scheduling() {
     const [rescheduleError, setRescheduleError] = useState("");
     const [reason, setReason] = useState("Program completed");
     const [err, setErr] = useState("");
+    const [completionErrors, setCompletionErrors] = useState({});
+    const [completingSession, setCompletingSession] = useState(null);
     const [pick, setPick] = useState({});
     const today = todayISO();
     const [selectedDate, setSelectedDate] = useState(today);
@@ -23,6 +25,15 @@ export default function Scheduling() {
     const subj = (id) => db.bookings.find((b) => b.id === id)?.subject || "";
     const flagged = db.sessions.filter((x) => x.status === "needs_reassignment");
     const sessions = db.sessions.filter((x) => x.status !== "cancelled");
+    const completeSession = async (sessionId, attended) => {
+      setCompletingSession(sessionId);
+      setCompletionErrors((current) => ({ ...current, [sessionId]: "" }));
+      const result = await s.completeSession(sessionId, attended);
+      setCompletingSession(null);
+      if (!result.ok) {
+        setCompletionErrors((current) => ({ ...current, [sessionId]: result.error || "Could not update this session." }));
+      }
+    };
     const sessionsByDate = {};
     sessions.forEach((session) => { var _a; return (sessionsByDate[_a = session.date] ?? (sessionsByDate[_a] = [])).push(session); });
     const daySessions = [...(sessionsByDate[selectedDate] ?? [])].sort((a, b) => a.time.localeCompare(b.time));
@@ -84,15 +95,18 @@ export default function Scheduling() {
                 <div className="min-w-[180px] flex-1">
                   <div className="font-bold">{un(x.tuteeId)} <span className="font-normal text-slate-400">with</span> {tn(x.tutorId)}</div>
                   <div className="text-sm text-slate-500">{subj(x.bookingId)} · <Badge status={x.modality}/></div>
-                  {x.tuteeCheckedInAt && <div className="mt-1 text-xs font-semibold text-mint-600">Tutee checked in {fmtDateTime(x.tuteeCheckedInAt)}</div>}
+                  {x.tutorCheckedInAt
+                    ? <div className="mt-1 text-xs font-semibold text-mint-600">Tutor checked in; student marked present {fmtDateTime(x.tutorCheckedInAt)}</div>
+                    : x.tuteeCheckedInAt && <div className="mt-1 text-xs font-semibold text-mint-600">Student check-in {fmtDateTime(x.tuteeCheckedInAt)}</div>}
                 </div>
                 <Badge status={x.status}/>
                 {proposedSession && <Alert kind="warn">Proposed change to {fmtDate(proposedSession.date)} at {fmtTime(proposedSession.time)} is awaiting tutee approval.</Alert>}
                 {x.status === "completed" && x.attended === false && <span className="text-xs text-coral-600">No-show</span>}
                 {x.status === "scheduled" && x.date <= today && <div className="flex gap-1">
-                  <Button size="sm" variant="success" onClick={() => s.completeSession(x.id, true)}>Completed</Button>
-                  <Button size="sm" variant="secondary" onClick={() => s.completeSession(x.id, false)}>No-show</Button>
+                  <Button size="sm" variant="success" disabled={completingSession === x.id} onClick={() => completeSession(x.id, true)}>Completed</Button>
+                  <Button size="sm" variant="secondary" disabled={completingSession === x.id} onClick={() => completeSession(x.id, false)}>No-show</Button>
                 </div>}
+                {completionErrors[x.id] && <Alert kind="error">{completionErrors[x.id]}</Alert>}
                 {x.status === "scheduled" && x.date > today && <Button size="sm" variant="ghost" onClick={() => s.cancelSession(x.id)}>Cancel</Button>}
                 {(x.status === "scheduled" || x.status === "needs_reassignment") && x.date >= today && (<Button size="sm" variant="secondary" onClick={() => { setReschedule({ id: x.id, date: proposedSession?.date ?? x.date, time: proposedSession?.time ?? x.time }); setRescheduleError(""); }}>{proposedSession ? "Edit proposal" : "Reschedule"}</Button>)}
               </Card>);

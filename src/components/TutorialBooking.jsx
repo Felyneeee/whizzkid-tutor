@@ -53,7 +53,7 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
         <CheckCircle2 className="mx-auto h-12 w-12 text-mint-500"/>
         <h2 className="mt-2 text-xl font-extrabold">Booking request submitted!</h2>
         <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
-          Your {b.dates.length} slot(s) are temporarily reserved. {b.recommendations.length ? "Our admin will review the recommended tutors and confirm the assignment." : "We’ll match your request when a tutor with a suitable approved schedule becomes available."} You&apos;ll be notified on the web, by email and SMS.
+          Your {b.dates.length} slot(s) are temporarily reserved. {b.recommendations.length ? "Our admin will review the recommended tutors and confirm the assignment." : "We’ll match your request when a tutor with a suitable approved schedule becomes available."} You&apos;ll receive an in-app notification when the request is reviewed.
         </p>
         <div className="mt-4 flex justify-center gap-2">
           <Link href="/tutee/requests">

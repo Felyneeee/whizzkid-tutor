@@ -2,7 +2,7 @@ import "server-only";
 import { ADMIN_ID } from "@/lib/seed";
 import { ageFromBirthday, firstName, nowISO, todayISO, uid, fmtDate, fmtTime, addDays, rangeDates } from "@/lib/dates";
 import { cohortSessionDates, computeRate, matchTutors, onApprovedLeave, payrollFor, tutorBusy, tutorFreeOn, approvedSlot, slotOccupied } from "@/lib/logic";
-import { HOURS, PLAYGROUP_MONTHLY_FEE } from "@/lib/constants";
+import { HOURS, PLAYGROUP_MONTHLY_FEE, SHOP_ITEMS } from "@/lib/constants";
 
 export function createBusinessActions({ get, mutate }) {
   const pushNotif = (d, userId, text, channels = ["web", "email"], threadId) => {
@@ -184,6 +184,12 @@ export function createBusinessActions({ get, mutate }) {
       return { ok: true, bookingId };
   },
   placeOrder(tuteeId, items) {
+      if (!Array.isArray(items) || !items.length || items.some((item) => !Number.isInteger(item.qty) || item.qty < 1 || item.qty > 99 || !SHOP_ITEMS.some((product) => product.sku === item.sku)))
+          return { ok: false, error: "Order items are invalid. Refresh the page and try again." };
+      items = items.map((item) => {
+          const product = SHOP_ITEMS.find((entry) => entry.sku === item.sku);
+          return { sku: product.sku, name: product.name, qty: item.qty, price: product.price };
+      });
       const total = items.reduce((a, i) => a + i.qty * i.price, 0);
       mutate((n) => {
           n.purchases.unshift({ id: uid("p"), tuteeId, items, total, status: "pending", at: nowISO() });
@@ -639,11 +645,11 @@ export function createBusinessActions({ get, mutate }) {
               pushNotif(n, s.tuteeId, `Session on ${fmtDate(s.date)} marked completed. Please rate your tutor!`, ["web"]);
       });
   },
-  submitProgressReport(sessionId, report) {
+  submitProgressReport(sessionId, report, tutorId) {
       const d = get();
       const session = d.sessions.find((x) => x.id === sessionId);
-      const tutor = d.users.find((x) => x.id === meId && x.role === "tutor");
-      if (!tutor || !session || session.tutorId !== meId)
+      const tutor = d.users.find((x) => x.id === tutorId && x.role === "tutor");
+      if (!tutor || !session || session.tutorId !== tutorId)
           return { ok: false, error: "You can only report progress for your assigned students." };
       if (session.status !== "completed" || session.attended === false)
           return { ok: false, error: "Progress can be reported only for a completed session that was not marked absent." };
@@ -678,24 +684,26 @@ export function createBusinessActions({ get, mutate }) {
       });
       return { ok: true, reportId };
   },
-  checkInSession(sessionId, tuteeId) {
+  checkInSession(sessionId, tutorId) {
       const d = get();
       const session = d.sessions.find((x) => x.id === sessionId);
-      if (!session || session.tuteeId !== tuteeId)
+      if (!session || session.tutorId !== tutorId)
           return { ok: false, error: "Session not found." };
       if (session.date !== todayISO())
           return { ok: false, error: "You can check in on the day of your session." };
       if (session.status !== "scheduled")
           return { ok: false, error: "This session is not currently scheduled." };
-      if (session.tuteeCheckedInAt)
+      if (session.tutorCheckedInAt)
           return { ok: false, error: "You are already checked in for this session." };
       const checkedInAt = nowISO();
       mutate((n) => {
           const target = n.sessions.find((x) => x.id === sessionId);
           target.tuteeCheckedInAt = checkedInAt;
-          pushNotif(n, target.tutorId, `${firstNameOf(n, tuteeId)} checked in for the session today at ${fmtTime(target.time)}.`, ["web"]);
-          pushAdmins(n, `${firstNameOf(n, tuteeId)} checked in for a session with ${firstNameOf(n, target.tutorId)} today at ${fmtTime(target.time)}.`);
-          logAct(n, tuteeId, "attendance", `Checked in for a session with ${firstNameOf(n, target.tutorId)} at ${fmtTime(target.time)}`);
+          target.tutorCheckedInAt = checkedInAt;
+          target.attended = true;
+          pushNotif(n, target.tuteeId, `${firstNameOf(n, target.tutorId)} checked you in for today's session at ${fmtTime(target.time)}.`, ["web"]);
+          pushAdmins(n, `${firstNameOf(n, target.tutorId)} checked in at ${fmtTime(target.time)} and marked ${firstNameOf(n, target.tuteeId)} present.`);
+          logAct(n, tutorId, "attendance", `Checked in for session with ${firstNameOf(n, target.tuteeId)} at ${fmtTime(target.time)}`);
       });
       return { ok: true, checkedInAt };
   },
@@ -788,13 +796,19 @@ export function createBusinessActions({ get, mutate }) {
       });
   },
   updatePurchase(id, status) {
+      if (!["paid", "released"].includes(status))
+          return { ok: false, error: "Choose a valid order status." };
+      const purchase = get().purchases.find((x) => x.id === id);
+      if (!purchase)
+          return { ok: false, error: "Order not found." };
+      if ((status === "paid" && purchase.status !== "pending") || (status === "released" && purchase.status !== "paid"))
+          return { ok: false, error: "Orders must be paid before release." };
       mutate((n) => {
           const p = n.purchases.find((x) => x.id === id);
-          if (!p)
-              return;
           p.status = status;
           pushNotif(n, p.tuteeId, `Your order is now marked "${status}".`, ["web", "email"]);
       });
+      return { ok: true };
   },
   addMaterial(m) {
       mutate((n) => {

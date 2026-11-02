@@ -7,7 +7,7 @@ export default function Orders() {
     const list = [...s.db.purchases].sort((a, b) => b.at.localeCompare(a.at));
     const name = (id) => s.db.tutees.find((t) => t.userId === id)?.fullName || s.db.users.find((u) => u.id === id)?.username || id;
     return (<>
-      <PageHeader title="Purchases" subtitle="Miscellaneous fees: shirts, workbooks and other items. Mark orders paid, then released."/>
+      <PageHeader title="Purchases" subtitle="Center-settled orders: mark an order paid after collecting payment, then released after handing over the items."/>
       {list.length === 0 ? <Empty>No orders yet.</Empty> : (<Table head={["Date", "Tutee", "Items", "Total", "Status", ""]}>
           {list.map((p) => (<tr key={p.id}>
               <Td>{fmtDateTime(p.at)}</Td>

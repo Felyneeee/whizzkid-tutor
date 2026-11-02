@@ -9,7 +9,6 @@ export default function TuteeSchedule() {
     const s = useStore();
     const id = s.me.id;
     const [rating, setRating] = useState(null);
-    const [checkInErrors, setCheckInErrors] = useState({});
     const sessions = s.db.sessions.filter((x) => x.tuteeId === id).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
     const bookings = s.db.bookings.filter((b) => b.tuteeId === id && b.status !== "awaiting_admin");
     const tutor = (tid) => firstName(s.db.tutors.find((t) => t.userId === tid)?.fullName);
@@ -26,13 +25,9 @@ export default function TuteeSchedule() {
               <Td><Badge status={x.modality}/></Td>
               <Td><Badge status={x.status}/></Td>
               <Td>
-                {x.status === "scheduled" && x.date === today && !x.tuteeCheckedInAt && (<Button size="sm" variant="success" onClick={async () => {
-                        const result = await s.checkInSession(x.id, id);
-                        if (!result.ok)
-                            setCheckInErrors((current) => ({ ...current, [x.id]: result.error }));
-                    }}>I&apos;ve arrived · Check in</Button>)}
-                {x.tuteeCheckedInAt && <span className="text-xs font-semibold text-mint-600">Checked in {fmtDateTime(x.tuteeCheckedInAt)}</span>}
-                {checkInErrors[x.id] && <span className="text-xs text-coral-600">{checkInErrors[x.id]}</span>}
+                {x.tutorCheckedInAt
+                    ? <span className="text-xs font-semibold text-mint-600">Tutor checked you in {fmtDateTime(x.tutorCheckedInAt)}</span>
+                    : x.tuteeCheckedInAt && <span className="text-xs font-semibold text-mint-600">Checked in {fmtDateTime(x.tuteeCheckedInAt)}</span>}
                 {x.status === "completed" && !x.rating && (<Button size="sm" variant="sunny" onClick={() => setRating({ id: x.id, stars: 5, text: "" })}>
                     Rate
                   </Button>)}

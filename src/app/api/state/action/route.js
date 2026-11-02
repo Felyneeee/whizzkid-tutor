@@ -6,6 +6,9 @@ import { createBusinessActions } from "@/server/business-actions";
 import { mysqlPool } from "@/server/mysql";
 import { persistRelationalState } from "@/server/relational-state";
 import { isValidPdfDataUrl } from "@/lib/resumes";
+import { GRADE_LEVELS, HOURS, SUBJECTS } from "@/lib/constants";
+import { todayISO } from "@/lib/dates";
+import { expandBookingDates } from "@/lib/logic";
 
 export const runtime = "nodejs";
 
@@ -40,6 +43,45 @@ export async function POST(request) {
       if (resumeData && !isValidPdfDataUrl(resumeData)) {
         await connection.rollback();
         return NextResponse.json({ error: "Upload a valid PDF resume no larger than 1.5 MB." }, { status: 400 });
+      }
+    }
+    if (body.action === "submitTutorialBooking") {
+      const [booking] = permission.args;
+      const validDate = (value) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+      const valid = booking && typeof booking === "object"
+        && ["reading", "academic"].includes(booking.program)
+        && (booking.program === "reading" ? booking.subject === "Reading" : SUBJECTS.includes(booking.subject))
+        && GRADE_LEVELS.includes(booking.gradeLevel)
+        && ["online", "face-to-face"].includes(booking.modality)
+        && typeof booking.learningNeeds === "string" && booking.learningNeeds.length <= 2000
+        && ["one-time", "recurring"].includes(booking.bookingType)
+        && Array.isArray(booking.dates) && booking.dates.length > 0 && booking.dates.length <= 60
+        && booking.dates.every((date) => validDate(date) && date >= todayISO())
+        && new Set(booking.dates).size === booking.dates.length
+        && HOURS.includes(booking.time);
+      if (!valid) {
+        await connection.rollback();
+        return NextResponse.json({ error: "Booking details are invalid. Choose a valid program, grade, modality, future date(s), and time (up to 60 sessions)." }, { status: 400 });
+      }
+      if (booking.program === "reading") {
+        const assessment = state.assessments.find((entry) => entry.id === booking.assessmentId && entry.tuteeId === user.id && entry.status === "completed");
+        if (!assessment) {
+          await connection.rollback();
+          return NextResponse.json({ error: "Complete a reading assessment before requesting a reading program." }, { status: 400 });
+        }
+      }
+      if (booking.recurrence) {
+        const recurrence = booking.recurrence;
+        const recurrenceValid = booking.bookingType === "recurring" && typeof recurrence === "object"
+          && Array.isArray(recurrence.days) && recurrence.days.length > 0
+          && recurrence.days.every((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+          && new Set(recurrence.days).size === recurrence.days.length
+          && validDate(recurrence.start) && validDate(recurrence.end)
+          && JSON.stringify(expandBookingDates({ type: "recurring", ...recurrence })) === JSON.stringify(booking.dates);
+        if (!recurrenceValid) {
+          await connection.rollback();
+          return NextResponse.json({ error: "Recurring schedule details are invalid." }, { status: 400 });
+        }
       }
     }
 
