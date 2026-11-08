@@ -36,7 +36,7 @@ export default function TutorCalendar() {
         }}/>
         <div className="space-y-3">
           <h2 className="font-extrabold">{fmtDate(sel)}</h2>
-          {weeklySchedule && <Card className="!p-4"><div className="text-xs font-bold uppercase tracking-wide text-slate-400">Admin-assigned schedule</div><div className="mt-1 font-extrabold">{workingOnDate(sel) ? "Working day · Standard hours" : weekdayNames[weekday(sel)] === "Sunday" ? "Center closed" : "Day off"}</div></Card>}
+          {weeklySchedule && <Card className="!p-4"><div className="text-xs font-bold uppercase tracking-wide text-slate-400">Schedule</div><div className="mt-1 font-extrabold">{workingOnDate(sel) ? "Working day" : weekdayNames[weekday(sel)] === "Sunday" ? "Center closed" : "Day off"}</div></Card>}
           {day.length === 0 && <Empty>No sessions.</Empty>}
           {day.map((x) => (<Card key={x.id} className="!p-4">
               <div className="flex items-center justify-between">
