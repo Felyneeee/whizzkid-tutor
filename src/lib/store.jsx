@@ -59,13 +59,39 @@ export function StoreProvider({ children }) {
   const [db, setDb] = useState(() => buildSeed());
   const [ready, setReady] = useState(false);
   const [meId, setMeId] = useState(null);
+  const [actionFeedback, setActionFeedback] = useState("idle");
   const dbRef = useRef(db);
   const legacyDbRef = useRef(null);
+  const pendingActions = useRef(0);
+  const actionFeedbackTimers = useRef([]);
 
   const acceptState = useCallback((next) => {
     dbRef.current = next;
     setDb(next);
   }, []);
+
+  const runBusinessAction = useCallback(async (name, args) => {
+    if (pendingActions.current++ === 0) {
+      setActionFeedback("idle");
+      actionFeedbackTimers.current = [
+        setTimeout(() => setActionFeedback("saving"), 160),
+        setTimeout(() => setActionFeedback("slow"), 900),
+      ];
+    }
+    try {
+      const result = await requestJson("/api/state/action", { method: "POST", body: { action: name, args } });
+      if (!result.ok) return { ok: false, error: result.error };
+      if (result.payload.db) acceptState(result.payload.db);
+      return result.payload.result ?? { ok: true };
+    } finally {
+      pendingActions.current = Math.max(0, pendingActions.current - 1);
+      if (pendingActions.current === 0) {
+        actionFeedbackTimers.current.forEach(clearTimeout);
+        actionFeedbackTimers.current = [];
+        setActionFeedback("idle");
+      }
+    }
+  }, [acceptState]);
 
   const loadState = useCallback(async (user) => {
     let response = await requestJson("/api/state");
@@ -140,15 +166,10 @@ export function StoreProvider({ children }) {
       return { ok: true, user: result.payload.user };
     };
 
-    const actions = Object.fromEntries(BUSINESS_ACTIONS.map((name) => [name, async (...args) => {
-      const result = await requestJson("/api/state/action", { method: "POST", body: { action: name, args } });
-      if (!result.ok) return { ok: false, error: result.error };
-      if (result.payload.db) acceptState(result.payload.db);
-      return result.payload.result ?? { ok: true };
-    }]));
+    const actions = Object.fromEntries(BUSINESS_ACTIONS.map((name) => [name, (...args) => runBusinessAction(name, args)]));
 
     return {
-      db, ready, me,
+      db, ready, me, actionFeedback,
       login,
       logout() {
         void requestJson("/api/auth/logout", { method: "POST" });
@@ -160,7 +181,7 @@ export function StoreProvider({ children }) {
       registerTutor(value) { return register("/api/auth/register/tutor", value); },
       ...actions,
     };
-  }, [acceptState, db, loadState, ready, me]);
+  }, [acceptState, actionFeedback, db, loadState, ready, me, runBusinessAction]);
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }

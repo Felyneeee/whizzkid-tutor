@@ -1,5 +1,5 @@
 "use client";
-import { Bell, LogOut, Menu, X } from "lucide-react";
+import { Bell, LoaderCircle, LogOut, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
@@ -68,11 +68,16 @@ export function DashboardShell({ role, nav, children, gate }) {
             {open ? <X className="h-5 w-5"/> : <Menu className="h-5 w-5"/>}
           </button>
           <div className="flex-1"/>
+          {s.actionFeedback !== "idle" && <div role="status" aria-live="polite" className="mr-3 flex items-center gap-2 text-xs font-medium text-slate-500">
+            <LoaderCircle className="h-4 w-4 animate-spin text-brand-600" aria-hidden="true"/>
+            {s.actionFeedback === "slow" ? "Saving changes…" : <span className="sr-only">Saving changes</span>}
+          </div>}
           <Link href={`${base}/notifications`} className="relative rounded-xl p-2 hover:bg-slate-100" aria-label="Notifications">
             <Bell className="h-5 w-5"/>
             {unread > 0 && <span className="absolute -right-0.5 -top-0.5 rounded-full bg-coral-500 px-1.5 text-[10px] font-bold text-white">{unread}</span>}
           </Link>
         </header>
+        {s.actionFeedback !== "idle" && <div className="fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden bg-brand-100" aria-hidden="true"><div className="h-full w-1/3 animate-pulse bg-brand-600"/></div>}
         <main className="mx-auto max-w-6xl space-y-4 p-4 lg:p-8">
           {gate ?? children}
         </main>
