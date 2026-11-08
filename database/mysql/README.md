@@ -7,12 +7,14 @@ The app stores accounts and business records in relational MySQL/MariaDB tables.
 1. Start **MySQL** in the XAMPP Control Panel. Apache is not needed by Next.js.
 2. Open phpMyAdmin at `http://localhost/phpmyadmin`.
 3. Import [`schema.sql`](schema.sql). It creates the `whizzkids` database and tables, including `application_state` and `tutor_schedules`. Re-import it after an application update to create any newly added tables; existing rows are preserved.
-   For an existing database, also run [`20261102_add_tutor_checked_in_at.sql`](migrations/20261102_add_tutor_checked_in_at.sql) in phpMyAdmin before starting the updated app.
+   For an existing database, run [`20261102_add_tutor_checked_in_at.sql`](migrations/20261102_add_tutor_checked_in_at.sql) and [`20261109_booking_capacity_cycles.sql`](migrations/20261109_booking_capacity_cycles.sql) in phpMyAdmin before starting the updated app. The booking migration adds session type, cycle dates/allowance, pending expiration fields, and a shared tutor assignment key for paired Academic Group records.
 4. In phpMyAdmin, create a database user named `whizzkids_app` restricted to `localhost`, with a strong password. Grant it only `SELECT`, `INSERT`, `UPDATE`, and `DELETE` on the `whizzkids` database. Do not use the XAMPP `root` account from the app.
 5. Copy the root `.env.example` to `.env.local` and replace `CHANGE_ME` with the database user's password. `.env.local` is ignored by Git. The connection module and `/api/health` endpoint are now in place.
 6. Start the Next.js app with `npm run dev`, then visit `http://localhost:3000/api/health`. A successful connection returns `{"ok":true,"database":"whizzkids"}`.
 
 Keep MySQL bound to localhost while developing. Do not expose port 3306 to the internet or forward it through your router. XAMPP is for development/testing; for a public deployment, move the database to a maintained, access-controlled host and configure encrypted connections, backups, and firewall rules.
+
+Pending requests expire after `BOOKING_PENDING_TTL_HOURS` (default 72) and trigger an administrator warning within `BOOKING_EXPIRY_WARNING_HOURS` (default 12). Expiration is processed transactionally during business actions.
 
 ## Migration status
 

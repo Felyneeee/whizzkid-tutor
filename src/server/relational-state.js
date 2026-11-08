@@ -129,6 +129,11 @@ const tables = [
       id: b.id, tutee_id: b.tuteeId, program: b.program, subject: b.subject ?? "",
       grade_level: b.gradeLevel ?? "", modality: b.modality, learning_needs: b.learningNeeds ?? "",
       booking_type: b.bookingType, dates: jsonText(b.dates, []), class_time: b.time,
+      session_type: b.sessionType ?? "one-on-one", cycle_type: b.cycleType ?? null,
+      cycle_start: b.cycleStart ?? null, cycle_end: b.cycleEnd ?? null,
+      cycle_session_allowance: b.cycleSessionAllowance ?? null,
+      expires_at: b.expiresAt ? sqlDateTime(b.expiresAt) : null,
+      expiration_warning_at: b.expirationWarningAt ? sqlDateTime(b.expirationWarningAt) : null,
       session_times: b.sessionTimes == null ? null : jsonText(b.sessionTimes, {}),
       schedule_proposal: b.scheduleProposal == null ? null : jsonText(b.scheduleProposal, {}),
       recurrence: b.recurrence == null ? null : jsonText(b.recurrence, {}),
@@ -142,6 +147,12 @@ const tables = [
       id: r.id, tuteeId: r.tutee_id, program: r.program, subject: r.subject,
       gradeLevel: r.grade_level, modality: r.modality, learningNeeds: r.learning_needs,
       bookingType: r.booking_type, dates: parseJson(r.dates, []), time: r.class_time,
+      sessionType: r.session_type ?? "one-on-one", ...(r.cycle_type == null ? {} : { cycleType: r.cycle_type }),
+      ...(r.cycle_start == null ? {} : { cycleStart: dateOnly(r.cycle_start) }),
+      ...(r.cycle_end == null ? {} : { cycleEnd: dateOnly(r.cycle_end) }),
+      ...(r.cycle_session_allowance == null ? {} : { cycleSessionAllowance: Number(r.cycle_session_allowance) }),
+      ...(r.expires_at == null ? {} : { expiresAt: isoDateTime(r.expires_at) }),
+      ...(r.expiration_warning_at == null ? {} : { expirationWarningAt: isoDateTime(r.expiration_warning_at) }),
       ...(r.session_times == null ? {} : { sessionTimes: parseJson(r.session_times, {}) }),
       ...(r.schedule_proposal == null ? {} : { scheduleProposal: parseJson(r.schedule_proposal, {}) }),
       ...(r.recurrence == null ? {} : { recurrence: parseJson(r.recurrence, {}) }),
@@ -157,6 +168,7 @@ const tables = [
     stateKey: "sessions", table: "sessions", primaryKey: "id",
     toRow: (s) => ({
       id: s.id, booking_id: s.bookingId, tutor_id: s.tutorId, tutee_id: s.tuteeId,
+      assignment_id: s.assignmentId ?? s.id,
       session_date: s.date, session_time: s.time, modality: s.modality, status: s.status,
       tutee_checked_in_at: sqlDateTime(s.tuteeCheckedInAt),
       tutor_checked_in_at: sqlDateTime(s.tutorCheckedInAt), attended: s.attended ?? null,
@@ -164,6 +176,7 @@ const tables = [
     }),
     fromRow: (r) => ({
       id: r.id, bookingId: r.booking_id, tutorId: r.tutor_id, tuteeId: r.tutee_id,
+      assignmentId: r.assignment_id ?? r.id,
       date: dateOnly(r.session_date), time: r.session_time, modality: r.modality, status: r.status,
       ...(r.tutee_checked_in_at ? { tuteeCheckedInAt: isoDateTime(r.tutee_checked_in_at) } : {}),
       ...(r.tutor_checked_in_at ? { tutorCheckedInAt: isoDateTime(r.tutor_checked_in_at) } : {}),
@@ -274,20 +287,6 @@ const tables = [
     fromRow: (r) => ({
       id: r.id, userId: r.user_id, kind: r.kind, text: r.activity_text,
       at: isoDateTime(r.created_at),
-    }),
-  },
-  {
-    stateKey: "payroll", table: "payroll", primaryKey: "id",
-    toRow: (p) => ({
-      id: p.id, tutor_id: p.tutorId, period: p.period, hours: p.hours,
-      hourly_rate: p.hourlyRate, fixed_salary: p.fixedSalary, amount: p.amount,
-      paid: Boolean(p.paid), paid_at: sqlDateTime(p.paidAt),
-    }),
-    fromRow: (r) => ({
-      id: r.id, tutorId: r.tutor_id, period: r.period, hours: Number(r.hours),
-      hourlyRate: Number(r.hourly_rate), fixedSalary: Number(r.fixed_salary),
-      amount: Number(r.amount), paid: Boolean(r.paid),
-      ...(r.paid_at ? { paidAt: isoDateTime(r.paid_at) } : {}),
     }),
   },
   {

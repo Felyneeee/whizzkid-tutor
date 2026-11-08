@@ -1,7 +1,7 @@
-// One-hour tutorial sessions start from 10 AM; the last session starts at 5 PM and ends at 6 PM.
-export const HOURS = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+// Union of the configurable Academic/Reading 45-minute start times (center schedule).
+export const HOURS = ["10:00", "10:45", "12:00", "12:45", "13:30", "14:15", "15:00", "15:45", "16:30", "17:15"];
 export const TUTOR_SHIFT_STARTS = ["09:00", "10:00"];
-export const SUBJECTS = ["English", "Filipino", "Araling Panlipunan", "Science", "Math"];
+export const SUBJECTS = ["English", "Mathematics", "Araling Panlipunan (AP)", "Filipino", "Science"];
 export const READING_SKILLS = [
     "Phonemic Awareness",
     "Sight Words",

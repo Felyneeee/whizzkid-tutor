@@ -36,39 +36,36 @@ export function approvedSlot(db, tutorId, date, time, modality) {
         a.slots.includes(time) &&
         a.modalities.includes(modality));
 }
-export function tutorBusy(db, tutorId, date, time, ignoreBookingId) {
-    const hasSession = db.sessions.some((s) => s.tutorId === tutorId &&
-        s.date === date &&
-        s.time === time &&
-        (s.status === "scheduled" || s.status === "needs_reassignment") &&
-        s.bookingId !== ignoreBookingId);
-    if (hasSession)
-        return true;
-    // Temporary reservation: top recommendation of a booking still awaiting admin review.
-    return db.bookings.some((b) => b.id !== ignoreBookingId &&
-        b.status === "awaiting_admin" &&
-        b.recommendations[0] === tutorId &&
-        (b.sessionTimes?.[date] ?? b.time) === time &&
-        b.dates.includes(date));
+export function tutorBusy(db, tutorId, date, time, ignoreBookingId, sessionType = "one-on-one") {
+    const active = db.sessions.filter((s) => s.tutorId === tutorId && s.date === date && s.time === time &&
+        (s.status === "scheduled" || s.status === "needs_reassignment") && s.bookingId !== ignoreBookingId);
+    if (!active.length) return false;
+    const groups = sessionType === "group" && active.every((s) => db.bookings.find((b) => b.id === s.bookingId)?.sessionType === "group");
+    // Group bookings share one tutor assignment, with a hard two-student ceiling.
+    return !groups || active.length >= 2;
 }
 export function tutorAssessmentBusy(db, tutorId, date, time) {
     return tutorBusy(db, tutorId, date, time);
 }
-/** A requested center-wide slot is closed once it has a session or pending booking. */
-export function slotOccupied(db, date, time, ignoreBookingId, ignoreSessionId) {
-    const hasSession = db.sessions.some((s) => s.id !== ignoreSessionId && s.date === date && s.time === time && (s.status === "scheduled" || s.status === "needs_reassignment"));
-    if (hasSession)
-        return true;
-    const hasPendingBooking = db.bookings.some((b) => {
-        if (b.id === ignoreBookingId || b.program === "playgroup")
-            return false;
-        const currentSlot = b.status === "awaiting_admin" && b.dates.includes(date) && (b.sessionTimes?.[date] ?? b.time) === time;
-        const proposedSlot = b.scheduleProposal?.sessions.some((session) => session.date === date && session.time === time) ?? false;
-        return currentSlot || proposedSlot;
-    });
-    if (hasPendingBooking)
-        return true;
-    return db.assessments.some((a) => a.status === "booked" && a.date === date && a.time === time);
+/** Center slot capacity is derived from eligible tutors; pending requests reserve seats. */
+export function remainingCapacity(db, date, time, options = {}, ignoreBookingId, ignoreSessionId) {
+    const program = options.program ?? "academic";
+    const sessionType = options.sessionType ?? "one-on-one";
+    const modality = options.modality ?? "online";
+    const base = { program, subject: options.subject ?? (program === "reading" ? "Reading" : "English"), gradeLevel: options.gradeLevel ?? "Grade 1", modality, sessionType };
+    const eligible = db.tutors.filter((t) => tutorQualifies(t, base) && approvedSlot(db, t.userId, date, time, modality) && !onApprovedLeave(db, t.userId, date));
+    const eligibleIds = new Set(eligible.map((tutor) => tutor.userId));
+    const capacity = eligible.length * (program === "academic" && sessionType === "group" ? 2 : 1);
+    let used = db.sessions.filter((s) => {
+        if (s.id === ignoreSessionId || s.date !== date || s.time !== time || !["scheduled", "needs_reassignment"].includes(s.status)) return false;
+        const booking = db.bookings.find((b) => b.id === s.bookingId);
+        return eligibleIds.has(s.tutorId) && booking?.program === program && (booking?.sessionType ?? "one-on-one") === sessionType;
+    }).length;
+    used += db.bookings.filter((b) => b.id !== ignoreBookingId && b.program !== "playgroup" && b.status === "awaiting_admin" && b.program === program && (b.sessionType ?? "one-on-one") === sessionType && b.dates.includes(date) && (b.sessionTimes?.[date] ?? b.time) === time).length;
+    return Math.max(0, capacity - used);
+}
+export function slotOccupied(db, date, time, ignoreBookingId, ignoreSessionId, options = {}) {
+    return remainingCapacity(db, date, time, options, ignoreBookingId, ignoreSessionId) === 0;
 }
 export function hasOpenSlot(db, date) {
     return HOURS.some((time) => !slotOccupied(db, date, time));
@@ -86,8 +83,8 @@ export function bookingTimeOnDate(booking, date) {
 export function tutorQualifies(t, p) {
     if (t.status !== "active")
         return false;
-    const needSubject = p.program === "reading" ? "Reading" : p.subject;
-    if (!t.subjects.includes(needSubject))
+    const needSubject = p.program === "reading" ? ["Reading"] : p.subject === "Mathematics" || p.subject === "Math" ? ["Mathematics", "Math"] : p.subject === "Araling Panlipunan (AP)" ? ["Araling Panlipunan (AP)", "Araling Panlipunan", "AP"] : [p.subject];
+    if (!t.subjects.some((subject) => needSubject.includes(subject)))
         return false;
     return t.gradeBands.includes(bandOf(p.gradeLevel));
 }
@@ -99,7 +96,7 @@ export function tutorFreeOn(db, t, p, date) {
         return false;
     if (onApprovedLeave(db, t.userId, date))
         return false;
-    if (tutorBusy(db, t.userId, date, time, p.ignoreBookingId))
+    if (tutorBusy(db, t.userId, date, time, p.ignoreBookingId, p.sessionType))
         return false;
     return true;
 }
@@ -115,8 +112,7 @@ export function matchTutors(db, p) {
         const full = ok.length === p.dates.length;
         const gradeScore = t.gradeBands.includes(bandOf(p.gradeLevel)) ? 25 : 0;
         const scheduleScore = (ok.length / p.dates.length) * 40;
-        const requiredSubject = p.program === "reading" ? "Reading" : p.subject;
-        const subjectScore = t.subjects.includes(requiredSubject) ? 35 : 0;
+        const subjectScore = tutorQualifies(t, p) ? 35 : 0;
         const score = gradeScore + scheduleScore + subjectScore;
         out.push({
             tutor: t,
@@ -135,9 +131,13 @@ export function matchTutors(db, p) {
 }
 /** Time slots on a date with number of compatible tutors who are free. */
 export function timesForDate(db, base, date) {
-    return HOURS.map((time) => {
+    const day = weekday(date);
+    const hours = day === 1 || day === 3 || day === 5
+        ? ["12:00", "12:45", "13:30", "14:15", "15:00", "15:45", "16:30", "17:15"]
+        : day === 2 || day === 4 || day === 6 ? HOURS : [];
+    return hours.map((time) => {
         const m = matchTutors(db, { ...base, dates: [date], time });
-        return { time, count: m.length };
+        return { time, count: remainingCapacity(db, date, time, base) };
     });
 }
 export function dateHasTutors(db, base, date) {
@@ -167,16 +167,6 @@ export function cohortSessionDates(c) {
         cur = addDays(cur, 1);
     }
     return dates;
-}
-// ---------- Payroll ----------
-export function payrollFor(db, tutorId, period) {
-    const t = db.tutors.find((x) => x.userId === tutorId);
-    if (!t)
-        return null;
-    const done = db.sessions.filter((s) => s.tutorId === tutorId && s.status === "completed" && s.attended !== false && s.date.startsWith(period));
-    const hours = done.length; // 1-hour sessions
-    const amount = hours * t.hourlyRate + t.fixedSalary;
-    return { tutorId, period, hours, hourlyRate: t.hourlyRate, fixedSalary: t.fixedSalary, amount };
 }
 export function isPastSession(date, time) {
     const d = parseISO(date);

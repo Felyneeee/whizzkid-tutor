@@ -91,10 +91,13 @@ CREATE TABLE IF NOT EXISTS bookings (
   program ENUM('reading','academic','playgroup') NOT NULL, subject VARCHAR(120) NOT NULL DEFAULT '',
   grade_level VARCHAR(80) NOT NULL DEFAULT '', modality ENUM('online','face-to-face') NOT NULL,
   learning_needs TEXT NOT NULL, booking_type ENUM('one-time','recurring') NOT NULL,
+  session_type ENUM('one-on-one','group') NOT NULL DEFAULT 'one-on-one',
+  cycle_type ENUM('2-week','3-week','1-month') NULL, cycle_start DATE NULL, cycle_end DATE NULL,
+  cycle_session_allowance SMALLINT UNSIGNED NULL, expires_at DATETIME NULL, expiration_warning_at DATETIME NULL,
   dates JSON NOT NULL, class_time VARCHAR(5) NOT NULL, session_times JSON NULL,
   schedule_proposal JSON NULL, recurrence JSON NULL,
   rate_per_hour DECIMAL(10,2) NOT NULL DEFAULT 0, total_fee DECIMAL(10,2) NOT NULL DEFAULT 0,
-  status ENUM('awaiting_admin','confirmed','rejected','terminated','completed') NOT NULL,
+  status ENUM('awaiting_admin','confirmed','rejected','terminated','completed','expired','cancelled') NOT NULL,
   tutor_id VARCHAR(64) NULL, recommendations JSON NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   terminated_at DATETIME NULL, termination_reason TEXT NULL, cohort_id VARCHAR(64) NULL, assessment_id VARCHAR(64) NULL,
   INDEX idx_bookings_tutee_status (tutee_id,status),
@@ -105,7 +108,7 @@ CREATE TABLE IF NOT EXISTS bookings (
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS sessions (
-  id VARCHAR(64) PRIMARY KEY, booking_id VARCHAR(64) NOT NULL, tutor_id VARCHAR(64) NOT NULL, tutee_id VARCHAR(64) NOT NULL,
+  id VARCHAR(64) PRIMARY KEY, assignment_id VARCHAR(64) NOT NULL, booking_id VARCHAR(64) NOT NULL, tutor_id VARCHAR(64) NOT NULL, tutee_id VARCHAR(64) NOT NULL,
   session_date DATE NOT NULL, session_time VARCHAR(5) NOT NULL,
   modality ENUM('online','face-to-face') NOT NULL,
   status ENUM('scheduled','completed','cancelled','needs_reassignment') NOT NULL,

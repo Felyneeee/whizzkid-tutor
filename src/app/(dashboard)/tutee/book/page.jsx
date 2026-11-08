@@ -77,6 +77,7 @@ function AcademicFlow() {
     const [subject, setSubject] = useState(SUBJECTS[0]);
     const [grade, setGrade] = useState(profile.gradeLevel || "Grade 1");
     const [modality, setModality] = useState("online");
+    const [sessionType, setSessionType] = useState("one-on-one");
     const [needs, setNeeds] = useState("");
     const [params, setParams] = useState(null);
     if (params)
@@ -94,10 +95,13 @@ function AcademicFlow() {
       <Field label="Modality">
         <ModalityPicker value={modality} onChange={setModality}/>
       </Field>
+      <Field label="Session type">
+        <Chips options={["one-on-one", "group"]} value={[sessionType]} onChange={(v) => setSessionType(v[0])}/>
+      </Field>
       <Field label="Learning needs / areas of difficulty">
         <Textarea value={needs} onChange={(e) => setNeeds(e.target.value)} placeholder="e.g. struggles with fractions, needs help with reading comprehension…"/>
       </Field>
-      <Button onClick={() => setParams({ program: "academic", subject, gradeLevel: grade, modality, learningNeeds: needs })}>Proceed to booking & matching</Button>
+      <Button onClick={() => setParams({ program: "academic", subject, gradeLevel: grade, modality, sessionType, learningNeeds: needs })}>Proceed to booking & matching</Button>
     </Card>);
 }
 /* ---------------- Reading ---------------- */

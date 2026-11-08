@@ -7,7 +7,7 @@ import { useStore } from "@/lib/store";
 export default function Classes() {
     const s = useStore();
     const [cohortOpen, setCohortOpen] = useState(false);
-    const [c, setC] = useState({ label: "", startDate: todayISO(), weekdays: [1, 3, 5], time: "09:00", capacity: 8, tutorId: "" });
+    const [c, setC] = useState({ label: "", startDate: todayISO(), weekdays: [1, 3, 5], time: "10:00", capacity: 6, tutorId: "" });
     const nm = (id) => s.db.tutees.find((t) => t.userId === id)?.fullName || id;
     const tutors = s.db.tutors.filter((t) => t.status === "active");
     return (<>
@@ -37,15 +37,9 @@ export default function Classes() {
       <Modal open={cohortOpen} onClose={() => setCohortOpen(false)} title="New playgroup cohort">
         <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); s.addCohort({ ...c, tutorId: c.tutorId || undefined, sessionsCount: 12 }); setCohortOpen(false); }}>
           <Field label="Label"><Input required value={c.label} onChange={(e) => setC({ ...c, label: e.target.value })} placeholder="e.g. November Morning Group"/></Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Start date"><Input type="date" required value={c.startDate} onChange={(e) => setC({ ...c, startDate: e.target.value })}/></Field>
-            <Field label="Time"><Input type="time" required value={c.time} onChange={(e) => setC({ ...c, time: e.target.value })}/></Field>
-          </div>
-          <Field label="Days (3x a week)">
-            <div className="flex gap-1">{DAY_NAMES.map((d, i) => <button type="button" key={d} onClick={() => setC({ ...c, weekdays: c.weekdays.includes(i) ? c.weekdays.filter((x) => x !== i) : [...c.weekdays, i].sort() })} className={`rounded-lg border px-2 py-1 text-xs font-bold ${c.weekdays.includes(i) ? "border-brand-500 bg-brand-500 text-white" : "border-slate-200"}`}>{d}</button>)}</div>
-          </Field>
-          <Field label="Capacity"><Input type="number" min={1} value={c.capacity} onChange={(e) => setC({ ...c, capacity: Number(e.target.value) })}/></Field>
-          <Button type="submit" disabled={!c.weekdays.length}>Create cohort</Button>
+          <Field label="Start date"><Input type="date" required value={c.startDate} onChange={(e) => setC({ ...c, startDate: e.target.value })}/></Field>
+          <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">Playgroup meets Monday, Wednesday and Friday, 10:00–11:30 AM. Face-to-Face only · maximum 6 children.</p>
+          <Button type="submit">Create cohort</Button>
         </form>
       </Modal>
     </>);

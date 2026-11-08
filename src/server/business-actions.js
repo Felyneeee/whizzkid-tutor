@@ -1,7 +1,7 @@
 import "server-only";
 import { ADMIN_ID } from "@/lib/seed";
 import { ageFromBirthday, firstName, nowISO, todayISO, uid, fmtDate, fmtTime, addDays, rangeDates } from "@/lib/dates";
-import { cohortSessionDates, computeRate, matchTutors, onApprovedLeave, payrollFor, tutorBusy, tutorFreeOn, approvedSlot, slotOccupied } from "@/lib/logic";
+import { cohortSessionDates, computeRate, matchTutors, onApprovedLeave, tutorBusy, tutorFreeOn, approvedSlot, slotOccupied } from "@/lib/logic";
 import { HOURS, PLAYGROUP_MONTHLY_FEE, SHOP_ITEMS } from "@/lib/constants";
 
 export function createBusinessActions({ get, mutate }) {
@@ -64,8 +64,8 @@ export function createBusinessActions({ get, mutate }) {
       const d = get();
       if (d.assessments.some((a) => a.tuteeId === tuteeId && a.status === "booked"))
           return { ok: false, error: "You already have an upcoming assessment. Cancel it first to rebook." };
-      if (slotOccupied(d, date, time))
-          return { ok: false, error: "That slot was just taken. Please pick another." };
+      if (d.assessments.some((a) => a.status === "booked" && a.date === date && a.time === time))
+          return { ok: false, error: "That assessment appointment was just taken. Please pick another." };
       const id = uid("as");
       mutate((n) => {
           n.assessments.push({ id, tuteeId, modality, date, time, status: "booked" });
@@ -102,8 +102,10 @@ export function createBusinessActions({ get, mutate }) {
           return { ok: false, error: "Class not found." };
       if (c.enrolled.includes(tuteeId))
           return { ok: false, error: "You are already enrolled in this class." };
-      if (c.enrolled.length >= c.capacity)
+      if (c.enrolled.length >= Math.min(c.capacity, 6))
           return { ok: false, error: "This class is full. Please choose another schedule." };
+      if ((c.modality ?? "face-to-face") !== "face-to-face" || c.time !== "10:00" || JSON.stringify(c.weekdays) !== JSON.stringify([1, 3, 5]))
+          return { ok: false, error: "Playgroup classes must meet Monday, Wednesday and Friday at 10:00 AM, Face-to-Face." };
       const bookingId = uid("b");
       const tutee = d.tutees.find((t) => t.userId === tuteeId);
       mutate((n) => {
@@ -139,9 +141,14 @@ export function createBusinessActions({ get, mutate }) {
       const d = get();
       if (!v.dates.length || !v.time)
           return { ok: false, error: "Choose at least one date and time." };
+      v.sessionType = v.program === "academic" && v.sessionType === "group" ? "group" : "one-on-one";
+      if (v.program === "reading") v.sessionType = "one-on-one";
       if (v.dates.some((date) => date < todayISO()))
           return { ok: false, error: "Past dates cannot be booked. Please choose a future date." };
-      const occupied = v.dates.filter((date) => slotOccupied(d, date, v.time));
+      if (d.bookings.some((b) => b.tuteeId === v.tuteeId && b.program === v.program && ["awaiting_admin", "confirmed"].includes(b.status) && b.dates.some((date) => v.dates.includes(date) && (b.sessionTimes?.[date] ?? b.time) === v.time)))
+          return { ok: false, error: "You already have a request or booking for this program, date, and time." };
+      const capacityOptions = { program: v.program, subject: v.subject, gradeLevel: v.gradeLevel, modality: v.modality, sessionType: v.sessionType };
+      const occupied = v.dates.filter((date) => slotOccupied(d, date, v.time, undefined, undefined, capacityOptions));
       if (occupied.length)
           return { ok: false, error: `That time is no longer open on: ${occupied.map(fmtDate).join(", ")}. Please choose another slot.` };
       const matches = matchTutors(d, {
@@ -164,6 +171,7 @@ export function createBusinessActions({ get, mutate }) {
               modality: v.modality,
               learningNeeds: v.learningNeeds,
               bookingType: v.bookingType,
+              sessionType: v.sessionType,
               dates: v.dates,
               time: v.time,
               recurrence: v.recurrence,
@@ -172,6 +180,7 @@ export function createBusinessActions({ get, mutate }) {
               status: "awaiting_admin",
               recommendations: matches.slice(0, 3).map((m) => m.tutor.userId),
               createdAt: nowISO(),
+              expiresAt: new Date(Date.now() + Math.max(1, Number(process.env.BOOKING_PENDING_TTL_HOURS) || 72) * 3600000).toISOString(),
               assessmentId: v.assessmentId,
           };
           n.bookings.push(b);
@@ -540,6 +549,8 @@ export function createBusinessActions({ get, mutate }) {
       const b = d.bookings.find((x) => x.id === bookingId);
       if (!b)
           return { ok: false, error: "Booking not found." };
+      if (b.status !== "awaiting_admin")
+          return { ok: false, error: "Only pending requests can be assigned." };
       if (b.scheduleProposal)
           return { ok: false, error: "Wait for the tutee to approve or decline the proposed schedule first." };
       const t = d.tutors.find((x) => x.userId === tutorId);
@@ -550,6 +561,7 @@ export function createBusinessActions({ get, mutate }) {
           subject: b.subject,
           gradeLevel: b.gradeLevel,
           modality: b.modality,
+          sessionType: b.sessionType ?? "one-on-one",
           dates: b.dates,
           time: b.time,
           times: b.sessionTimes,
@@ -568,7 +580,11 @@ export function createBusinessActions({ get, mutate }) {
           bb.dates = okDates;
           bb.totalFee = bb.ratePerHour * okDates.length;
           okDates.forEach((dt) => {
-              const s = { id: uid("s"), bookingId: bb.id, tutorId, tuteeId: bb.tuteeId, date: dt, time: bb.sessionTimes?.[dt] ?? bb.time, modality: bb.modality, status: "scheduled" };
+              const sessionTime = bb.sessionTimes?.[dt] ?? bb.time;
+              const shared = bb.program === "academic" && bb.sessionType === "group"
+                  ? n.sessions.find((x) => x.date === dt && x.time === sessionTime && x.tutorId === tutorId && ["scheduled", "needs_reassignment"].includes(x.status) && n.bookings.find((other) => other.id === x.bookingId)?.sessionType === "group")
+                  : undefined;
+              const s = { id: uid("s"), assignmentId: shared?.assignmentId ?? uid("ta"), bookingId: bb.id, tutorId, tuteeId: bb.tuteeId, date: dt, time: sessionTime, modality: bb.modality, status: "scheduled" };
               n.sessions.push(s);
           });
           const tutorFullName = nameOf(n, tutorId);
@@ -593,6 +609,18 @@ export function createBusinessActions({ get, mutate }) {
           b.terminationReason = reason;
           pushNotif(n, b.tuteeId, `We couldn't confirm your booking. ${reason} Please choose another schedule.`, ["web", "email", "sms"]);
       });
+  },
+  cancelTutorialBooking(bookingId) {
+      const booking = get().bookings.find((entry) => entry.id === bookingId);
+      if (!booking || booking.status !== "awaiting_admin") return { ok: false, error: "Only pending requests can be cancelled." };
+      mutate((n) => {
+          const target = n.bookings.find((entry) => entry.id === bookingId);
+          target.status = "cancelled";
+          target.scheduleProposal = undefined;
+          pushNotif(n, target.tuteeId, `Your ${target.subject} request was cancelled and its reserved capacity released.`, ["web"]);
+          pushAdmins(n, `${nameOf(n, target.tuteeId)} cancelled a pending ${target.subject} request.`);
+      });
+      return { ok: true };
   },
   terminateBooking(bookingId, reason) {
       mutate((n) => {
@@ -775,13 +803,12 @@ export function createBusinessActions({ get, mutate }) {
   updateCohort(id, p) {
       mutate((n) => {
           const c = n.cohorts.find((x) => x.id === id);
-          if (c)
-              Object.assign(c, p);
+          if (c) Object.assign(c, p, { weekdays: [1, 3, 5], time: "10:00", capacity: 6, modality: "face-to-face" });
       });
   },
   addCohort(c) {
       mutate((n) => {
-          n.cohorts.push({ ...c, modality: "face-to-face", id: uid("pg"), enrolled: [] });
+          n.cohorts.push({ ...c, weekdays: [1, 3, 5], time: "10:00", capacity: 6, modality: "face-to-face", id: uid("pg"), enrolled: [] });
       });
   },
   removeFromCohort(cohortId, tuteeId) {
@@ -840,36 +867,6 @@ export function createBusinessActions({ get, mutate }) {
               logAct(n, userId, "upload", `Viewed material: ${m.title}`);
       });
   },
-  generatePayroll(period) {
-      mutate((n) => {
-          n.tutors
-              .filter((t) => t.status === "active")
-              .forEach((t) => {
-              const p = payrollFor(n, t.userId, period);
-              if (!p)
-                  return;
-              const existing = n.payroll.find((r) => r.tutorId === t.userId && r.period === period);
-              if (existing) {
-                  if (!existing.paid)
-                      Object.assign(existing, { hours: p.hours, hourlyRate: p.hourlyRate, fixedSalary: p.fixedSalary, amount: p.amount });
-              }
-              else {
-                  n.payroll.push({ id: uid("pr"), ...p, paid: false });
-              }
-          });
-      });
-  },
-  markPayrollPaid(id) {
-      mutate((n) => {
-          const r = n.payroll.find((x) => x.id === id);
-          if (!r)
-              return;
-          r.paid = true;
-          r.paidAt = nowISO();
-          pushNotif(n, r.tutorId, `Payroll for ${r.period} (₱${r.amount.toLocaleString()}) has been released.`, ["web", "email", "sms"]);
-      });
-  },
-
   };
   return actions;
 }

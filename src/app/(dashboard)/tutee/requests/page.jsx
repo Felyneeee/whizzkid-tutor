@@ -7,7 +7,7 @@ export default function TuteeRequests() {
     const s = useStore();
     const [proposalMsg, setProposalMsg] = useState({});
     const id = s.me.id;
-    const bookings = s.db.bookings.filter((b) => b.tuteeId === id && (b.status === "awaiting_admin" || b.status === "rejected" || !!b.scheduleProposal)).reverse();
+    const bookings = s.db.bookings.filter((b) => b.tuteeId === id && (["awaiting_admin", "rejected", "cancelled", "expired"].includes(b.status) || !!b.scheduleProposal)).reverse();
     const assessments = s.db.assessments.filter((a) => a.tuteeId === id && a.status === "booked");
     const orders = s.db.purchases.filter((p) => p.tuteeId === id && p.status === "pending");
     return (<>
@@ -39,6 +39,7 @@ export default function TuteeRequests() {
                 </div>
               </div>
               <Badge status={b.status}/>
+              {b.status === "awaiting_admin" && <Button size="sm" variant="secondary" onClick={() => s.cancelTutorialBooking(b.id)}>Cancel request</Button>}
             </div>
             {b.status === "awaiting_admin" && !b.scheduleProposal && <p className="mt-2 text-xs text-slate-500">Your slot is reserved while the admin reviews your request and finds a matching tutor.</p>}
             {b.scheduleProposal && (<div className="mt-3 space-y-3 rounded-xl border border-sunny-200 bg-sunny-50 p-3">
@@ -57,6 +58,7 @@ export default function TuteeRequests() {
               </div>)}
             {proposalMsg[b.id] && <div className="mt-3"><Alert kind={proposalMsg[b.id].kind}>{proposalMsg[b.id].text}</Alert></div>}
             {b.status === "rejected" && <p className="mt-2 text-xs text-coral-600">{b.terminationReason} Please book a new schedule.</p>}
+            {b.status === "expired" && <p className="mt-2 text-xs text-coral-600">This request expired and its temporary capacity reservation was released.</p>}
           </Card>))}
         {orders.map((o) => (<Card key={o.id} className="flex items-center justify-between !p-4">
             <div>

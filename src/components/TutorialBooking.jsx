@@ -6,7 +6,7 @@ import { Calendar } from "@/components/Calendar";
 import { Alert, Badge, Button, Card, Field, Input, cn, peso } from "@/components/ui";
 import { addDays, fmtDate, fmtTime, todayISO, weekday } from "@/lib/dates";
 import { HOURS } from "@/lib/constants";
-import { computeRate, expandBookingDates, hasOpenSlot, matchTutors, slotOccupied, timesForDate } from "@/lib/logic";
+import { computeRate, expandBookingDates, hasOpenSlot, matchTutors, remainingCapacity, slotOccupied, timesForDate } from "@/lib/logic";
 import { useStore } from "@/lib/store";
 export function TutorialBooking({ params, tuteeId, onBack }) {
     const s = useStore();
@@ -16,7 +16,7 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
     const [time, setTime] = useState("");
     const [err, setErr] = useState("");
     const [doneId, setDoneId] = useState(null);
-    const base = useMemo(() => ({ program: params.program, subject: params.subject, gradeLevel: params.gradeLevel, modality: params.modality }), [params.program, params.subject, params.gradeLevel, params.modality]);
+    const base = useMemo(() => ({ program: params.program, subject: params.subject, gradeLevel: params.gradeLevel, modality: params.modality, sessionType: params.sessionType ?? "one-on-one" }), [params.program, params.subject, params.gradeLevel, params.modality, params.sessionType]);
     const rate = computeRate(params.program, params.gradeLevel, params.modality);
     const dates = useMemo(() => {
         if (!selectedDates.length)
@@ -33,15 +33,15 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
         if (!dates.length)
             return [];
         if (dates.length === 1)
-            return timesForDate(s.db, base, dates[0]).map((t) => ({ time: t.time, full: t.count, any: t.count, open: !slotOccupied(s.db, dates[0], t.time) }));
-        return HOURS.map((h) => {
+            return timesForDate(s.db, base, dates[0]).map((t) => ({ time: t.time, full: t.count, any: t.count, open: !slotOccupied(s.db, dates[0], t.time, undefined, undefined, base) }));
+        return HOURS.filter((h) => dates.every((date) => timesForDate(s.db, base, date).some((slot) => slot.time === h))).map((h) => {
             const m = matchTutors(s.db, { ...base, dates, time: h });
-            const open = dates.every((date) => !slotOccupied(s.db, date, h));
-            return { time: h, full: m.filter((x) => x.full).length, any: m.length, open };
+            const open = dates.every((date) => !slotOccupied(s.db, date, h, undefined, undefined, base));
+            return { time: h, full: m.filter((x) => x.full).length, any: Math.min(...dates.map((date) => remainingCapacity(s.db, date, h, base))), open };
         });
     }, [s.db, base, dates]);
     const matches = useMemo(() => (dates.length && time ? matchTutors(s.db, { ...base, dates, time }) : []), [s.db, base, dates, time]);
-    const slotOpen = !!dates.length && !!time && dates.every((date) => !slotOccupied(s.db, date, time));
+    const slotOpen = !!dates.length && !!time && dates.every((date) => !slotOccupied(s.db, date, time, undefined, undefined, base));
     const noTutors = slotOpen && matches.length === 0;
     const calMarks = useMemo(() => {
         const cache = {};
@@ -75,6 +75,7 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
             modality: params.modality,
             learningNeeds: params.learningNeeds,
             bookingType: dates.length > 1 ? "recurring" : "one-time",
+            sessionType: params.sessionType ?? "one-on-one",
             dates,
             time,
             recurrence: repeatWeekly && dates.length ? { days: [...new Set(selectedDates.map(weekday))], start: selectedDates[0], end: repeatUntil } : undefined,
@@ -181,7 +182,7 @@ function TimeGrid({ times, value, onChange, recurring, empty }) {
             return (<button key={t.time} disabled={disabled} onClick={() => onChange(t.time)} className={cn("rounded-xl border p-2 text-sm font-bold transition", value === t.time ? "border-brand-600 bg-brand-600 text-white" : "border-slate-200 bg-white", disabled ? "cursor-not-allowed text-slate-300 line-through" : "hover:border-brand-400")}>
             {fmtTime(t.time)}
             <div className={cn("text-[10px] font-semibold", value === t.time ? "text-white/80" : "text-slate-400")}>
-              {disabled ? "occupied" : t.any === 0 ? "awaiting tutor" : recurring ? `${t.full} full · ${t.any} partial` : `${t.any} tutor(s)`}
+              {disabled ? "occupied" : t.any === 0 ? "awaiting tutor" : recurring ? `${t.full} full · ${t.any} place(s) available` : `${t.any} place(s) available`}
             </div>
           </button>);
         })}

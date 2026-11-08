@@ -6,11 +6,10 @@ const ADMIN_ACTIONS = new Set([
   "adminLeave", "proposeBookingSchedule", "confirmBooking", "rejectBooking", "terminateBooking",
   "completeSession", "reassignSession", "proposeSessionReschedule", "cancelSession", "updateCohort",
   "addCohort", "removeFromCohort", "updatePurchase", "addMaterial", "updateMaterial", "deleteMaterial",
-  "generatePayroll", "markPayrollPaid",
 ]);
 
 const TUTEE_ACTIONS = new Set([
-  "bookAssessment", "cancelAssessment", "bookPlaygroup", "submitTutorialBooking", "placeOrder",
+  "bookAssessment", "cancelAssessment", "cancelTutorialBooking", "bookPlaygroup", "submitTutorialBooking", "placeOrder",
   "rateSession",
 ]);
 const TUTOR_ACTIONS = new Set(["submitAvailability", "submitLeave", "submitProgressReport", "checkInSession"]);
@@ -84,6 +83,10 @@ export function authorizeBusinessAction(state, user, action, args) {
   if (action === "cancelAssessment") {
     const assessment = state.assessments.find((entry) => entry.id === safeArgs[0]);
     if (!assessment || assessment.tuteeId !== user.id) return deny();
+  }
+  if (action === "cancelTutorialBooking") {
+    const booking = state.bookings.find((entry) => entry.id === safeArgs[0]);
+    if (!booking || booking.tuteeId !== user.id) return deny();
   }
   if (action === "decideBookingScheduleProposal") {
     const booking = state.bookings.find((entry) => entry.id === safeArgs[0]);

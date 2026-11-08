@@ -283,7 +283,6 @@ export function stateVisibleToUser(state, user) {
   visible.materials = state.materials.filter((item) => !item.revoked && (!Array.isArray(item.allowedUserIds) || item.allowedUserIds.length === 0 || item.allowedUserIds.includes(user.id)) && (user.role === "tutor" ? item.allowTutors : item.allowTutees));
   visible.materialLogs = state.materialLogs.filter((item) => item.userId === user.id);
   visible.activities = state.activities.filter((item) => item.userId === user.id);
-  visible.payroll = user.role === "tutor" ? state.payroll.filter((item) => item.tutorId === user.id) : [];
   visible.cohorts = state.cohorts.map((cohort) => ({
     ...cohort,
     enrolled: cohort.enrolled.map((id, index) => id === user.id ? id : `occupied-${index}`),
