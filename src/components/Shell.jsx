@@ -38,7 +38,7 @@ export function DashboardShell({ role, nav, children, gate }) {
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
         {nav.map((n) => {
             const active = n.href === base ? path === base : path.startsWith(n.href);
-            return (<Link key={n.href} href={n.href} className={cn("flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition", active ? "bg-brand-600 text-white shadow-sm" : "text-slate-600 hover:bg-brand-50 hover:text-brand-700")}>
+            return (<Link key={n.href} href={n.href} prefetch className={cn("flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-colors duration-150", active ? "bg-brand-600 text-white shadow-sm" : "text-slate-600 hover:bg-brand-50 hover:text-brand-700")}>
               <span className="h-4 w-4 shrink-0 [&>svg]:h-4 [&>svg]:w-4">{n.icon}</span>
               <span className="flex-1">{n.label}</span>
               {!!n.badge && <span className="rounded-full bg-coral-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{n.badge}</span>}
@@ -63,7 +63,7 @@ export function DashboardShell({ role, nav, children, gate }) {
           <div className="absolute left-0 top-0 h-full w-64 bg-white shadow-xl">{sidebar}</div>
         </div>)}
       <div className="min-w-0 flex-1">
-        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-100 bg-white/80 px-4 py-3 backdrop-blur lg:px-8">
+        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-100 bg-white px-4 py-3 lg:px-8">
           <button className="rounded-lg p-2 hover:bg-slate-100 lg:hidden" onClick={() => setOpen(!open)} aria-label="Menu">
             {open ? <X className="h-5 w-5"/> : <Menu className="h-5 w-5"/>}
           </button>

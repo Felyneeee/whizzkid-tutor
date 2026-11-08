@@ -781,7 +781,7 @@ export function createBusinessActions({ get, mutate }) {
   },
   addCohort(c) {
       mutate((n) => {
-          n.cohorts.push({ ...c, id: uid("pg"), enrolled: [] });
+          n.cohorts.push({ ...c, modality: "face-to-face", id: uid("pg"), enrolled: [] });
       });
   },
   removeFromCohort(cohortId, tuteeId) {

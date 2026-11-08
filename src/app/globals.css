@@ -9,7 +9,19 @@
 body {
   @apply bg-brand-50/40 text-slate-800 antialiased;
   background-image: radial-gradient(circle at 12% 8%, #fff3c466 0, transparent 28%), radial-gradient(circle at 92% 4%, #d9eaff99 0, transparent 30%);
-  background-attachment: fixed;
+  /* Keep the decorative background in the normal paint flow. Fixed layered
+     gradients force expensive repaints while scrolling and interacting. */
+  background-attachment: scroll;
+}
+
+/* Keep interactions responsive for users who prefer less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Anti-leak: learning-material viewer */

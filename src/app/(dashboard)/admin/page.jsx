@@ -1,19 +1,17 @@
 "use client";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
-import { Card, PageHeader, Stat, peso } from "@/components/ui";
-import { addDays, fmtShort, monthKey, todayISO } from "@/lib/dates";
-import { payrollFor, tutorRating } from "@/lib/logic";
+import { Card, PageHeader, Stat } from "@/components/ui";
+import { addDays, fmtShort, todayISO } from "@/lib/dates";
+import { tutorRating } from "@/lib/logic";
 import { useStore } from "@/lib/store";
 export default function AdminHome() {
     const s = useStore();
     const db = s.db;
     const today = todayISO();
-    const month = monthKey(today);
     const completed = db.sessions.filter((x) => x.status === "completed");
     const attended = completed.filter((x) => x.attended !== false).length;
     const conflicts = db.sessions.filter((x) => x.status === "needs_reassignment").length;
-    const payroll = db.tutors.filter((t) => t.status === "active").reduce((a, t) => a + (payrollFor(db, t.userId, month)?.amount || 0), 0);
     const rated = db.sessions.filter((x) => typeof x.rating === "number");
     const avg = rated.length ? rated.reduce((a, x) => a + (x.rating || 0), 0) / rated.length : null;
     const queue = [
@@ -42,7 +40,7 @@ export default function AdminHome() {
         <Stat label="Tutees" value={db.tutees.length} tone="brand"/>
         <Stat label="Active tutors" value={db.tutors.filter((t) => t.status === "active").length} tone="mint"/>
         <Stat label="Attendance rate" value={completed.length ? `${Math.round((attended / completed.length) * 100)}%` : "—"} tone="sunny" sub={`${completed.length} completed sessions`}/>
-        <Stat label="Payroll this month" value={peso(payroll)} tone="coral" sub={avg ? `Avg rating ${avg.toFixed(1)} ★` : undefined}/>
+        <Stat label="Average rating" value={avg ? `${avg.toFixed(1)} ★` : "—"} tone="coral" sub={`${rated.length} rated sessions`}/>
       </div>
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

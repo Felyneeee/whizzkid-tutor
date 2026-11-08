@@ -1,8 +1,8 @@
 "use client";
 import Link from "next/link";
-import { Badge, Card, Empty, PageHeader, Stat, peso } from "@/components/ui";
-import { firstName, fmtDate, fmtTime, isBirthdayToday, monthKey, todayISO } from "@/lib/dates";
-import { payrollFor, tutorRating } from "@/lib/logic";
+import { Badge, Card, Empty, PageHeader, Stat } from "@/components/ui";
+import { firstName, fmtDate, fmtTime, isBirthdayToday, todayISO } from "@/lib/dates";
+import { tutorRating } from "@/lib/logic";
 import { useStore } from "@/lib/store";
 export default function TutorHome() {
     const s = useStore();
@@ -12,27 +12,25 @@ export default function TutorHome() {
     const upcoming = s.db.sessions.filter((x) => x.tutorId === id && x.status === "scheduled" && x.date >= today).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
     const flagged = s.db.sessions.filter((x) => x.tutorId === id && x.status === "needs_reassignment");
     const rating = tutorRating(s.db, id);
-    const pay = payrollFor(s.db, id, monthKey(today));
     const students = new Set(s.db.sessions.filter((x) => x.tutorId === id && x.status !== "cancelled").map((x) => x.tuteeId)).size;
-    const pendingReq = s.db.availability.filter((a) => a.tutorId === id && a.status === "pending").length + s.db.leaves.filter((l) => l.tutorId === id && l.status === "pending").length;
+    const pendingLeaves = s.db.leaves.filter((l) => l.tutorId === id && l.status === "pending").length;
     const nm = (tid) => firstName(s.db.tutees.find((x) => x.userId === tid)?.fullName, "Student");
     const subj = (bid) => s.db.bookings.find((b) => b.id === bid)?.subject;
     return (<>
       <PageHeader title={`Hello, ${t.fullName.split(" ")[0]}!`} subtitle="Your teaching overview"/>
       {t.birthday && isBirthdayToday(t.birthday) && <div className="mb-4 rounded-2xl bg-sunny-100 p-4 text-center font-extrabold">🎂 Happy Birthday from all of us at Whizzkids!</div>}
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Stat label="Upcoming sessions" value={upcoming.length} tone="brand"/>
         <Stat label="Students" value={students} tone="mint"/>
         <Stat label="Avg. rating" value={rating ? `${rating.toFixed(1)} ★` : "—"} tone="sunny"/>
-        <Stat label="Est. pay this month" value={pay ? peso(pay.amount) : "—"} tone="coral" sub={pay ? `${pay.hours} h × ${peso(pay.hourlyRate)}` : undefined}/>
       </div>
       {flagged.length > 0 && (<Card className="mb-4 border-coral-100 bg-coral-50 !p-4 text-sm text-coral-600">
           {flagged.length} of your session(s) were flagged for reassignment by the admin (leave/availability change).
         </Card>)}
-      {pendingReq > 0 && (<p className="mb-4 text-sm text-slate-500">
-          You have {pendingReq} request(s) awaiting admin approval.{" "}
-          <Link href="/tutor/status" className="font-bold text-brand-600">
-            Track status →
+      {pendingLeaves > 0 && (<p className="mb-4 text-sm text-slate-500">
+          You have {pendingLeaves} leave request(s) awaiting admin approval.{" "}
+          <Link href="/tutor/leave" className="font-bold text-brand-600">
+            View leave requests →
           </Link>
         </p>)}
       <h2 className="mb-3 text-lg font-extrabold">Upcoming sessions</h2>

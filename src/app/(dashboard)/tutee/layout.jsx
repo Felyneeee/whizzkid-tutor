@@ -9,7 +9,7 @@ export default function TuteeLayout({ children }) {
     const unread = s.db.notifications?.filter((n) => n.userId === id && !n.read).length ?? 0;
     const unreadMessages = s.db.notifications?.filter((n) => n.userId === id && !n.read && n.text.startsWith("New message")).length ?? 0;
     return (<DashboardShell role="tutee" nav={[
-            { href: "/tutee", label: "Overview", icon: <Home /> },
+            { href: "/tutee", label: "Dashboard", icon: <Home /> },
             { href: "/tutee/profile", label: "Child Profile", icon: <UserRound /> },
             { href: "/tutee/book", label: "Book a Program", icon: <Sparkles /> },
             { href: "/tutee/schedule", label: "My Schedule", icon: <CalendarDays /> },

@@ -1,13 +1,11 @@
 "use client";
 import { Download } from "lucide-react";
-import { Button, Card, PageHeader, Stat, Table, Td, peso } from "@/components/ui";
-import { monthKey, todayISO } from "@/lib/dates";
-import { payrollFor, tutorRating } from "@/lib/logic";
+import { Button, Card, PageHeader, Stat, Table, Td } from "@/components/ui";
+import { tutorRating } from "@/lib/logic";
 import { useStore } from "@/lib/store";
 export default function Reports() {
     const s = useStore();
     const db = s.db;
-    const period = monthKey(todayISO());
     const bookings = db.bookings;
     const done = db.sessions.filter((x) => x.status === "completed");
     const attended = done.filter((x) => x.attended !== false).length;
@@ -22,23 +20,22 @@ export default function Reports() {
             scheduled: mine.filter((x) => x.status === "scheduled").length,
             completed: mine.filter((x) => x.status === "completed").length,
             rating: tutorRating(db, t.userId),
-            pay: payrollFor(db, t.userId, period)?.amount ?? 0,
         };
     });
     const exportCsv = () => {
-        const csv = ["Tutor,Students,Scheduled,Completed,Rating,Payroll " + period, ...rows.map((r) => [r.name, r.students, r.scheduled, r.completed, r.rating?.toFixed(1) ?? "", r.pay].join(","))].join("\n");
+        const csv = ["Tutor,Students,Scheduled,Completed,Rating", ...rows.map((r) => [r.name, r.students, r.scheduled, r.completed, r.rating?.toFixed(1) ?? ""].join(","))].join("\n");
         const a = document.createElement("a");
         a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-        a.download = `whizzkids-report-${period}.csv`;
+        a.download = "whizzkids-report.csv";
         a.click();
     };
     return (<>
-      <PageHeader title="Reports & monitoring" subtitle="Bookings, tutor assignments, completed sessions, ratings and payroll." action={<Button variant="secondary" onClick={exportCsv}><Download className="h-4 w-4"/> Export CSV</Button>}/>
+      <PageHeader title="Reports & monitoring" subtitle="Bookings, tutor assignments, completed sessions and ratings." action={<Button variant="secondary" onClick={exportCsv}><Download className="h-4 w-4"/> Export CSV</Button>}/>
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Total bookings" value={bookings.length} tone="brand"/>
         <Stat label="Completed sessions" value={done.length} tone="mint" sub={done.length ? `${Math.round((attended / done.length) * 100)}% attended` : undefined}/>
         <Stat label="Average rating" value={avg ? `${avg.toFixed(1)} ★` : "—"} tone="sunny" sub={`${rated.length} rated`}/>
-        <Stat label="Payroll (this month)" value={peso(rows.reduce((a, r) => a + r.pay, 0))} tone="coral"/>
+        <Stat label="Tutors" value={rows.length} tone="coral"/>
       </div>
       <div className="mb-6 grid gap-6 lg:grid-cols-2">
         <Card>
@@ -54,8 +51,8 @@ export default function Reports() {
         </Card>
       </div>
       <h2 className="mb-2 font-extrabold">Tutor summary</h2>
-      <Table head={["Tutor", "Active students", "Upcoming", "Completed", "Rating", `Payroll ${period}`]}>
-        {rows.map((r) => <tr key={r.name}><Td className="font-bold">{r.name}</Td><Td>{r.students}</Td><Td>{r.scheduled}</Td><Td>{r.completed}</Td><Td>{r.rating ? `${r.rating.toFixed(1)} ★` : "—"}</Td><Td>{peso(r.pay)}</Td></tr>)}
+      <Table head={["Tutor", "Active students", "Upcoming", "Completed", "Rating"]}>
+        {rows.map((r) => <tr key={r.name}><Td className="font-bold">{r.name}</Td><Td>{r.students}</Td><Td>{r.scheduled}</Td><Td>{r.completed}</Td><Td>{r.rating ? `${r.rating.toFixed(1)} ★` : "—"}</Td></tr>)}
       </Table>
     </>);
 }

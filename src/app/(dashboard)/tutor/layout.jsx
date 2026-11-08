@@ -1,5 +1,5 @@
 "use client";
-import { Bell, CalendarCheck, CalendarDays, CalendarOff, ClipboardList, FileLock2, History, Home, MessageCircle, UserRound, Users } from "lucide-react";
+import { Bell, CalendarCheck, CalendarDays, CalendarOff, FileLock2, History, Home, MessageCircle, UserRound, Users } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { DashboardShell } from "@/components/Shell";
 import { Alert, Badge, Card } from "@/components/ui";
@@ -19,8 +19,7 @@ export default function TutorLayout({ children }) {
         { href: "/tutor", label: "Dashboard", icon: <Home /> },
         { href: "/tutor/calendar", label: "My Calendar", icon: <CalendarDays /> },
         { href: "/tutor/students", label: "My Students", icon: <Users /> },
-        { href: "/tutor/leave", label: "Leave Requests", icon: <CalendarOff /> },
-        { href: "/tutor/status", label: "Request Status", icon: <ClipboardList /> },
+        { href: "/tutor/leave", label: "Leave Requests", icon: <CalendarOff />, badge: s.db.leaves?.filter((l) => l.tutorId === id && l.status === "pending").length ?? 0 },
         { href: "/tutor/materials", label: "Learning Materials", icon: <FileLock2 /> },
         { href: "/tutor/chat", label: "Chat with Admin", icon: <MessageCircle />, badge: unreadMessages },
         { href: "/tutor/history", label: "Activity History", icon: <History /> },
@@ -28,7 +27,7 @@ export default function TutorLayout({ children }) {
         { href: "/tutor/profile", label: "My Profile", icon: <UserRound /> },
     ];
     const limited = [
-        { href: "/tutor", label: "Application Status", icon: <ClipboardList /> },
+        { href: "/tutor", label: "Dashboard", icon: <Home /> },
         { href: "/tutor/chat", label: "Chat with Admin", icon: <MessageCircle />, badge: unreadMessages },
         { href: "/tutor/notifications", label: "Notifications", icon: <Bell />, badge: unread },
         { href: "/tutor/profile", label: "My Profile", icon: <UserRound /> },

@@ -214,6 +214,7 @@ function PlaygroupFlow() {
     const today = todayISO();
     const cohorts = s.db.cohorts
         .filter((c) => cohortSessionDates(c)[cohortSessionDates(c).length - 1] >= today)
+        .filter((c) => c.modality !== "online" || c.enrolled.includes(id))
         .map((c) => ({ c, dates: cohortSessionDates(c), left: c.capacity - c.enrolled.length }));
     const allDates = new Set(cohorts.flatMap((x) => x.dates));
     const onDate = cohorts.filter((x) => (date ? x.dates.includes(date) : true));
