@@ -112,8 +112,8 @@ const tables = [
   {
     stateKey: "assessments", table: "assessments", primaryKey: "id",
     toRow: (a) => ({
-      id: a.id, tutee_id: a.tuteeId, modality: a.modality, assessment_date: a.date,
-      assessment_time: a.time, status: a.status, results: a.results ?? null,
+      id: a.id, tutee_id: a.tuteeId, modality: a.modality, assessment_date: a.date ?? null,
+      assessment_time: a.time ?? null, status: a.status, results: a.results ?? null,
       learning_needs: a.learningNeeds ?? null, reading_level: a.readingLevel ?? null,
     }),
     fromRow: (r) => ({

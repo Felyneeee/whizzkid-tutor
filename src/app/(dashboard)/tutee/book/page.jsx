@@ -6,9 +6,9 @@ import { CheckCircle2 } from "lucide-react";
 import { Calendar } from "@/components/Calendar";
 import { TutorialBooking } from "@/components/TutorialBooking";
 import { Alert, Badge, Button, Card, Chips, Field, PageHeader, Select, Textarea, cn, peso } from "@/components/ui";
-import { ASSESSMENT_FEE, GRADE_LEVELS, HOURS, PLAYGROUP_MONTHLY_FEE, PROGRAMS, READING_SKILLS, SUBJECTS } from "@/lib/constants";
-import { addDays, fmtDate, fmtTime, parseISO, todayISO, weekday } from "@/lib/dates";
-import { cohortSessionDates, slotOccupied } from "@/lib/logic";
+import { GRADE_LEVELS, PLAYGROUP_MONTHLY_FEE, PROGRAMS, READING_SKILLS, SUBJECTS } from "@/lib/constants";
+import { addDays, fmtDate, fmtTime, parseISO, todayISO } from "@/lib/dates";
+import { cohortSessionDates } from "@/lib/logic";
 import { useStore } from "@/lib/store";
 function ageMonths(bday) {
     if (!bday)
@@ -111,14 +111,13 @@ function ReadingFlow() {
     const profile = s.db.tutees.find((t) => t.userId === id);
     const mine = s.db.assessments.filter((a) => a.tuteeId === id);
     const booked = mine.find((a) => a.status === "booked");
+    const pending = mine.find((a) => a.status === "pending_admin_scheduling");
     const done = [...mine].reverse().find((a) => a.status === "completed");
     const [params, setParams] = useState(null);
     const [modality, setModality] = useState("online");
-    const [date, setDate] = useState("");
-    const [time, setTime] = useState("");
+    const [needs, setNeeds] = useState("");
     const [err, setErr] = useState("");
     const [ok, setOk] = useState(false);
-    const [skill, setSkill] = useState([]);
     const age = profile.age;
     const ageWarn = age !== null && (age < 3 || age > 15);
     if (params)
@@ -137,7 +136,7 @@ function ReadingFlow() {
           </dl>
         </Card>
         <Card className="space-y-4">
-          <h3 className="font-extrabold">Proceed to tutorial booking & matching</h3>
+          <h3 className="font-extrabold">Book your Reading Program schedule</h3>
           <Field label="Modality">
             <ModalityPicker value={modality} onChange={setModality}/>
           </Field>
@@ -157,53 +156,20 @@ function ReadingFlow() {
         </Button>
       </Card>);
     }
-    const slotOk = (d, t) => !slotOccupied(s.db, d, t);
-    const slots = HOURS.filter((h) => h !== "17:00");
-    const dayOpen = (d) => weekday(d) !== 0 && slots.some((t) => slotOk(d, t));
+    if (pending) return <div className="max-w-2xl space-y-4"><Card><h2 className="text-lg font-extrabold">Reading program request received</h2><p className="mt-2"><Badge status="pending_admin_scheduling">Pending Admin Assessment Scheduling</Badge></p><p className="mt-3 text-sm text-slate-600">Your reading program request is awaiting an initial assessment. The administrator will schedule it and send you the details.</p></Card><Alert kind="warn">Note: Your program booking request will be confirmed once your initial assessment is completed. The admin will schedule and send you your specific initial assessment details (assessments are held between 9:00 AM – 10:00 AM).</Alert></div>;
     return (<div className="space-y-4">
       <Card>
         <h2 className="text-lg font-extrabold">Reading Programs</h2>
-        <p className="mt-1 text-sm text-slate-500">Step 1: book an initial assessment ({peso(ASSESSMENT_FEE)}). The admin records results and learning needs, then you proceed to matching.</p>
+        <p className="mt-1 text-sm text-slate-500">Submit a request for the Reading Program. The administrator will schedule your initial assessment, then confirm the program after it is completed.</p>
         <p className="mt-2 text-xs text-slate-400">Covers: {READING_SKILLS.join(" · ")}</p>
         {ageWarn && <div className="mt-3"><Alert kind="warn">Reading Programs are for ages 3–15; your child is {age}. You can still book — the admin will review.</Alert></div>}
       </Card>
-      {ok ? (<Alert kind="success">Assessment booked! Check Pending Requests for details.</Alert>) : (<div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-4">
-            <Field label="Modality">
-              <ModalityPicker value={modality} onChange={(m) => { setModality(m); setTime(""); }}/>
-            </Field>
-            <Field label="Select an available date">
-              <Calendar selected={date ? [date] : []} onSelect={(d) => { setDate(d); setTime(""); }} isDisabled={(d) => d <= todayISO() || !dayOpen(d)} mark={(d) => (d > todayISO() && dayOpen(d) ? { text: "open", tone: "mint" } : null)}/>
-            </Field>
-          </div>
-          <div className="space-y-4">
-            <Field label="Select a time">
-              {date ? (<div className="grid grid-cols-3 gap-2">
-                  {slots.map((t) => {
-                    const free = slotOk(date, t);
-                    return (<button key={t} disabled={!free} onClick={() => setTime(t)} className={cn("rounded-xl border p-2 text-sm font-bold", time === t ? "border-brand-600 bg-brand-600 text-white" : "border-slate-200", !free && "cursor-not-allowed text-slate-300 line-through")}>
-                        {fmtTime(t)}
-                      </button>);
-                })}
-                </div>) : (<p className="text-sm text-slate-400">Pick a date first.</p>)}
-            </Field>
-            {date && time && (<Card className="space-y-3 bg-slate-50 !shadow-none">
-                <p className="text-sm">
-                  {fmtDate(date)} · {fmtTime(time)} · {modality}
-                </p>
-                {err && <Alert kind="error">{err}</Alert>}
-                <Button onClick={async () => {
-                    const r = await s.bookAssessment(id, modality, date, time);
-                    if (!r.ok)
-                        return setErr(r.error);
-                    setOk(true);
-                }}>
-                  Submit assessment booking
-                </Button>
-              </Card>)}
-          </div>
-        </div>)}
-      <input type="hidden" value={skill.join(",")} readOnly/>
+      {ok ? (<div className="space-y-3"><Alert kind="success">Program booking request received. Status: Pending Admin Assessment Scheduling.</Alert><Alert kind="warn">Note: Your program booking request will be confirmed once your initial assessment is completed. The admin will schedule and send you your specific initial assessment details (assessments are held between 9:00 AM – 10:00 AM).</Alert></div>) : (<Card className="max-w-xl space-y-4">
+          <Field label="Preferred assessment modality"><ModalityPicker value={modality} onChange={setModality}/></Field>
+          <Field label="Reading goals or areas of concern" hint={`Areas include: ${READING_SKILLS.join(", ")}`}><Textarea value={needs} onChange={(e) => setNeeds(e.target.value)} placeholder="Tell us what your child would like help with…"/></Field>
+          {err && <Alert kind="error">{err}</Alert>}
+          <Button onClick={async () => { const r = await s.requestAssessment(id, modality, needs); if (!r.ok) return setErr(r.error); setOk(true); }}>Submit program booking request</Button>
+        </Card>)}
     </div>);
 }
 /* ---------------- Playgroup ---------------- */

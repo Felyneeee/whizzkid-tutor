@@ -60,6 +60,38 @@ export function createBusinessActions({ get, mutate }) {
       });
   },
   // ---------- Tutee flows ----------
+  requestAssessment(tuteeId, modality, learningNeeds = "") {
+      const d = get();
+      if (d.assessments.some((a) => a.tuteeId === tuteeId))
+          return { ok: false, error: "An initial reading assessment can only be requested once. Your existing request or assessment is already on record." };
+      const id = uid("as");
+      mutate((n) => {
+          n.assessments.push({ id, tuteeId, modality, learningNeeds: String(learningNeeds).slice(0, 2000), status: "pending_admin_scheduling", program: "reading" });
+          pushNotif(n, tuteeId, "Your reading program booking request was received. Status: Pending Admin Assessment Scheduling.", ["web", "email"]);
+          pushAdmins(n, `New reading program booking request from ${nameOf(n, tuteeId)}. Initial assessment needs scheduling.`);
+          logAct(n, tuteeId, "booking", "Submitted a reading program booking request");
+      });
+      return { ok: true, id };
+  },
+  scheduleAssessment(id, date, time) {
+      const validDate = typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T00:00:00Z`)) && new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date && date >= todayISO();
+      if (!validDate)
+          return { ok: false, error: "Choose today or a future date for the assessment." };
+      if (!/^09:(00|15|30|45)$/.test(String(time)))
+          return { ok: false, error: "Initial assessments must be scheduled between 9:00 AM and 10:00 AM." };
+      if (!get().assessments.some((x) => x.id === id && x.status === "pending_admin_scheduling"))
+          return { ok: false, error: "This assessment request is no longer awaiting scheduling." };
+      if (get().assessments.some((x) => x.id !== id && x.status === "booked" && x.date === date && x.time === time))
+          return { ok: false, error: "That initial assessment slot is already occupied." };
+      mutate((n) => {
+          const a = n.assessments.find((x) => x.id === id && x.status === "pending_admin_scheduling");
+          if (!a) return;
+          a.date = date; a.time = time; a.status = "booked";
+          n.assessments.filter((x) => x.tuteeId === a.tuteeId && x.id !== a.id && x.status === "pending_admin_scheduling").forEach((x) => { x.status = "cancelled"; });
+          pushNotif(n, a.tuteeId, `Your initial assessment is scheduled for ${fmtDate(date)} at ${fmtTime(time)}.`, ["web", "email", "sms"]);
+      });
+      return { ok: true };
+  },
   bookAssessment(tuteeId, modality, date, time) {
       const d = get();
       if (d.assessments.some((a) => a.tuteeId === tuteeId && a.status === "booked"))
@@ -76,17 +108,25 @@ export function createBusinessActions({ get, mutate }) {
       return { ok: true, id };
   },
   completeAssessment(id, v) {
+      const assessment = get().assessments.find((x) => x.id === id && x.status === "booked");
+      if (!assessment)
+          return { ok: false, error: "Only a scheduled initial assessment can be completed." };
+      const readingLevel = typeof v?.readingLevel === "string" ? v.readingLevel.trim() : "";
+      const results = typeof v?.results === "string" ? v.results.trim() : "";
+      const learningNeeds = typeof v?.learningNeeds === "string" ? v.learningNeeds.trim() : "";
+      if (!readingLevel || readingLevel.length > 100 || !results || !learningNeeds)
+          return { ok: false, error: "Enter a reading level (up to 100 characters), assessment results, and learning needs." };
       mutate((n) => {
-          const a = n.assessments.find((x) => x.id === id);
-          if (!a)
-              return;
+          const a = n.assessments.find((x) => x.id === id && x.status === "booked");
+          if (!a) return;
           a.status = "completed";
-          a.results = v.results;
-          a.learningNeeds = v.learningNeeds;
-          a.readingLevel = v.readingLevel;
-          pushNotif(n, a.tuteeId, "Your assessment results are in! You can now proceed to Reading Program booking & matching.", ["web", "email", "sms"]);
-          logAct(n, a.tuteeId, "match", `Assessment completed — level: ${v.readingLevel}`);
+          a.results = results;
+          a.learningNeeds = learningNeeds;
+          a.readingLevel = readingLevel;
+          pushNotif(n, a.tuteeId, "Your reading assessment is complete. You can now book a schedule for your Reading Program.", ["web", "email", "sms"]);
+          logAct(n, a.tuteeId, "match", `Assessment completed — level: ${readingLevel}`);
       });
+      return { ok: true };
   },
   cancelAssessment(id) {
       mutate((n) => {

@@ -8,7 +8,7 @@ export default function TuteeRequests() {
     const [proposalMsg, setProposalMsg] = useState({});
     const id = s.me.id;
     const bookings = s.db.bookings.filter((b) => b.tuteeId === id && (["awaiting_admin", "rejected", "cancelled", "expired"].includes(b.status) || !!b.scheduleProposal)).reverse();
-    const assessments = s.db.assessments.filter((a) => a.tuteeId === id && a.status === "booked");
+    const assessments = s.db.assessments.filter((a) => a.tuteeId === id && ["pending_admin_scheduling", "booked"].includes(a.status));
     const orders = s.db.purchases.filter((p) => p.tuteeId === id && p.status === "pending");
     return (<>
       <PageHeader title="Pending requests" subtitle="Everything waiting on admin review."/>
@@ -16,16 +16,13 @@ export default function TuteeRequests() {
       <div className="space-y-3">
         {assessments.map((a) => (<Card key={a.id} className="flex flex-wrap items-center justify-between gap-2 !p-4">
             <div>
-              <div className="font-extrabold">Initial reading assessment</div>
+              <div className="font-extrabold">Reading program request · Initial assessment</div>
               <div className="text-sm text-slate-500">
-                {fmtDate(a.date)} · {fmtTime(a.time)} · {a.modality}
+                {a.date ? `${fmtDate(a.date)} · ${fmtTime(a.time)}` : "The admin will schedule and send your assessment details"} · {a.modality}
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Badge status="booked">Scheduled</Badge>
-              <Button size="sm" variant="secondary" onClick={() => s.cancelAssessment(a.id)}>
-                Cancel
-              </Button>
+              <Badge status={a.status}>{a.status === "pending_admin_scheduling" ? "Pending Admin Assessment Scheduling" : "Scheduled"}</Badge>
             </div>
           </Card>))}
         {bookings.map((b) => (<Card key={b.id} className="!p-4">

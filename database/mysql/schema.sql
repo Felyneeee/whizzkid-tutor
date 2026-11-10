@@ -80,8 +80,8 @@ CREATE TABLE IF NOT EXISTS cohorts (
 
 CREATE TABLE IF NOT EXISTS assessments (
   id VARCHAR(64) PRIMARY KEY, tutee_id VARCHAR(64) NOT NULL, modality ENUM('online','face-to-face') NOT NULL,
-  assessment_date DATE NOT NULL, assessment_time VARCHAR(5) NOT NULL,
-  status ENUM('booked','completed','cancelled') NOT NULL,
+  assessment_date DATE NULL, assessment_time VARCHAR(5) NULL,
+  status ENUM('pending_admin_scheduling','booked','completed','cancelled') NOT NULL,
   results TEXT NULL, learning_needs TEXT NULL, reading_level VARCHAR(100) NULL,
   FOREIGN KEY (tutee_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;

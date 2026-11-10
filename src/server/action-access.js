@@ -1,7 +1,7 @@
 import "server-only";
 
 const ADMIN_ACTIONS = new Set([
-  "notify", "completeAssessment", "scheduleInterview", "evaluateApplicant", "verifyExistingTutor",
+  "notify", "completeAssessment", "scheduleAssessment", "scheduleInterview", "evaluateApplicant", "verifyExistingTutor",
   "setTutorPay", "approveAvailability", "adminEditTutorAvailability", "setTutorWeeklySchedule", "rejectAvailability", "decideLeave",
   "adminLeave", "proposeBookingSchedule", "confirmBooking", "rejectBooking", "terminateBooking",
   "completeSession", "reassignSession", "proposeSessionReschedule", "cancelSession", "updateCohort",
@@ -9,7 +9,7 @@ const ADMIN_ACTIONS = new Set([
 ]);
 
 const TUTEE_ACTIONS = new Set([
-  "bookAssessment", "cancelAssessment", "cancelTutorialBooking", "bookPlaygroup", "submitTutorialBooking", "placeOrder",
+  "requestAssessment", "cancelAssessment", "cancelTutorialBooking", "bookPlaygroup", "submitTutorialBooking", "placeOrder",
   "rateSession",
 ]);
 const TUTOR_ACTIONS = new Set(["submitAvailability", "submitLeave", "submitProgressReport", "checkInSession"]);
@@ -58,7 +58,7 @@ export function authorizeBusinessAction(state, user, action, args) {
       safeArgs[1] = Object.fromEntries(Object.entries(safeArgs[1] || {}).filter(([key]) => allowed.has(key)));
     }
   }
-  if (action === "bookAssessment" || action === "bookPlaygroup") safeArgs[0] = user.id;
+  if (action === "bookPlaygroup" || action === "requestAssessment") safeArgs[0] = user.id;
   if (action === "submitTutorialBooking") safeArgs[0] = { ...(safeArgs[0] || {}), tuteeId: user.id };
   if (action === "placeOrder") safeArgs[0] = user.id;
   if (action === "placeOrder") {
@@ -100,3 +100,4 @@ export function authorizeBusinessAction(state, user, action, args) {
 
   return { ok: true, args: safeArgs };
 }
+

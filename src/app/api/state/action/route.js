@@ -99,6 +99,23 @@ export async function POST(request) {
         }
       }
     }
+    if (body.action === "requestAssessment") {
+      const modality = permission.args[1];
+      if (!(["online", "face-to-face"].includes(modality))) {
+        await connection.rollback();
+        return NextResponse.json({ error: "Choose a valid assessment modality." }, { status: 400 });
+      }
+    }
+    if (body.action === "scheduleAssessment") {
+      const [assessmentId, date, time] = permission.args;
+      const validDate = typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T00:00:00Z`)) && new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date && date >= todayISO();
+      const assessment = state.assessments.find((entry) => entry.id === assessmentId && entry.status === "pending_admin_scheduling");
+      const slotTaken = state.assessments.some((entry) => entry.id !== assessmentId && entry.status === "booked" && entry.date === date && entry.time === time);
+      if (!assessment || !validDate || !/^09:(00|15|30|45)$/.test(String(time)) || slotTaken) {
+        await connection.rollback();
+        return NextResponse.json({ error: "Choose a valid date and a time between 9:00 AM and 10:00 AM." }, { status: 400 });
+      }
+    }
 
     let nextState = structuredClone(state);
     const now = Date.now();
