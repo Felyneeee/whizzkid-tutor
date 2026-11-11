@@ -98,7 +98,7 @@ export const FAQS = [
     },
     {
         q: "Can I book a recurring schedule?",
-        a: "Yes. Choose one-time or recurring (e.g. every Monday and Wednesday for a date range). We try to keep the same tutor throughout a recurring booking.",
+        a: "Academic Tutorial bookings are recurring only. Choose a 2, 3, or 4-week cycle and the tutor assigned to a selected weekday will cover that weekday throughout the cycle.",
     },
     {
         q: "How much does it cost?",

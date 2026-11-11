@@ -15,7 +15,7 @@ export default function TutorHome() {
     const students = new Set(s.db.sessions.filter((x) => x.tutorId === id && x.status !== "cancelled").map((x) => x.tuteeId)).size;
     const pendingLeaves = s.db.leaves.filter((l) => l.tutorId === id && l.status === "pending").length;
     const nm = (tid) => firstName(s.db.tutees.find((x) => x.userId === tid)?.fullName, "Student");
-    const subj = (bid) => s.db.bookings.find((b) => b.id === bid)?.subject;
+    const subj = (bid, date, time) => { const booking = s.db.bookings.find((b) => b.id === bid); return booking?.sessionSlots?.find((slot) => slot.date === date && slot.time === time)?.subject || booking?.sessionSubjects?.[date] || booking?.subject; };
     return (<>
       <PageHeader title={`Hello, ${t.fullName.split(" ")[0]}!`} subtitle="Your teaching overview"/>
       {t.birthday && isBirthdayToday(t.birthday) && <div className="mb-4 rounded-2xl bg-sunny-100 p-4 text-center font-extrabold">🎂 Happy Birthday from all of us at Whizzkids!</div>}
@@ -39,7 +39,7 @@ export default function TutorHome() {
               <div className="min-w-[150px] font-bold">{fmtDate(x.date)}</div>
               <div className="text-sm">{fmtTime(x.time)}</div>
               <div className="flex-1 text-sm text-slate-500">
-                {nm(x.tuteeId)} — {subj(x.bookingId)}
+                {nm(x.tuteeId)} — {subj(x.bookingId, x.date, x.time)}
               </div>
               <Badge status={x.modality}/>
             </Card>))}

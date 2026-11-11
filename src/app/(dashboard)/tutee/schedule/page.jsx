@@ -1,60 +1,81 @@
 "use client";
 import { Star } from "lucide-react";
 import { useState } from "react";
-import { Badge, Button, Card, Empty, Modal, PageHeader, Table, Td, Textarea, cn } from "@/components/ui";
-import { firstName, fmtDate, fmtDateTime, fmtTime, todayISO } from "@/lib/dates";
-import { cohortSessionDates } from "@/lib/logic";
+import { Calendar } from "@/components/Calendar";
+import { Badge, Button, Card, Empty, Modal, PageHeader, Textarea, cn } from "@/components/ui";
+import { addDays, firstName, fmtDate, fmtDateTime, fmtTime, todayISO } from "@/lib/dates";
 import { useStore } from "@/lib/store";
 export default function TuteeSchedule() {
     const s = useStore();
     const id = s.me.id;
     const [rating, setRating] = useState(null);
-    const sessions = s.db.sessions.filter((x) => x.tuteeId === id).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
-    const bookings = s.db.bookings.filter((b) => b.tuteeId === id && b.status !== "awaiting_admin");
-    const tutor = (tid) => firstName(s.db.tutors.find((t) => t.userId === tid)?.fullName);
-    const subj = (bid) => s.db.bookings.find((b) => b.id === bid)?.subject || "";
     const today = todayISO();
+    const [selectedDate, setSelectedDate] = useState(today);
+    const sessions = s.db.sessions.filter((x) => x.tuteeId === id).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+    const assessments = s.db.assessments.filter((a) => a.tuteeId === id && a.date && ["booked", "completed"].includes(a.status));
+    const sessionsByDate = {};
+    sessions.forEach((session) => { (sessionsByDate[session.date] ??= []).push(session); });
+    const assessmentsByDate = {};
+    assessments.forEach((assessment) => { (assessmentsByDate[assessment.date] ??= []).push(assessment); });
+    const daySessions = [...(sessionsByDate[selectedDate] ?? [])].sort((a, b) => a.time.localeCompare(b.time));
+    const dayAssessments = [...(assessmentsByDate[selectedDate] ?? [])].sort((a, b) => a.time.localeCompare(b.time));
+    const tutor = (tid) => firstName(s.db.tutors.find((t) => t.userId === tid)?.fullName);
+    const subj = (bid, date, time) => { const booking = s.db.bookings.find((b) => b.id === bid); return booking?.sessionSlots?.find((slot) => slot.date === date && slot.time === time)?.subject || booking?.sessionSubjects?.[date] || booking?.subject || ""; };
     return (<>
       <PageHeader title="My schedule" subtitle="Confirmed matches are added automatically."/>
-      {sessions.length === 0 ? (<Empty>No sessions yet.</Empty>) : (<Table head={["Date", "Time", "Subject", "Tutor", "Mode", "Status", ""]}>
-          {sessions.map((x) => (<tr key={x.id} className={x.date < today ? "text-slate-500" : ""}>
-              <Td>{fmtDate(x.date)}</Td>
-              <Td>{fmtTime(x.time)}</Td>
-              <Td>{subj(x.bookingId)}</Td>
-              <Td>{tutor(x.tutorId)}</Td>
-              <Td><Badge status={x.modality}/></Td>
-              <Td><Badge status={x.status}/></Td>
-              <Td>
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(320px,0.85fr)_minmax(0,1.4fr)]">
+        <Card className="p-3 sm:p-5">
+          <Calendar selected={[selectedDate]} onSelect={setSelectedDate} allowPast initialMonth={selectedDate} mark={(date) => {
+              const sessionCount = sessionsByDate[date]?.length ?? 0;
+              const assessmentCount = assessmentsByDate[date]?.length ?? 0;
+              if (!sessionCount && !assessmentCount) return null;
+              return {
+                text: sessionCount ? `${sessionCount} session${sessionCount === 1 ? "" : "s"}` : `${assessmentCount} assessment${assessmentCount === 1 ? "" : "s"}`,
+                tone: sessionCount ? "brand" : "sunny",
+                ...(sessionCount && assessmentCount ? { subtext: `${assessmentCount} assessment${assessmentCount === 1 ? "" : "s"}`, subtone: "sunny" } : {}),
+              };
+          }}/>
+          <div className="mt-4 flex items-center justify-between gap-2">
+            <Button size="sm" variant="secondary" onClick={() => setSelectedDate(addDays(selectedDate, -1))}>Previous day</Button>
+            <Button size="sm" variant="ghost" onClick={() => setSelectedDate(today)}>Today</Button>
+            <Button size="sm" variant="secondary" onClick={() => setSelectedDate(addDays(selectedDate, 1))}>Next day</Button>
+          </div>
+        </Card>
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-xl font-extrabold">{fmtDate(selectedDate)}</h2>
+            <p className="text-sm text-slate-500">{daySessions.length} session{daySessions.length === 1 ? "" : "s"} · {dayAssessments.length} initial assessment{dayAssessments.length === 1 ? "" : "s"}</p>
+          </div>
+          {daySessions.length === 0 && dayAssessments.length === 0 && <Empty>No sessions or initial assessments on this day.</Empty>}
+          {daySessions.map((x) => (<Card key={x.id} className="flex flex-wrap items-center gap-3">
+              <div className="min-w-20 rounded-xl bg-brand-50 px-3 py-2 text-center font-extrabold text-brand-700">{fmtTime(x.time)}</div>
+              <div className="min-w-[180px] flex-1">
+                <div className="font-bold">{subj(x.bookingId, x.date, x.time)} · {tutor(x.tutorId)}</div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                  <Badge status={x.modality}/>
+                  <Badge status={x.status}/>
+                </div>
                 {x.tutorCheckedInAt
-                    ? <span className="text-xs font-semibold text-mint-600">Tutor checked you in {fmtDateTime(x.tutorCheckedInAt)}</span>
-                    : x.tuteeCheckedInAt && <span className="text-xs font-semibold text-mint-600">Checked in {fmtDateTime(x.tuteeCheckedInAt)}</span>}
+                    ? <div className="mt-1 text-xs font-semibold text-mint-600">Tutor checked you in {fmtDateTime(x.tutorCheckedInAt)}</div>
+                    : x.tuteeCheckedInAt && <div className="mt-1 text-xs font-semibold text-mint-600">Checked in {fmtDateTime(x.tuteeCheckedInAt)}</div>}
+              </div>
+              <div className="flex items-center gap-2">
                 {x.status === "completed" && !x.rating && (<Button size="sm" variant="sunny" onClick={() => setRating({ id: x.id, stars: 5, text: "" })}>
                     Rate
                   </Button>)}
                 {x.rating && <span className="text-sunny-500">{"★".repeat(x.rating)}</span>}
-              </Td>
-            </tr>))}
-        </Table>)}
-
-      <h2 className="mb-3 mt-8 text-lg font-extrabold">Bookings & contracts</h2>
-      {bookings.length === 0 ? (<Empty>No bookings.</Empty>) : (<div className="grid gap-3 md:grid-cols-2">
-          {bookings.map((b) => {
-                const cohort = b.cohortId ? s.db.cohorts.find((c) => c.id === b.cohortId) : null;
-                return (<Card key={b.id} className="!p-4">
-                <div className="flex items-center justify-between">
-                  <div className="font-extrabold">{cohort ? cohort.label : `${b.subject} (${b.bookingType})`}</div>
-                  <Badge status={b.status}/>
-                </div>
-                <div className="mt-1 text-sm text-slate-500">
-                  {b.tutorId ? `Tutor: ${tutor(b.tutorId)}` : "Tutor to be assigned"} · {b.dates.length} session(s)
-                </div>
-                {!cohort && <div className="mt-1 text-xs text-slate-500">{b.dates.map((date) => `${fmtDate(date)} · ${fmtTime(b.sessionTimes?.[date] ?? b.time)}`).join(" · ")}</div>}
-                {cohort && <div className="mt-1 text-xs text-slate-400">{cohortSessionDates(cohort).slice(0, 3).map(fmtDate).join(" · ")} …</div>}
-                {b.terminationReason && <div className="mt-1 text-xs text-coral-600">{b.terminationReason}</div>}
-              </Card>);
-            })}
-        </div>)}
-
+              </div>
+          </Card>))}
+          {dayAssessments.map((assessment) => (<Card key={assessment.id} className="flex flex-wrap items-center gap-3 border-sunny-200 bg-sunny-50/50">
+            <div className="min-w-20 rounded-xl bg-sunny-100 px-3 py-2 text-center font-extrabold text-sunny-700">{fmtTime(assessment.time)}</div>
+            <div className="min-w-[180px] flex-1">
+              <div className="font-bold">Reading · Initial assessment</div>
+              <div className="mt-1 text-sm text-slate-500"><Badge status={assessment.modality}/></div>
+            </div>
+            <Badge status={assessment.status}/>
+          </Card>))}
+        </section>
+      </div>
       <Modal open={!!rating} onClose={() => setRating(null)} title="Rate your tutor">
         {rating && (<div className="space-y-4">
             <div className="flex gap-1">

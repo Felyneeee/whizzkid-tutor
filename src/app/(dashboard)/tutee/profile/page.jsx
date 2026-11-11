@@ -2,14 +2,20 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Alert, Button, Card, Field, Input, PageHeader, Select } from "@/components/ui";
-import { GRADE_LEVELS } from "@/lib/constants";
 import { ageFromBirthday } from "@/lib/dates";
 import { useStore } from "@/lib/store";
+const GRADE_CHOICES = ["Nursery", "Preschool", "Kinder", ...Array.from({ length: 10 }, (_, index) => `Grade ${index + 1}`)];
+const gradeChoiceForProfile = (grade) => {
+    if (GRADE_CHOICES.includes(grade)) return grade;
+    if (grade === "Elementary") return "Grade 1";
+    if (grade === "High School") return "Grade 7";
+    return "";
+};
 export default function TuteeProfile() {
     const s = useStore();
     const id = s.me.id;
     const p = s.db.tutees.find((t) => t.userId === id);
-    const [f, setF] = useState({ fullName: p.fullName, birthday: p.birthday, gradeLevel: p.gradeLevel, contact: p.contact, guardianName: p.guardianName });
+    const [f, setF] = useState({ fullName: p.fullName, birthday: p.birthday, gradeLevel: gradeChoiceForProfile(p.gradeLevel), contact: p.contact, guardianName: p.guardianName });
     const [saved, setSaved] = useState(false);
     const age = f.birthday ? ageFromBirthday(f.birthday) : null;
     const set = (k) => (e) => {
@@ -33,7 +39,7 @@ export default function TuteeProfile() {
           <Field label="Grade level">
             <Select required value={f.gradeLevel} onChange={set("gradeLevel")}>
               <option value="">Select…</option>
-              {GRADE_LEVELS.map((g) => (<option key={g}>{g}</option>))}
+              {GRADE_CHOICES.map((g) => (<option key={g}>{g}</option>))}
             </Select>
           </Field>
           <Field label="Contact number">

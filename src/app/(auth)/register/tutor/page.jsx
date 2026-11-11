@@ -2,15 +2,18 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Alert, Button, Card, Chips, Field, Input, Textarea, cn } from "@/components/ui";
-import { GRADE_BANDS, READING_SKILLS, SUBJECTS } from "@/lib/constants";
+import { ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { Alert, Button, Card, Chips, Field, Input } from "@/components/ui";
+import { SUBJECTS } from "@/lib/constants";
 import { ageFromBirthday, todayISO } from "@/lib/dates";
 import { readFileAsDataURL, readPdfAsDataURL } from "@/lib/files";
 import { useStore } from "@/lib/store";
-export default function RegisterTutor() {
+const GRADE_CHOICES = ["Nursery", "Preschool", "Kinder", "Elementary", "High School"];
+const gradeBandForChoice = (grade) => ["Nursery", "Preschool", "Kinder"].includes(grade) ? "Preschool" : grade === "High School" ? "Junior High" : grade;
+export default function RegisterTutor({ initialType = "new" }) {
     const s = useStore();
     const router = useRouter();
-    const [type, setType] = useState("new");
+    const type = initialType;
     const [f, setF] = useState({ email: "", username: "", password: "", fullName: "", contact: "", birthday: "", bio: "" });
     const [subjects, setSubjects] = useState([]);
     const [bands, setBands] = useState([]);
@@ -18,6 +21,9 @@ export default function RegisterTutor() {
     const [photo, setPhoto] = useState("");
     const [err, setErr] = useState("");
     const [success, setSuccess] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirm, setShowConfirm] = useState(false);
+    const [confirm, setConfirm] = useState("");
     const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
     const calculatedAge = f.birthday ? ageFromBirthday(f.birthday) : null;
     const upload = async (file, kind) => {
@@ -37,19 +43,16 @@ export default function RegisterTutor() {
             setErr(e.message);
         }
     };
-    return (<Card>
-      <h1 className="text-2xl font-extrabold">Tutor registration</h1>
-      <p className="mb-4 text-sm text-slate-500">Tell us about yourself. An admin will review your details before activating your tutor account.</p>
-      <div className="mb-5 grid grid-cols-2 gap-2">
-        {["new", "existing"].map((t) => (<button key={t} type="button" onClick={() => setType(t)} className={cn("rounded-xl border-2 p-3 text-left text-sm", type === t ? "border-brand-500 bg-brand-50" : "border-slate-200")}>
-            <div className="font-extrabold">{t === "new" ? "New Applicant" : "Existing Tutor"}</div>
-            <div className="text-xs text-slate-500">{t === "new" ? "Application → review → interview → approval" : "Already teaching with us? Verify your account"}</div>
-          </button>))}
-      </div>
+    return (<>
+      <Card className="p-7 sm:p-8">
+      <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">{type === "new" ? "Application Form" : "Account Activation"}</h1>
+      <p className="mb-4 text-sm text-slate-500">{type === "new" ? "After filling out applicant form, an admin will review your resume and send an application status whether you’re rejected or scheduled for the interview." : "Already employed tutors must submit registration details to request account activation. An admin will verify your record and activate your access."}</p>
       <form className="space-y-4" onSubmit={async (e) => {
             e.preventDefault();
             if (f.password.length < 12)
                 return setErr("Password must be at least 12 characters.");
+            if (f.password !== confirm)
+                return setErr("Passwords do not match.");
             if (calculatedAge === null || calculatedAge < 18 || calculatedAge > 80)
                 return setErr("Enter a birthday that makes you between 18 and 80 years old.");
             if (!subjects.length || !bands.length)
@@ -68,7 +71,7 @@ export default function RegisterTutor() {
                 resumeName: resume.name,
                 resumeData: resume.data,
                 subjects,
-                gradeBands: bands,
+                gradeBands: [...new Set(bands.map(gradeBandForChoice))],
                 bio: f.bio,
                 birthday: f.birthday || undefined,
             });
@@ -81,18 +84,21 @@ export default function RegisterTutor() {
             }
             router.replace("/tutor");
         }}>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Email">
+        <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+          <div className="sm:col-span-2"><Field label="Email">
             <Input type="email" required value={f.email} onChange={set("email")}/>
-          </Field>
+          </Field></div>
           <Field label="Username">
             <Input required value={f.username} onChange={set("username")}/>
           </Field>
-          <Field label="Password">
-            <Input type="password" required minLength={12} value={f.password} onChange={set("password")}/>
-          </Field>
           <Field label="Full name">
             <Input required value={f.fullName} onChange={set("fullName")}/>
+          </Field>
+          <Field label="Password">
+            <div className="relative"><Input type={showPassword ? "text" : "password"} required minLength={12} value={f.password} onChange={set("password")} className="pr-11"/><button type="button" onClick={() => setShowPassword((visible) => !visible)} className="absolute inset-y-0 right-0 grid w-10 place-items-center text-slate-700" aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? <Eye className="h-4 w-4"/> : <EyeOff className="h-4 w-4"/>}</button></div>
+          </Field>
+          <Field label="Confirm password">
+            <div className="relative"><Input type={showConfirm ? "text" : "password"} required minLength={12} value={confirm} onChange={(e) => setConfirm(e.target.value)} className="pr-11"/><button type="button" onClick={() => setShowConfirm((visible) => !visible)} className="absolute inset-y-0 right-0 grid w-10 place-items-center text-slate-700" aria-label={showConfirm ? "Hide password" : "Show password"}>{showConfirm ? <Eye className="h-4 w-4"/> : <EyeOff className="h-4 w-4"/>}</button></div>
           </Field>
           <Field label="Birthday">
             <Input type="date" required max={todayISO()} value={f.birthday} onChange={set("birthday")}/>
@@ -100,33 +106,31 @@ export default function RegisterTutor() {
           <Field label="Contact number">
             <Input required value={f.contact} onChange={set("contact")}/>
           </Field>
-          <Field label="Profile photo">
-            <Input type="file" accept="image/*" onChange={(e) => upload(e.target.files?.[0], "photo")}/>
-          </Field>
         </div>
         <Field label="Subject expertise">
           <Chips multi options={[...SUBJECTS, "Reading"]} value={subjects} onChange={setSubjects}/>
         </Field>
-        <Field label="Grade levels you can teach" hint={`Reading skills covered: ${READING_SKILLS.join(", ")}`}>
-          <Chips multi options={GRADE_BANDS} value={bands} onChange={setBands}/>
+        <Field label="Grade levels you can teach">
+          <Chips multi options={GRADE_CHOICES} value={bands} onChange={setBands}/>
         </Field>
-        <Field label="Short bio / experience">
-          <Textarea value={f.bio} onChange={set("bio")}/>
-        </Field>
-        <Field label={type === "new" ? "Resume (PDF)" : "Resume (optional PDF)"} hint={resume.name || undefined}>
-          <Input type="file" accept=".pdf,application/pdf" onChange={(e) => upload(e.target.files?.[0], "resume")}/>
-        </Field>
+        {type === "new" && <Field label="Resume (PDF)" hint={resume.name || undefined}>
+          <Input type="file" accept=".pdf,application/pdf" required onChange={(e) => upload(e.target.files?.[0], "resume")}/>
+        </Field>}
         {err && <Alert kind="error">{err}</Alert>}
         {success && <Alert kind="success">{success}</Alert>}
         <Button type="submit" className="w-full" disabled={!s.ready}>
-          {type === "new" ? "Submit application" : "Submit for verification"}
+          Submit
         </Button>
       </form>
       <p className="mt-4 text-center text-sm text-slate-500">
         Already registered?{" "}
         <Link href="/login" className="font-bold text-brand-600">
-          Log in
+          Log in Here
         </Link>
       </p>
-    </Card>);
+      </Card>
+      <button type="button" onClick={() => router.back()} className="mx-auto mt-7 flex items-center gap-3 text-sm font-bold text-slate-800 hover:text-brand-700">
+        <span className="grid h-8 w-8 place-items-center rounded-full bg-brand-600 text-white"><ArrowLeft className="h-4 w-4"/></span>Back
+      </button>
+    </>);
 }

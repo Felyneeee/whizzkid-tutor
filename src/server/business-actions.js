@@ -1,8 +1,8 @@
 import "server-only";
 import { ADMIN_ID } from "@/lib/seed";
 import { ageFromBirthday, firstName, nowISO, todayISO, uid, fmtDate, fmtTime, addDays, rangeDates } from "@/lib/dates";
-import { cohortSessionDates, computeRate, matchTutors, onApprovedLeave, tutorBusy, tutorFreeOn, approvedSlot, slotOccupied } from "@/lib/logic";
-import { HOURS, PLAYGROUP_MONTHLY_FEE, SHOP_ITEMS } from "@/lib/constants";
+import { cohortSessionDates, computeRate, matchTutors, onApprovedLeave, tutorBusy, tutorFreeOn, tutorQualifies, approvedSlot, slotOccupied, slotRequestable } from "@/lib/logic";
+import { HOURS, PLAYGROUP_MONTHLY_FEE, SHOP_ITEMS, SUBJECTS } from "@/lib/constants";
 
 export function createBusinessActions({ get, mutate }) {
   const pushNotif = (d, userId, text, channels = ["web", "email"], threadId) => {
@@ -185,10 +185,27 @@ export function createBusinessActions({ get, mutate }) {
       if (v.program === "reading") v.sessionType = "one-on-one";
       if (v.dates.some((date) => date < todayISO()))
           return { ok: false, error: "Past dates cannot be booked. Please choose a future date." };
-      if (d.bookings.some((b) => b.tuteeId === v.tuteeId && b.program === v.program && ["awaiting_admin", "confirmed"].includes(b.status) && b.dates.some((date) => v.dates.includes(date) && (b.sessionTimes?.[date] ?? b.time) === v.time)))
+      if (d.bookings.some((b) => b.tuteeId === v.tuteeId && b.program === v.program && ["awaiting_admin", "confirmed"].includes(b.status) && (b.sessionSlots || b.dates.map((date) => ({ date, time: b.sessionTimes?.[date] ?? b.time }))).some((existing) => (v.sessionSlots || v.dates.map((date) => ({ date, time: v.sessionTimes?.[date] ?? v.time }))).some((requested) => existing.date === requested.date && existing.time === requested.time))))
           return { ok: false, error: "You already have a request or booking for this program, date, and time." };
+      if (v.program === "academic") {
+          const cycleWeeks = v.recurrence?.cycleWeeks;
+          const slots = v.sessionSlots;
+          const templates = new Map((slots || []).map((slot) => [slot.seriesKey, slot]));
+          const weeklySubjects = new Map([...templates.values()].map((slot) => [slot.seriesKey, slot.subject]));
+          const perSubject = new Map();
+          for (const subject of weeklySubjects.values()) perSubject.set(subject, (perSubject.get(subject) || 0) + 1);
+          const perDate = new Map();
+          for (const slot of slots || []) perDate.set(slot.date, (perDate.get(slot.date) || 0) + 1);
+          const perDay = new Map();
+          for (const slot of templates.values()) perDay.set(slot.day, (perDay.get(slot.day) || 0) + 1);
+          const maxSessions = v.bookingType === "recurring" && [2, 3, 4].includes(cycleWeeks) ? 5 * cycleWeeks : 0;
+          if (!Array.isArray(slots) || !slots.length || !maxSessions || slots.length > maxSessions || v.dates.length < 1 || [...perDate.values()].some((count) => count > 2) || new Set(slots.map((slot) => `${slot.date}|${slot.time}`)).size !== slots.length || new Set(slots.map((slot) => slot.date)).size !== v.dates.length || !v.recurrence || !Array.isArray(v.recurrence.days) || v.recurrence.days.length < 1 || v.recurrence.days.length > 5 || v.dates.length !== v.recurrence.days.length * cycleWeeks || slots.length !== templates.size * cycleWeeks || templates.size > 5 || [...perDay.values()].some((count) => count > 2) || perSubject.size > 5 || [...perSubject.values()].some((count) => count > 2) || slots.some((slot) => !slot.seriesKey || !v.dates.includes(slot.date) || !HOURS.includes(slot.time) || !SUBJECTS.includes(slot.subject) || templates.get(slot.seriesKey)?.subject !== slot.subject || templates.get(slot.seriesKey)?.time !== slot.time || templates.get(slot.seriesKey)?.day !== slot.day))
+              return { ok: false, error: "Choose 1–5 sessions per week, with each subject selected no more than twice per week." };
+      }
       const capacityOptions = { program: v.program, subject: v.subject, gradeLevel: v.gradeLevel, modality: v.modality, sessionType: v.sessionType };
-      const occupied = v.dates.filter((date) => slotOccupied(d, date, v.time, undefined, undefined, capacityOptions));
+      const occupied = v.program === "academic"
+          ? v.sessionSlots.filter((slot) => !slotRequestable(d, slot.date, slot.time, { ...capacityOptions, subject: slot.subject })).map((slot) => slot.date)
+          : v.dates.filter((date) => slotOccupied(d, date, v.time, undefined, undefined, capacityOptions));
       if (occupied.length)
           return { ok: false, error: `That time is no longer open on: ${occupied.map(fmtDate).join(", ")}. Please choose another slot.` };
       const matches = matchTutors(d, {
@@ -196,6 +213,7 @@ export function createBusinessActions({ get, mutate }) {
           subject: v.subject,
           gradeLevel: v.gradeLevel,
           modality: v.modality,
+          learningNeeds: v.learningNeeds,
           dates: v.dates,
           time: v.time,
       });
@@ -214,9 +232,16 @@ export function createBusinessActions({ get, mutate }) {
               sessionType: v.sessionType,
               dates: v.dates,
               time: v.time,
+              ...(v.sessionTimes ? { sessionTimes: v.sessionTimes } : {}),
+              ...(v.sessionSubjects ? { sessionSubjects: v.sessionSubjects } : {}),
+              ...(v.sessionSlots ? { sessionSlots: v.sessionSlots } : {}),
               recurrence: v.recurrence,
+              cycleType: v.cycleType,
+              cycleStart: v.cycleStart,
+              cycleEnd: v.cycleEnd,
+              cycleSessionAllowance: v.cycleSessionAllowance,
               ratePerHour: rate,
-              totalFee: rate * v.dates.length,
+              totalFee: rate * (v.sessionSlots?.length ?? v.dates.length),
               status: "awaiting_admin",
               recommendations: matches.slice(0, 3).map((m) => m.tutor.userId),
               createdAt: nowISO(),
@@ -227,8 +252,9 @@ export function createBusinessActions({ get, mutate }) {
           pushNotif(n, v.tuteeId, matches.length
               ? "Booking request submitted. Your open slot is reserved while our admin reviews the tutor recommendations."
               : "Booking request submitted. Your open slot is reserved while we wait for a matching tutor to become available.", ["web", "email"]);
-          pushAdmins(n, `New booking request from ${nameOf(n, v.tuteeId)} — ${b.subject}, ${v.dates.length} session(s). ${matches.length ? "Review recommendations." : "No tutor matches yet; review when an eligible tutor's availability is approved."}`);
-          logAct(n, v.tuteeId, "booking", `Requested ${b.subject} ${v.bookingType} booking (${v.dates.length} session/s)`);
+          const sessionCount = v.sessionSlots?.length ?? v.dates.length;
+          pushAdmins(n, `New booking request from ${nameOf(n, v.tuteeId)} — ${b.subject}, ${sessionCount} session(s). ${matches.length ? "Review recommendations." : "No tutor matches yet; review when an eligible tutor's availability is approved."}`);
+          logAct(n, v.tuteeId, "booking", `Requested ${b.subject} ${v.bookingType} booking (${sessionCount} session/s)`);
       });
       return { ok: true, bookingId };
   },
@@ -478,6 +504,10 @@ export function createBusinessActions({ get, mutate }) {
       const booking = d.bookings.find((x) => x.id === bookingId);
       if (!booking || booking.status !== "awaiting_admin")
           return { ok: false, error: "This booking is no longer awaiting assignment." };
+      if (booking.sessionSlots?.length)
+          return { ok: false, error: "Academic session slots cannot be changed in this editor. Reject the request and ask the tutee to submit a new schedule." };
+      if (d.sessions.some((session) => session.bookingId === bookingId && session.status !== "cancelled"))
+          return { ok: false, error: "A schedule cannot be changed after tutor matching has started." };
       if (!sessions.length)
           return { ok: false, error: "A booking must include at least one session." };
       const sorted = [...sessions].sort((a, b) => a.date.localeCompare(b.date));
@@ -566,6 +596,7 @@ export function createBusinessActions({ get, mutate }) {
                   subject: target.subject,
                   gradeLevel: target.gradeLevel,
                   modality: target.modality,
+                  learningNeeds: target.learningNeeds,
                   dates: target.dates,
                   time: target.time,
                   times: target.sessionTimes,
@@ -581,6 +612,50 @@ export function createBusinessActions({ get, mutate }) {
               pushAdmins(n, `${nameOf(n, target.tuteeId)} declined the proposed schedule for ${target.subject}. Follow up or submit another proposal.`);
               logAct(n, target.tuteeId, "booking", `Declined the proposed schedule for ${target.subject}`);
           }
+      });
+      return { ok: true };
+  },
+  confirmBookingSession(bookingId, requestedSlots, tutorId) {
+      const d = get();
+      const booking = d.bookings.find((entry) => entry.id === bookingId);
+      if (!booking || booking.status !== "awaiting_admin") return { ok: false, error: "This booking is no longer awaiting matching." };
+      if (booking.scheduleProposal) return { ok: false, error: "Wait for the tutee to respond to the proposed schedule first." };
+      const canonicalSlots = booking.sessionSlots ?? booking.dates.map((date) => ({ seriesKey: `day-${new Date(`${date}T00:00:00Z`).getUTCDay()}`, date, time: booking.sessionTimes?.[date] ?? booking.time, subject: booking.sessionSubjects?.[date] ?? booking.subject, day: new Date(`${date}T00:00:00Z`).getUTCDay() }));
+      const requests = Array.isArray(requestedSlots) ? requestedSlots : [requestedSlots];
+      const slots = requests.length && typeof requests[0] === "string" ? canonicalSlots.filter((slot) => requests.includes(slot.date)) : requests;
+      const seriesKeys = new Set(slots.map((slot) => slot?.seriesKey));
+      if (!slots.length || seriesKeys.size !== 1 || slots.some((slot) => !canonicalSlots.some((entry) => entry.seriesKey === slot.seriesKey && entry.date === slot.date && entry.time === slot.time && entry.subject === slot.subject))) return { ok: false, error: "Choose sessions from one selected weekly time slot." };
+      if (slots.some((slot) => d.sessions.some((session) => session.bookingId === bookingId && session.date === slot.date && session.time === slot.time && session.status !== "cancelled"))) return { ok: false, error: "A tutor is already assigned to one of these sessions." };
+      const tutor = d.tutors.find((entry) => entry.userId === tutorId);
+      const subject = slots[0].subject;
+      const time = slots[0].time;
+      const availableSlots = slots.filter((slot) => {
+          const options = { program: booking.program, subject: slot.subject, gradeLevel: booking.gradeLevel, modality: booking.modality, sessionType: booking.sessionType ?? "one-on-one", time: slot.time, ignoreBookingId: booking.id };
+          return tutor && tutorQualifies(tutor, options) && tutorFreeOn(d, tutor, options, slot.date);
+      });
+      if (!tutor || availableSlots.length !== slots.length) return { ok: false, error: "This tutor is no longer eligible or available for every session in that weekly slot." };
+      mutate((n) => {
+          const target = n.bookings.find((entry) => entry.id === bookingId);
+          slots.forEach((slot) => n.sessions.push({ id: uid("s"), assignmentId: uid("ta"), bookingId, tutorId, tuteeId: target.tuteeId, date: slot.date, time: slot.time, modality: target.modality, status: "scheduled" }));
+          const assigned = n.sessions.filter((session) => session.bookingId === bookingId && session.status !== "cancelled");
+          const allTargetSlots = target.sessionSlots ?? canonicalSlots;
+          const allAssigned = allTargetSlots.every((slot) => assigned.some((session) => session.date === slot.date && session.time === slot.time));
+          const tutorIds = [...new Set(assigned.map((session) => session.tutorId))];
+          target.tutorId = allAssigned && tutorIds.length === 1 ? tutorIds[0] : undefined;
+          if (allAssigned) {
+              target.status = "confirmed";
+              const scheduleText = allTargetSlots.map((slot) => {
+                  const assignedSession = assigned.find((session) => session.date === slot.date && session.time === slot.time);
+                  return `${slot.subject ?? target.sessionSubjects?.[slot.date] ?? target.subject} with ${nameOf(n, assignedSession?.tutorId)} on ${fmtDate(slot.date)} at ${fmtTime(slot.time)}`;
+              }).join("; ");
+              pushNotif(n, target.tuteeId, `Your booking is confirmed for all sessions: ${scheduleText}.`, ["web", "email", "sms"]);
+          }
+          const tutorName = nameOf(n, tutorId);
+          const assignedDatesText = slots.map((slot) => `${fmtDate(slot.date)} at ${fmtTime(slot.time)}`).join(", ");
+          pushNotif(n, tutorId, `New assignment: ${nameOf(n, target.tuteeId)} — ${subject}, ${assignedDatesText} (${target.modality}).`, ["web", "email"]);
+          pushAdmins(n, `${nameOf(n, target.tuteeId)}'s ${subject} weekday series was assigned to ${tutorName}.${allAssigned ? " All sessions are now assigned." : " Other weekdays remain pending matching."}`);
+          logAct(n, adminIdOf(n), "match", `Assigned ${tutorName} to ${subject} weekday series`);
+          if (allAssigned) logAct(n, target.tuteeId, "match", `All sessions confirmed for ${target.subject}`);
       });
       return { ok: true };
   },
@@ -601,6 +676,7 @@ export function createBusinessActions({ get, mutate }) {
           subject: b.subject,
           gradeLevel: b.gradeLevel,
           modality: b.modality,
+          learningNeeds: b.learningNeeds,
           sessionType: b.sessionType ?? "one-on-one",
           dates: b.dates,
           time: b.time,
@@ -646,6 +722,7 @@ export function createBusinessActions({ get, mutate }) {
               return;
           b.status = "rejected";
           b.scheduleProposal = undefined;
+          n.sessions.filter((session) => session.bookingId === bookingId && session.status !== "completed").forEach((session) => { session.status = "cancelled"; });
           b.terminationReason = reason;
           pushNotif(n, b.tuteeId, `We couldn't confirm your booking. ${reason} Please choose another schedule.`, ["web", "email", "sms"]);
       });
@@ -657,6 +734,7 @@ export function createBusinessActions({ get, mutate }) {
           const target = n.bookings.find((entry) => entry.id === bookingId);
           target.status = "cancelled";
           target.scheduleProposal = undefined;
+          n.sessions.filter((session) => session.bookingId === bookingId && session.status !== "completed").forEach((session) => { session.status = "cancelled"; });
           pushNotif(n, target.tuteeId, `Your ${target.subject} request was cancelled and its reserved capacity released.`, ["web"]);
           pushAdmins(n, `${nameOf(n, target.tuteeId)} cancelled a pending ${target.subject} request.`);
       });

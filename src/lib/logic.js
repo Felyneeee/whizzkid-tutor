@@ -4,6 +4,8 @@ import { addDays, parseISO, rangeDates, todayISO, weekday } from "./dates";
 export function computeRate(program, grade, modality) {
     if (program === "playgroup")
         return PLAYGROUP_MONTHLY_FEE;
+    if (program === "academic")
+        return 600;
     let rate = BASE_RATES[bandOf(grade || "Grade 1")];
     if (program === "reading")
         rate += READING_PREMIUM;
@@ -61,11 +63,19 @@ export function remainingCapacity(db, date, time, options = {}, ignoreBookingId,
         const booking = db.bookings.find((b) => b.id === s.bookingId);
         return eligibleIds.has(s.tutorId) && booking?.program === program && (booking?.sessionType ?? "one-on-one") === sessionType;
     }).length;
-    used += db.bookings.filter((b) => b.id !== ignoreBookingId && b.program !== "playgroup" && b.status === "awaiting_admin" && b.program === program && (b.sessionType ?? "one-on-one") === sessionType && b.dates.includes(date) && (b.sessionTimes?.[date] ?? b.time) === time).length;
+    used += db.bookings.filter((b) => b.id !== ignoreBookingId && b.program !== "playgroup" && b.status === "awaiting_admin" && b.program === program && (b.sessionType ?? "one-on-one") === sessionType && (b.sessionSlots || b.dates.map((sessionDate) => ({ date: sessionDate, time: b.sessionTimes?.[sessionDate] ?? b.time }))).some((slot) => slot.date === date && slot.time === time) && !db.sessions.some((session) => session.bookingId === b.id && session.date === date && session.time === time && ["scheduled", "needs_reassignment"].includes(session.status))).length;
     return Math.max(0, capacity - used);
 }
 export function slotOccupied(db, date, time, ignoreBookingId, ignoreSessionId, options = {}) {
     return remainingCapacity(db, date, time, options, ignoreBookingId, ignoreSessionId) === 0;
+}
+/** A request can be held pending when no eligible tutor has opened that slot yet. */
+export function slotRequestable(db, date, time, options = {}, ignoreBookingId) {
+    const base = { program: options.program ?? "academic", subject: options.subject ?? "English", gradeLevel: options.gradeLevel ?? "Grade 1", modality: options.modality ?? "online", sessionType: options.sessionType ?? "one-on-one" };
+    const hasEligibleTutor = db.tutors.some((tutor) => tutorQualifies(tutor, base) && approvedSlot(db, tutor.userId, date, time, base.modality) && !onApprovedLeave(db, tutor.userId, date));
+    const reserved = db.bookings.some((booking) => booking.id !== ignoreBookingId && booking.program === base.program && (booking.sessionType ?? "one-on-one") === base.sessionType && booking.status === "awaiting_admin" && (booking.sessionSlots || booking.dates.map((sessionDate) => ({ date: sessionDate, time: booking.sessionTimes?.[sessionDate] ?? booking.time }))).some((slot) => slot.date === date && slot.time === time));
+    if (reserved) return false;
+    return hasEligibleTutor ? !slotOccupied(db, date, time, ignoreBookingId, undefined, base) : true;
 }
 export function hasOpenSlot(db, date) {
     return HOURS.some((time) => !slotOccupied(db, date, time));
@@ -101,6 +111,8 @@ export function tutorFreeOn(db, t, p, date) {
     return true;
 }
 export function matchTutors(db, p) {
+    const stopWords = new Set(["with", "that", "this", "from", "have", "needs", "help", "some", "more", "when", "where", "they", "their", "will", "would", "about", "difficulty"]);
+    const learningTerms = [...new Set(String(p.learningNeeds ?? "").toLowerCase().match(/[a-z0-9]{4,}/g) ?? [])].filter((word) => !stopWords.has(word));
     const out = [];
     for (const t of db.tutors) {
         if (!tutorQualifies(t, p))
@@ -110,10 +122,12 @@ export function matchTutors(db, p) {
             continue;
         const rating = tutorRating(db, t.userId);
         const full = ok.length === p.dates.length;
-        const gradeScore = t.gradeBands.includes(bandOf(p.gradeLevel)) ? 25 : 0;
-        const scheduleScore = (ok.length / p.dates.length) * 40;
-        const subjectScore = tutorQualifies(t, p) ? 35 : 0;
-        const score = gradeScore + scheduleScore + subjectScore;
+        const gradeScore = t.gradeBands.includes(bandOf(p.gradeLevel)) ? 20 : 0;
+        const scheduleScore = (ok.length / p.dates.length) * 30;
+        const subjectScore = tutorQualifies(t, p) ? 30 : 0;
+        const bio = String(t.bio ?? "").toLowerCase();
+        const learningFitScore = learningTerms.length ? Math.round(learningTerms.filter((word) => bio.includes(word)).length / learningTerms.length * 20) : 10;
+        const score = gradeScore + scheduleScore + subjectScore + learningFitScore;
         out.push({
             tutor: t,
             coverage: ok.length,
@@ -122,12 +136,13 @@ export function matchTutors(db, p) {
             gradeScore,
             scheduleScore,
             subjectScore,
+            learningFitScore,
             score,
             rating,
             missingDates: p.dates.filter((d) => !ok.includes(d)),
         });
     }
-    return out.sort((a, b) => b.score - a.score);
+    return out.sort((a, b) => b.score - a.score || (b.rating ?? 0) - (a.rating ?? 0));
 }
 /** Time slots on a date with number of compatible tutors who are free. */
 export function timesForDate(db, base, date) {

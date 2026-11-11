@@ -2,16 +2,19 @@
 import Image from "next/image";
 import { useState } from "react";
 import { Alert, Badge, Button, Card, Chips, Field, Input, PageHeader, Textarea, peso } from "@/components/ui";
-import { GRADE_BANDS, SUBJECTS } from "@/lib/constants";
+import { SUBJECTS } from "@/lib/constants";
 import { readFileAsDataURL, readPdfAsDataURL } from "@/lib/files";
 import { useStore } from "@/lib/store";
+const GRADE_CHOICES = ["Nursery", "Preschool", "Kinder", "Elementary", "High School"];
+const gradeBandForChoice = (grade) => ["Nursery", "Preschool", "Kinder"].includes(grade) ? "Preschool" : grade === "High School" ? "Junior High" : grade;
+const choicesForGradeBands = (bands) => bands.map((band) => band === "Preschool" ? "Preschool" : band === "Junior High" || band === "Senior High" ? "High School" : band).filter((band) => GRADE_CHOICES.includes(band));
 export default function TutorProfilePage() {
     const s = useStore();
     const id = s.me.id;
     const t = s.db.tutors.find((x) => x.userId === id);
     const [f, setF] = useState({ fullName: t.fullName, age: String(t.age ?? ""), contact: t.contact, bio: t.bio, birthday: t.birthday || "" });
     const [subjects, setSubjects] = useState(t.subjects);
-    const [bands, setBands] = useState(t.gradeBands);
+    const [bands, setBands] = useState(() => choicesForGradeBands(t.gradeBands));
     const [photo, setPhoto] = useState(t.photo);
     const [resume, setResume] = useState({ name: t.resumeName, data: t.resumeData });
     const [msg, setMsg] = useState(null);
@@ -50,8 +53,8 @@ export default function TutorProfilePage() {
         <Field label="Subject expertise">
           <Chips multi options={[...SUBJECTS, "Reading"]} value={subjects} onChange={setSubjects}/>
         </Field>
-        <Field label="Grade bands">
-          <Chips multi options={GRADE_BANDS} value={bands} onChange={setBands}/>
+        <Field label="Grade bands" hint="Elementary: Grades 1–6 · High School: Grades 7–10">
+          <Chips multi options={GRADE_CHOICES} value={bands} onChange={setBands}/>
         </Field>
         <Field label="Bio"><Textarea value={f.bio} onChange={set("bio")}/></Field>
         <Field label="Resume (PDF)" hint={resume.name}>
@@ -60,7 +63,7 @@ export default function TutorProfilePage() {
         <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Pay rate (set by admin): {peso(t.hourlyRate)} / hour{t.fixedSalary ? ` + ${peso(t.fixedSalary)} fixed monthly` : ""}</div>
         {msg && <Alert kind={msg.k === "success" ? "success" : "error"}>{msg.t}</Alert>}
         <Button onClick={() => {
-            s.saveTutorProfile(id, { fullName: f.fullName, age: f.age ? Number(f.age) : null, contact: f.contact, bio: f.bio, birthday: f.birthday || undefined, subjects, gradeBands: bands, photo, resumeName: resume.name, resumeData: resume.data });
+            s.saveTutorProfile(id, { fullName: f.fullName, age: f.age ? Number(f.age) : null, contact: f.contact, bio: f.bio, birthday: f.birthday || undefined, subjects, gradeBands: [...new Set(bands.map(gradeBandForChoice))], photo, resumeName: resume.name, resumeData: resume.data });
             setMsg({ k: "success", t: "Profile saved." });
         }}>
           Save profile

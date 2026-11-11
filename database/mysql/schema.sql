@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   session_type ENUM('one-on-one','group') NOT NULL DEFAULT 'one-on-one',
   cycle_type ENUM('2-week','3-week','1-month') NULL, cycle_start DATE NULL, cycle_end DATE NULL,
   cycle_session_allowance SMALLINT UNSIGNED NULL, expires_at DATETIME NULL, expiration_warning_at DATETIME NULL,
-  dates JSON NOT NULL, class_time VARCHAR(5) NOT NULL, session_times JSON NULL,
+  dates JSON NOT NULL, class_time VARCHAR(5) NOT NULL, session_times JSON NULL, session_subjects JSON NULL, session_slots JSON NULL,
   schedule_proposal JSON NULL, recurrence JSON NULL,
   rate_per_hour DECIMAL(10,2) NOT NULL DEFAULT 0, total_fee DECIMAL(10,2) NOT NULL DEFAULT 0,
   status ENUM('awaiting_admin','confirmed','rejected','terminated','completed','expired','cancelled') NOT NULL,

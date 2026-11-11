@@ -48,23 +48,56 @@ export async function POST(request) {
     if (body.action === "submitTutorialBooking") {
       const [booking] = permission.args;
       const validDate = (value) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+      const academicLimitValid = () => {
+        if (booking.program !== "academic") return true;
+        const recurrence = booking.recurrence;
+        const slots = booking.sessionSlots;
+        if (!Array.isArray(slots) || !slots.length) return false;
+        if (booking.bookingType !== "recurring" || !recurrence || ![2, 3, 4].includes(recurrence.cycleWeeks) || !Array.isArray(recurrence.days) || recurrence.days.length < 1 || recurrence.days.length > 5) return false;
+        const templates = new Map();
+        const perDate = new Map();
+        for (const slot of slots) {
+          if (!slot || typeof slot.seriesKey !== "string" || !booking.dates.includes(slot.date) || !validDate(slot.date) || !HOURS.includes(slot.time) || !booking.subjects.includes(slot.subject) || slot.day !== new Date(`${slot.date}T00:00:00Z`).getUTCDay() || slot.day === 0 || ([1, 3, 5].includes(slot.day) && ["10:00", "10:45"].includes(slot.time))) return false;
+          const current = templates.get(slot.seriesKey);
+          if (current && (current.day !== slot.day || current.time !== slot.time || current.subject !== slot.subject)) return false;
+          if (!current) templates.set(slot.seriesKey, slot);
+          perDate.set(slot.date, (perDate.get(slot.date) || 0) + 1);
+        }
+        const perSubject = new Map();
+        const perDay = new Map();
+        for (const template of templates.values()) {
+          perSubject.set(template.subject, (perSubject.get(template.subject) || 0) + 1);
+          perDay.set(template.day, (perDay.get(template.day) || 0) + 1);
+        }
+        const weeks = recurrence.cycleWeeks;
+        return booking.dates.length > 0 && booking.dates.length <= 5 * weeks && templates.size <= 5
+          && [...perDate.values()].every((count) => count <= 2)
+          && [...perDay.values()].every((count) => count <= 2)
+          && [...perSubject.values()].every((count) => count <= 2)
+          && slots.length === templates.size * weeks
+          && new Set(slots.map((slot) => slot.date)).size === booking.dates.length
+          && booking.dates.length === recurrence.days.length * weeks;
+      };
       const valid = booking && typeof booking === "object"
         && ["reading", "academic"].includes(booking.program)
         && (booking.program === "reading" ? booking.subject === "Reading" : SUBJECTS.includes(booking.subject))
+        && (booking.program !== "academic" || (Array.isArray(booking.subjects) && booking.subjects.length > 0 && booking.subjects.every((subject) => SUBJECTS.includes(subject)) && new Set(booking.subjects).size === booking.subjects.length))
         && GRADE_LEVELS.includes(booking.gradeLevel)
         && ["online", "face-to-face"].includes(booking.modality)
         && typeof booking.learningNeeds === "string" && booking.learningNeeds.length <= 2000
-        && ["one-time", "recurring"].includes(booking.bookingType)
+        && (booking.program === "academic" ? booking.bookingType === "recurring" : ["one-time", "recurring"].includes(booking.bookingType))
         && (booking.sessionType === undefined || ["one-on-one", "group"].includes(booking.sessionType))
         && (booking.program !== "reading" || !booking.sessionType || booking.sessionType === "one-on-one")
         && Array.isArray(booking.dates) && booking.dates.length > 0 && booking.dates.length <= 60
         && booking.dates.every((date) => validDate(date) && date >= todayISO())
         && new Set(booking.dates).size === booking.dates.length
-        && HOURS.includes(booking.time)
+        && (booking.program === "academic" ? booking.dates.every((date) => HOURS.includes(booking.sessionTimes?.[date]) && booking.subjects.includes(booking.sessionSubjects?.[date])) : HOURS.includes(booking.time))
+        && academicLimitValid()
         && booking.dates.every((date) => {
           const day = new Date(`${date}T00:00:00Z`).getUTCDay();
+          const time = booking.program === "academic" ? booking.sessionTimes[date] : booking.time;
           return day === 1 || day === 3 || day === 5
-            ? !["10:00", "10:45"].includes(booking.time)
+            ? !["10:00", "10:45"].includes(time)
             : day === 2 || day === 4 || day === 6;
         });
       if (!valid) {
@@ -78,9 +111,12 @@ export async function POST(request) {
           return NextResponse.json({ error: "Complete a reading assessment before requesting a reading program." }, { status: 400 });
         }
       }
-      const duplicate = state.bookings.some((entry) => entry.tuteeId === user.id && entry.program === booking.program
-        && ["awaiting_admin", "confirmed"].includes(entry.status)
-        && entry.dates.some((date) => booking.dates.includes(date) && (entry.sessionTimes?.[date] ?? entry.time) === booking.time));
+      const requestedSlots = booking.sessionSlots || booking.dates.map((date) => ({ date, time: booking.sessionTimes?.[date] ?? booking.time }));
+      const duplicate = state.bookings.some((entry) => {
+        if (entry.tuteeId !== user.id || entry.program !== booking.program || !["awaiting_admin", "confirmed"].includes(entry.status)) return false;
+        const existingSlots = entry.sessionSlots || entry.dates.map((date) => ({ date, time: entry.sessionTimes?.[date] ?? entry.time }));
+        return existingSlots.some((existing) => requestedSlots.some((requested) => existing.date === requested.date && existing.time === requested.time));
+      });
       if (duplicate) {
         await connection.rollback();
         return NextResponse.json({ error: "You already have a request or booking for this program, date, and time." }, { status: 409 });
@@ -92,7 +128,8 @@ export async function POST(request) {
           && recurrence.days.every((day) => Number.isInteger(day) && day >= 0 && day <= 6)
           && new Set(recurrence.days).size === recurrence.days.length
           && validDate(recurrence.start) && validDate(recurrence.end)
-          && JSON.stringify(expandBookingDates({ type: "recurring", ...recurrence })) === JSON.stringify(booking.dates);
+          && JSON.stringify(expandBookingDates({ type: "recurring", start: recurrence.start, end: recurrence.end, days: recurrence.days })) === JSON.stringify(booking.dates)
+          && (booking.program !== "academic" || ([2, 3, 4].includes(recurrence.cycleWeeks) && recurrence.days.length >= 1 && recurrence.days.length <= 5 && booking.dates.length <= 5 * recurrence.cycleWeeks));
         if (!recurrenceValid) {
           await connection.rollback();
           return NextResponse.json({ error: "Recurring schedule details are invalid." }, { status: 400 });

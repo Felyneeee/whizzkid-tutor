@@ -32,7 +32,7 @@ export default function TuteeRequests() {
                   {b.subject} · {b.bookingType}
                 </div>
                 <div className="text-sm text-slate-500">
-                  {b.dates.length} session(s) · {b.dates.map((date) => `${fmtDate(date)} at ${fmtTime(b.sessionTimes?.[date] ?? b.time)}`).join(" · ")} · {b.modality} · {peso(b.totalFee)}
+                  {(b.sessionSlots?.length ?? b.dates.length)} session(s) · {(b.sessionSlots || b.dates.map((date) => ({ date, subject: b.sessionSubjects?.[date], time: b.sessionTimes?.[date] ?? b.time }))).map((slot) => `${fmtDate(slot.date)} ${slot.subject ? `(${slot.subject}) ` : ""}at ${fmtTime(slot.time)}`).join(" · ")} · {b.modality} · {peso(b.totalFee)}
                 </div>
               </div>
               <Badge status={b.status}/>

@@ -8,7 +8,8 @@ export default function MyStudents() {
     const s = useStore();
     const id = s.me.id;
     const [checkInErrors, setCheckInErrors] = useState({});
-    const bookings = s.db.bookings.filter((b) => b.tutorId === id && (b.status === "confirmed" || b.status === "completed"));
+    const assignedBookingIds = new Set(s.db.sessions.filter((session) => session.tutorId === id && session.status !== "cancelled").map((session) => session.bookingId));
+    const bookings = s.db.bookings.filter((b) => assignedBookingIds.has(b.id) && (b.status === "confirmed" || b.status === "completed"));
     const tuteeIds = Array.from(new Set(bookings.map((b) => b.tuteeId)));
     return (<>
       <PageHeader title="My students" subtitle="Assigned students, subjects, grade levels and schedules."/>
@@ -25,7 +26,7 @@ export default function MyStudents() {
                   <span className="text-sm text-slate-500">{p?.gradeLevel || "Grade level not set"}</span>
                 </div>
                 {bs.map((b) => (<div key={b.id} className="mt-2 rounded-xl bg-slate-50 p-3 text-sm">
-                    <div className="font-bold">{b.subject} · {b.gradeLevel}</div>
+                    <div className="font-bold">{[...new Set(b.sessionSlots?.length ? b.sessionSlots.map((slot) => slot.subject) : Object.values(b.sessionSubjects || {}).length ? Object.values(b.sessionSubjects) : [b.subject])].join(", ")} · {b.gradeLevel}</div>
                     <div className="mt-1 space-y-1 text-slate-500">
                       {sessions.filter((session) => session.bookingId === b.id).length > 0
                             ? sessions.filter((session) => session.bookingId === b.id).map((session) => (<div key={session.id} className="rounded-lg bg-slate-50 p-2">
@@ -37,7 +38,7 @@ export default function MyStudents() {
                               {session.tutorCheckedInAt && <div className="mt-1 text-xs font-semibold text-mint-600">Tutor checked in; student marked present at {fmtDateTime(session.tutorCheckedInAt)}</div>}
                               {checkInErrors[session.id] && <Alert kind="error">{checkInErrors[session.id]}</Alert>}
                               {session.status === "completed" && session.attended === false && <div className="mt-1 text-xs font-semibold text-coral-600">Marked as no-show — progress report is unavailable for this session.</div>}
-                              {session.status === "completed" && session.attended !== false && (<SessionProgressForm sessionId={session.id} defaultSubject={b.subject} existing={s.db.progressReports.find((report) => report.sessionId === session.id)}/>)}
+                              {session.status === "completed" && session.attended !== false && (<SessionProgressForm sessionId={session.id} defaultSubject={b.sessionSlots?.find((slot) => slot.date === session.date && slot.time === session.time)?.subject || b.sessionSubjects?.[session.date] || b.subject} existing={s.db.progressReports.find((report) => report.sessionId === session.id)}/>)}
                             </div>))
                             : b.dates.map((scheduledDate) => <div key={scheduledDate}>{fmtDate(scheduledDate)} · {fmtTime(b.sessionTimes?.[scheduledDate] ?? b.time)}</div>)}
                     </div>

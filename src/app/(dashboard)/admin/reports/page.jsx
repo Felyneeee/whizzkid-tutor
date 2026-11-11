@@ -16,7 +16,7 @@ export default function Reports() {
         const mine = db.sessions.filter((x) => x.tutorId === t.userId);
         return {
             name: t.fullName,
-            students: new Set(db.bookings.filter((b) => b.tutorId === t.userId && b.status === "confirmed").map((b) => b.tuteeId)).size,
+            students: new Set(db.sessions.filter((session) => session.tutorId === t.userId && session.status !== "cancelled").map((session) => session.tuteeId)).size,
             scheduled: mine.filter((x) => x.status === "scheduled").length,
             completed: mine.filter((x) => x.status === "completed").length,
             rating: tutorRating(db, t.userId),

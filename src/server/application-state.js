@@ -254,8 +254,9 @@ export async function initializeApplicationState(importedState, user) {
 export function stateVisibleToUser(state, user) {
   if (user.role === "admin") return state;
   const visible = structuredClone(state);
-  const ownBookings = state.bookings.filter((booking) => booking.tuteeId === user.id || booking.tutorId === user.id);
   const ownSessions = state.sessions.filter((session) => session.tuteeId === user.id || session.tutorId === user.id);
+  const ownBookingIds = new Set(ownSessions.map((session) => session.bookingId));
+  const ownBookings = state.bookings.filter((booking) => booking.tuteeId === user.id || booking.tutorId === user.id || ownBookingIds.has(booking.id));
   const tuteeIds = new Set([user.id, ...ownBookings.map((booking) => booking.tuteeId), ...ownSessions.map((session) => session.tuteeId)]);
   const tutorIds = new Set([user.id, ...ownBookings.map((booking) => booking.tutorId), ...ownSessions.map((session) => session.tutorId)]);
   const activeTutorIds = new Set(state.tutors.filter((tutor) => tutor.status === "active").map((tutor) => tutor.userId));

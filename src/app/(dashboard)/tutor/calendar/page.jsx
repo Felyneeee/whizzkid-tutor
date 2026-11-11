@@ -12,7 +12,7 @@ export default function TutorCalendar() {
     const mine = s.db.sessions.filter((x) => x.tutorId === id && x.status !== "cancelled");
     const day = mine.filter((x) => x.date === sel).sort((a, b) => a.time.localeCompare(b.time));
     const nm = (tid) => firstName(s.db.tutees.find((x) => x.userId === tid)?.fullName, "Student");
-    const subj = (bid) => s.db.bookings.find((b) => b.id === bid)?.subject;
+    const subj = (bid, date, time) => { const booking = s.db.bookings.find((b) => b.id === bid); return booking?.sessionSlots?.find((slot) => slot.date === date && slot.time === time)?.subject || booking?.sessionSubjects?.[date] || booking?.subject; };
     const cohorts = s.db.cohorts.filter((c) => c.tutorId === id);
     const weeklySchedule = s.db.tutorSchedules?.[id];
     const weekdayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -44,7 +44,7 @@ export default function TutorCalendar() {
                 <Badge status={x.status}/>
               </div>
               <div className="mt-1 flex items-center gap-2 text-sm text-slate-500">
-                {subj(x.bookingId)} <Badge status={x.modality}/>
+                {subj(x.bookingId, x.date, x.time)} <Badge status={x.modality}/>
               </div>
             </Card>))}
           {cohorts.length > 0 && (<Card className="!p-4 text-sm">

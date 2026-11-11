@@ -6,10 +6,22 @@ import { CheckCircle2 } from "lucide-react";
 import { Calendar } from "@/components/Calendar";
 import { TutorialBooking } from "@/components/TutorialBooking";
 import { Alert, Badge, Button, Card, Chips, Field, PageHeader, Select, Textarea, cn, peso } from "@/components/ui";
-import { GRADE_LEVELS, PLAYGROUP_MONTHLY_FEE, PROGRAMS, READING_SKILLS, SUBJECTS } from "@/lib/constants";
+import { PLAYGROUP_MONTHLY_FEE, PROGRAMS, READING_SKILLS, SUBJECTS } from "@/lib/constants";
 import { addDays, fmtDate, fmtTime, parseISO, todayISO } from "@/lib/dates";
 import { cohortSessionDates } from "@/lib/logic";
 import { useStore } from "@/lib/store";
+const GRADE_CHOICES = ["Nursery", "Preschool", "Kinder", ...Array.from({ length: 10 }, (_, index) => `Grade ${index + 1}`)];
+const gradeChoiceForProfile = (grade) => {
+    if (GRADE_CHOICES.includes(grade)) return grade;
+    if (grade === "Elementary") return "Grade 1";
+    if (grade === "High School") return "Grade 7";
+    return "";
+};
+const gradeLevelForBooking = (grade) => ({
+    Nursery: "Nursery",
+    Preschool: "Kinder",
+    Kinder: "Kinder",
+}[grade] || (GRADE_CHOICES.includes(grade) && grade.startsWith("Grade ") ? grade : ""));
 function ageMonths(bday) {
     if (!bday)
         return null;
@@ -74,8 +86,8 @@ function AcademicFlow() {
     const s = useStore();
     const id = s.me.id;
     const profile = s.db.tutees.find((t) => t.userId === id);
-    const [subject, setSubject] = useState(SUBJECTS[0]);
-    const [grade, setGrade] = useState(profile.gradeLevel || "Grade 1");
+    const [subjects, setSubjects] = useState([SUBJECTS[0]]);
+    const [grade, setGrade] = useState(gradeChoiceForProfile(profile.gradeLevel));
     const [modality, setModality] = useState("online");
     const [sessionType, setSessionType] = useState("one-on-one");
     const [needs, setNeeds] = useState("");
@@ -84,12 +96,13 @@ function AcademicFlow() {
         return <TutorialBooking params={params} tuteeId={id} onBack={() => setParams(null)}/>;
     return (<Card className="max-w-2xl space-y-4">
       <h2 className="text-lg font-extrabold">Academic Tutorials</h2>
-      <Field label="Subject">
-        <Chips options={SUBJECTS} value={[subject]} onChange={(v) => setSubject(v[0])}/>
+      <Field label="Subjects">
+        <Chips options={SUBJECTS} value={subjects} multi onChange={setSubjects}/>
       </Field>
       <Field label="Grade level">
         <Select value={grade} onChange={(e) => setGrade(e.target.value)}>
-          {GRADE_LEVELS.map((g) => (<option key={g}>{g}</option>))}
+          <option value="">Select…</option>
+          {GRADE_CHOICES.map((g) => (<option key={g}>{g}</option>))}
         </Select>
       </Field>
       <Field label="Modality">
@@ -101,7 +114,7 @@ function AcademicFlow() {
       <Field label="Learning needs / areas of difficulty">
         <Textarea value={needs} onChange={(e) => setNeeds(e.target.value)} placeholder="e.g. struggles with fractions, needs help with reading comprehension…"/>
       </Field>
-      <Button onClick={() => setParams({ program: "academic", subject, gradeLevel: grade, modality, sessionType, learningNeeds: needs })}>Proceed to booking & matching</Button>
+      <Button disabled={!grade || !subjects.length} onClick={() => setParams({ program: "academic", subject: subjects[0], subjects, gradeLevel: gradeLevelForBooking(grade), modality, sessionType, learningNeeds: needs })}>Proceed to booking & matching</Button>
     </Card>);
 }
 /* ---------------- Reading ---------------- */
@@ -140,7 +153,7 @@ function ReadingFlow() {
           <Field label="Modality">
             <ModalityPicker value={modality} onChange={setModality}/>
           </Field>
-          <Button onClick={() => setParams({ program: "reading", subject: "Reading", gradeLevel: profile.gradeLevel, modality, learningNeeds: done.learningNeeds || "", assessmentId: done.id })}>Choose schedule</Button>
+          <Button disabled={!gradeLevelForBooking(gradeChoiceForProfile(profile.gradeLevel))} onClick={() => setParams({ program: "reading", subject: "Reading", gradeLevel: gradeLevelForBooking(gradeChoiceForProfile(profile.gradeLevel)), modality, learningNeeds: done.learningNeeds || "", assessmentId: done.id })}>Choose schedule</Button>
         </Card>
       </div>);
     }

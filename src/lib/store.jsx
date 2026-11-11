@@ -12,7 +12,7 @@ const BUSINESS_ACTIONS = [
   "bookPlaygroup", "submitTutorialBooking", "placeOrder", "rateSession", "submitAvailability", "submitLeave",
   "scheduleInterview", "evaluateApplicant", "verifyExistingTutor", "setTutorPay", "approveAvailability",
   "adminEditTutorAvailability", "setTutorWeeklySchedule", "rejectAvailability", "decideLeave", "adminLeave", "proposeBookingSchedule",
-  "decideBookingScheduleProposal", "confirmBooking", "rejectBooking", "terminateBooking", "completeSession",
+  "decideBookingScheduleProposal", "confirmBooking", "confirmBookingSession", "rejectBooking", "terminateBooking", "completeSession",
   "submitProgressReport", "checkInSession", "reassignSession", "proposeSessionReschedule", "cancelSession",
   "updateCohort", "addCohort", "removeFromCohort", "updatePurchase", "addMaterial", "updateMaterial",
   "deleteMaterial", "logMaterialAccess",
