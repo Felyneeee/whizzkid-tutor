@@ -63,7 +63,7 @@ export function remainingCapacity(db, date, time, options = {}, ignoreBookingId,
         const booking = db.bookings.find((b) => b.id === s.bookingId);
         return eligibleIds.has(s.tutorId) && booking?.program === program && (booking?.sessionType ?? "one-on-one") === sessionType;
     }).length;
-    used += db.bookings.filter((b) => b.id !== ignoreBookingId && b.program !== "playgroup" && b.status === "awaiting_admin" && b.program === program && (b.sessionType ?? "one-on-one") === sessionType && (b.sessionSlots || b.dates.map((sessionDate) => ({ date: sessionDate, time: b.sessionTimes?.[sessionDate] ?? b.time }))).some((slot) => slot.date === date && slot.time === time) && !db.sessions.some((session) => session.bookingId === b.id && session.date === date && session.time === time && ["scheduled", "needs_reassignment"].includes(session.status))).length;
+    used += db.bookings.filter((b) => b.id !== ignoreBookingId && b.program !== "playgroup" && ["pending_assessment", "awaiting_admin"].includes(b.status) && b.program === program && (b.sessionType ?? "one-on-one") === sessionType && (b.sessionSlots || b.dates.map((sessionDate) => ({ date: sessionDate, time: b.sessionTimes?.[sessionDate] ?? b.time }))).some((slot) => slot.date === date && slot.time === time) && !db.sessions.some((session) => session.bookingId === b.id && session.date === date && session.time === time && ["scheduled", "needs_reassignment"].includes(session.status))).length;
     return Math.max(0, capacity - used);
 }
 export function slotOccupied(db, date, time, ignoreBookingId, ignoreSessionId, options = {}) {
@@ -73,7 +73,7 @@ export function slotOccupied(db, date, time, ignoreBookingId, ignoreSessionId, o
 export function slotRequestable(db, date, time, options = {}, ignoreBookingId) {
     const base = { program: options.program ?? "academic", subject: options.subject ?? "English", gradeLevel: options.gradeLevel ?? "Grade 1", modality: options.modality ?? "online", sessionType: options.sessionType ?? "one-on-one" };
     const hasEligibleTutor = db.tutors.some((tutor) => tutorQualifies(tutor, base) && approvedSlot(db, tutor.userId, date, time, base.modality) && !onApprovedLeave(db, tutor.userId, date));
-    const reserved = db.bookings.some((booking) => booking.id !== ignoreBookingId && booking.program === base.program && (booking.sessionType ?? "one-on-one") === base.sessionType && booking.status === "awaiting_admin" && (booking.sessionSlots || booking.dates.map((sessionDate) => ({ date: sessionDate, time: booking.sessionTimes?.[sessionDate] ?? booking.time }))).some((slot) => slot.date === date && slot.time === time));
+    const reserved = db.bookings.some((booking) => booking.id !== ignoreBookingId && booking.program === base.program && (booking.sessionType ?? "one-on-one") === base.sessionType && ["pending_assessment", "awaiting_admin"].includes(booking.status) && (booking.sessionSlots || booking.dates.map((sessionDate) => ({ date: sessionDate, time: booking.sessionTimes?.[sessionDate] ?? booking.time }))).some((slot) => slot.date === date && slot.time === time));
     if (reserved) return false;
     return hasEligibleTutor ? !slotOccupied(db, date, time, ignoreBookingId, undefined, base) : true;
 }

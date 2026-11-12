@@ -1,6 +1,6 @@
 import "server-only";
 import { ADMIN_ID } from "@/lib/seed";
-import { ageFromBirthday, firstName, nowISO, todayISO, uid, fmtDate, fmtTime, addDays, rangeDates } from "@/lib/dates";
+import { ageFromBirthday, firstName, nowISO, todayISO, uid, fmtDate, fmtTime, addDays, rangeDates, weekday } from "@/lib/dates";
 import { cohortSessionDates, computeRate, matchTutors, onApprovedLeave, tutorBusy, tutorFreeOn, tutorQualifies, approvedSlot, slotOccupied, slotRequestable } from "@/lib/logic";
 import { HOURS, PLAYGROUP_MONTHLY_FEE, SHOP_ITEMS, SUBJECTS } from "@/lib/constants";
 
@@ -92,21 +92,6 @@ export function createBusinessActions({ get, mutate }) {
       });
       return { ok: true };
   },
-  bookAssessment(tuteeId, modality, date, time) {
-      const d = get();
-      if (d.assessments.some((a) => a.tuteeId === tuteeId && a.status === "booked"))
-          return { ok: false, error: "You already have an upcoming assessment. Cancel it first to rebook." };
-      if (d.assessments.some((a) => a.status === "booked" && a.date === date && a.time === time))
-          return { ok: false, error: "That assessment appointment was just taken. Please pick another." };
-      const id = uid("as");
-      mutate((n) => {
-          n.assessments.push({ id, tuteeId, modality, date, time, status: "booked" });
-          pushNotif(n, tuteeId, `Assessment booked: ${fmtDate(date)} at ${fmtTime(time)} (${modality}).`, ["web", "email", "sms"]);
-          pushAdmins(n, `Reading assessment booked by ${nameOf(n, tuteeId)} — ${fmtDate(date)} ${fmtTime(time)}`);
-          logAct(n, tuteeId, "booking", `Booked initial reading assessment on ${fmtDate(date)} ${fmtTime(time)}`);
-      });
-      return { ok: true, id };
-  },
   completeAssessment(id, v) {
       const assessment = get().assessments.find((x) => x.id === id && x.status === "booked");
       if (!assessment)
@@ -123,7 +108,16 @@ export function createBusinessActions({ get, mutate }) {
           a.results = results;
           a.learningNeeds = learningNeeds;
           a.readingLevel = readingLevel;
-          pushNotif(n, a.tuteeId, "Your reading assessment is complete. You can now book a schedule for your Reading Program.", ["web", "email", "sms"]);
+          const waitingBookings = n.bookings.filter((booking) => booking.program === "reading" && booking.assessmentId === a.id && booking.status === "pending_assessment");
+          waitingBookings.forEach((booking) => {
+              booking.status = "awaiting_admin";
+              booking.learningNeeds = learningNeeds;
+              booking.expiresAt = new Date(Date.now() + Math.max(1, Number(process.env.BOOKING_PENDING_TTL_HOURS) || 72) * 3600000).toISOString();
+          });
+          pushNotif(n, a.tuteeId, waitingBookings.length
+              ? "Your reading assessment is complete. Your selected Reading Program schedule is now being matched with a tutor."
+              : "Your reading assessment is complete. You can now select a schedule for your Reading Program.", ["web", "email", "sms"]);
+          if (waitingBookings.length) pushAdmins(n, `Reading assessment completed for ${nameOf(n, a.tuteeId)}. Their selected schedule is ready for tutor matching.`);
           logAct(n, a.tuteeId, "match", `Assessment completed — level: ${readingLevel}`);
       });
       return { ok: true };
@@ -181,11 +175,13 @@ export function createBusinessActions({ get, mutate }) {
       const d = get();
       if (!v.dates.length || !v.time)
           return { ok: false, error: "Choose at least one date and time." };
+      if (v.dates.some((date) => weekday(date) === 0))
+          return { ok: false, error: "Sunday is closed. Please choose another day." };
       v.sessionType = v.program === "academic" && v.sessionType === "group" ? "group" : "one-on-one";
       if (v.program === "reading") v.sessionType = "one-on-one";
       if (v.dates.some((date) => date < todayISO()))
           return { ok: false, error: "Past dates cannot be booked. Please choose a future date." };
-      if (d.bookings.some((b) => b.tuteeId === v.tuteeId && b.program === v.program && ["awaiting_admin", "confirmed"].includes(b.status) && (b.sessionSlots || b.dates.map((date) => ({ date, time: b.sessionTimes?.[date] ?? b.time }))).some((existing) => (v.sessionSlots || v.dates.map((date) => ({ date, time: v.sessionTimes?.[date] ?? v.time }))).some((requested) => existing.date === requested.date && existing.time === requested.time))))
+      if (d.bookings.some((b) => b.tuteeId === v.tuteeId && b.program === v.program && ["pending_assessment", "awaiting_admin", "confirmed"].includes(b.status) && (b.sessionSlots || b.dates.map((date) => ({ date, time: b.sessionTimes?.[date] ?? b.time }))).some((existing) => (v.sessionSlots || v.dates.map((date) => ({ date, time: v.sessionTimes?.[date] ?? v.time }))).some((requested) => existing.date === requested.date && existing.time === requested.time))))
           return { ok: false, error: "You already have a request or booking for this program, date, and time." };
       if (v.program === "academic") {
           const cycleWeeks = v.recurrence?.cycleWeeks;
@@ -202,8 +198,10 @@ export function createBusinessActions({ get, mutate }) {
           if (!Array.isArray(slots) || !slots.length || !maxSessions || slots.length > maxSessions || v.dates.length < 1 || [...perDate.values()].some((count) => count > 2) || new Set(slots.map((slot) => `${slot.date}|${slot.time}`)).size !== slots.length || new Set(slots.map((slot) => slot.date)).size !== v.dates.length || !v.recurrence || !Array.isArray(v.recurrence.days) || v.recurrence.days.length < 1 || v.recurrence.days.length > 5 || v.dates.length !== v.recurrence.days.length * cycleWeeks || slots.length !== templates.size * cycleWeeks || templates.size > 5 || [...perDay.values()].some((count) => count > 2) || perSubject.size > 5 || [...perSubject.values()].some((count) => count > 2) || slots.some((slot) => !slot.seriesKey || !v.dates.includes(slot.date) || !HOURS.includes(slot.time) || !SUBJECTS.includes(slot.subject) || templates.get(slot.seriesKey)?.subject !== slot.subject || templates.get(slot.seriesKey)?.time !== slot.time || templates.get(slot.seriesKey)?.day !== slot.day))
               return { ok: false, error: "Choose 1–5 sessions per week, with each subject selected no more than twice per week." };
       }
+      if (v.program === "reading" && (!Array.isArray(v.sessionSlots) || v.sessionSlots.length !== v.dates.length || v.sessionSlots.some((slot) => !v.dates.includes(slot.date) || slot.subject !== "Reading" || !HOURS.includes(slot.time) || slot.time !== v.sessionTimes?.[slot.date])))
+          return { ok: false, error: "Choose an available time for each Reading Program session." };
       const capacityOptions = { program: v.program, subject: v.subject, gradeLevel: v.gradeLevel, modality: v.modality, sessionType: v.sessionType };
-      const occupied = v.program === "academic"
+      const occupied = Array.isArray(v.sessionSlots)
           ? v.sessionSlots.filter((slot) => !slotRequestable(d, slot.date, slot.time, { ...capacityOptions, subject: slot.subject })).map((slot) => slot.date)
           : v.dates.filter((date) => slotOccupied(d, date, v.time, undefined, undefined, capacityOptions));
       if (occupied.length)
@@ -220,6 +218,20 @@ export function createBusinessActions({ get, mutate }) {
       const bookingId = uid("b");
       const rate = computeRate(v.program, v.gradeLevel, v.modality);
       mutate((n) => {
+          let assessmentId = v.assessmentId;
+          let assessment;
+          if (v.program === "reading") {
+              assessment = n.assessments.find((entry) => entry.tuteeId === v.tuteeId && ["pending_admin_scheduling", "booked", "completed"].includes(entry.status));
+              if (!assessment) {
+                  assessmentId = uid("as");
+                  assessment = { id: assessmentId, tuteeId: v.tuteeId, modality: v.modality, learningNeeds: String(v.learningNeeds || "").slice(0, 2000), status: "pending_admin_scheduling", program: "reading" };
+                  n.assessments.push(assessment);
+                  pushAdmins(n, `New Reading Program booking from ${nameOf(n, v.tuteeId)}. Initial assessment needs scheduling.`);
+              } else {
+                  assessmentId = assessment.id;
+              }
+          }
+          const assessmentComplete = v.program !== "reading" || assessment?.status === "completed";
           const b = {
               id: bookingId,
               tuteeId: v.tuteeId,
@@ -242,19 +254,21 @@ export function createBusinessActions({ get, mutate }) {
               cycleSessionAllowance: v.cycleSessionAllowance,
               ratePerHour: rate,
               totalFee: rate * (v.sessionSlots?.length ?? v.dates.length),
-              status: "awaiting_admin",
+              status: assessmentComplete ? "awaiting_admin" : "pending_assessment",
               recommendations: matches.slice(0, 3).map((m) => m.tutor.userId),
               createdAt: nowISO(),
-              expiresAt: new Date(Date.now() + Math.max(1, Number(process.env.BOOKING_PENDING_TTL_HOURS) || 72) * 3600000).toISOString(),
-              assessmentId: v.assessmentId,
+              ...(assessmentComplete ? { expiresAt: new Date(Date.now() + Math.max(1, Number(process.env.BOOKING_PENDING_TTL_HOURS) || 72) * 3600000).toISOString() } : {}),
+              assessmentId,
           };
           n.bookings.push(b);
-          pushNotif(n, v.tuteeId, matches.length
-              ? "Booking request submitted. Your open slot is reserved while our admin reviews the tutor recommendations."
-              : "Booking request submitted. Your open slot is reserved while we wait for a matching tutor to become available.", ["web", "email"]);
+          pushNotif(n, v.tuteeId, v.program === "reading" && !assessmentComplete
+              ? "Your Reading Program schedule request was received. It will be confirmed after your initial assessment is complete. The admin will schedule the assessment between 9:00 and 10:00 AM and send you the date and time."
+              : matches.length
+                  ? "Booking request submitted. Your open slot is reserved while our admin reviews the tutor recommendations."
+                  : "Booking request submitted. Your open slot is reserved while we wait for a matching tutor to become available.", ["web", "email"]);
           const sessionCount = v.sessionSlots?.length ?? v.dates.length;
-          pushAdmins(n, `New booking request from ${nameOf(n, v.tuteeId)} — ${b.subject}, ${sessionCount} session(s). ${matches.length ? "Review recommendations." : "No tutor matches yet; review when an eligible tutor's availability is approved."}`);
-          logAct(n, v.tuteeId, "booking", `Requested ${b.subject} ${v.bookingType} booking (${sessionCount} session/s)`);
+          if (v.program !== "reading" || assessmentComplete) pushAdmins(n, `New booking request from ${nameOf(n, v.tuteeId)} — ${b.subject}, ${sessionCount} session(s). ${matches.length ? "Review recommendations." : "No tutor matches yet; review when an eligible tutor's availability is approved."}`);
+          logAct(n, v.tuteeId, "booking", `Requested ${b.subject} schedule (${sessionCount} session/s)`);
       });
       return { ok: true, bookingId };
   },
@@ -729,7 +743,7 @@ export function createBusinessActions({ get, mutate }) {
   },
   cancelTutorialBooking(bookingId) {
       const booking = get().bookings.find((entry) => entry.id === bookingId);
-      if (!booking || booking.status !== "awaiting_admin") return { ok: false, error: "Only pending requests can be cancelled." };
+      if (!booking || !["pending_assessment", "awaiting_admin"].includes(booking.status)) return { ok: false, error: "Only pending requests can be cancelled." };
       mutate((n) => {
           const target = n.bookings.find((entry) => entry.id === bookingId);
           target.status = "cancelled";

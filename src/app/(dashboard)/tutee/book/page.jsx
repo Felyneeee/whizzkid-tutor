@@ -2,7 +2,6 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
-import { CheckCircle2 } from "lucide-react";
 import { Calendar } from "@/components/Calendar";
 import { TutorialBooking } from "@/components/TutorialBooking";
 import { Alert, Badge, Button, Card, Chips, Field, PageHeader, Select, Textarea, cn, peso } from "@/components/ui";
@@ -123,66 +122,42 @@ function ReadingFlow() {
     const id = s.me.id;
     const profile = s.db.tutees.find((t) => t.userId === id);
     const mine = s.db.assessments.filter((a) => a.tuteeId === id);
-    const booked = mine.find((a) => a.status === "booked");
-    const pending = mine.find((a) => a.status === "pending_admin_scheduling");
-    const done = [...mine].reverse().find((a) => a.status === "completed");
+    const assessment = [...mine].reverse().find((a) => ["pending_admin_scheduling", "booked", "completed"].includes(a.status));
+    const booking = [...s.db.bookings].reverse().find((b) => b.tuteeId === id && b.program === "reading" && ["pending_assessment", "awaiting_admin", "confirmed"].includes(b.status));
     const [params, setParams] = useState(null);
     const [modality, setModality] = useState("online");
     const [needs, setNeeds] = useState("");
-    const [err, setErr] = useState("");
-    const [ok, setOk] = useState(false);
     const age = profile.age;
     const ageWarn = age !== null && (age < 3 || age > 15);
     if (params)
         return <TutorialBooking params={params} tuteeId={id} onBack={() => setParams(null)}/>;
-    if (done) {
-        return (<div className="max-w-2xl space-y-4">
-        <Card>
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-mint-500"/>
-            <h2 className="text-lg font-extrabold">Assessment completed</h2>
-          </div>
-          <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-            <div><dt className="text-xs font-bold uppercase text-slate-400">Reading level</dt><dd>{done.readingLevel}</dd></div>
-            <div><dt className="text-xs font-bold uppercase text-slate-400">Results</dt><dd>{done.results}</dd></div>
-            <div className="sm:col-span-2"><dt className="text-xs font-bold uppercase text-slate-400">Learning needs</dt><dd>{done.learningNeeds}</dd></div>
-          </dl>
-        </Card>
-        <Card className="space-y-4">
-          <h3 className="font-extrabold">Book your Reading Program schedule</h3>
-          <Field label="Modality">
-            <ModalityPicker value={modality} onChange={setModality}/>
-          </Field>
-          <Button disabled={!gradeLevelForBooking(gradeChoiceForProfile(profile.gradeLevel))} onClick={() => setParams({ program: "reading", subject: "Reading", gradeLevel: gradeLevelForBooking(gradeChoiceForProfile(profile.gradeLevel)), modality, learningNeeds: done.learningNeeds || "", assessmentId: done.id })}>Choose schedule</Button>
-        </Card>
-      </div>);
+    if (booking) {
+      const slots = booking.sessionSlots || booking.dates.map((date) => ({ date, subject: "Reading", time: booking.sessionTimes?.[date] ?? booking.time }));
+      const linkedAssessment = mine.find((a) => a.id === booking.assessmentId);
+      const message = booking.status === "pending_assessment"
+        ? linkedAssessment?.status === "booked"
+            ? `Your selected schedule is saved. Your initial assessment is scheduled for ${fmtDate(linkedAssessment.date)} at ${fmtTime(linkedAssessment.time)}. Your request will be confirmed after the assessment is completed.`
+            : "Your selected schedule is saved. The admin will send your initial assessment date and time. Your request will be confirmed after the assessment is completed."
+        : booking.status === "awaiting_admin"
+            ? "Your initial assessment is complete. The admin is now matching a tutor to your selected schedule."
+            : "Your Reading Program schedule is confirmed.";
+      return <div className="max-w-2xl space-y-4"><Card><h2 className="text-lg font-extrabold">{booking.status === "pending_assessment" ? "Reading Program request received" : booking.status === "awaiting_admin" ? "Assessment completed" : "Reading Program schedule confirmed"}</h2><p className="mt-2"><Badge status={booking.status}>{booking.status === "pending_assessment" ? linkedAssessment?.status === "booked" ? "Awaiting assessment results" : "Awaiting initial assessment" : undefined}</Badge></p><p className="mt-3 text-sm text-slate-600">{message}</p>{booking.status === "pending_assessment" && linkedAssessment?.status !== "booked" && <p className="mt-1 text-sm text-slate-500">Initial assessments are scheduled by the admin between 9:00 and 10:00 AM.</p>}<div className="mt-4 space-y-1 text-sm">{slots.map((slot, index) => <div key={`${slot.date}-${slot.time}-${index}`}>{fmtDate(slot.date)} · {fmtTime(slot.time)}</div>)}</div><p className="mt-3 text-sm font-bold">{slots.length} sessions · {peso(booking.totalFee)}</p><Link href="/tutee/requests" className="mt-4 inline-block"><Button variant="secondary">View pending requests</Button></Link></Card></div>;
     }
-    if (booked) {
-        return (<Card className="max-w-2xl">
-        <h2 className="text-lg font-extrabold">Assessment booked ✅</h2>
-        <p className="mt-2 text-sm">
-          {fmtDate(booked.date)} at <b>{fmtTime(booked.time)}</b> <Badge status={booked.modality}/>
-        </p>
-        <p className="mt-2 text-sm text-slate-500">After the admin records your assessment results and learning needs, you can proceed to tutorial booking and matching.</p>
-        <Button variant="secondary" size="sm" className="mt-3" onClick={() => s.cancelAssessment(booked.id)}>
-          Cancel assessment
-        </Button>
-      </Card>);
-    }
-    if (pending) return <div className="max-w-2xl space-y-4"><Card><h2 className="text-lg font-extrabold">Reading program request received</h2><p className="mt-2"><Badge status="pending_admin_scheduling">Pending Admin Assessment Scheduling</Badge></p><p className="mt-3 text-sm text-slate-600">Your reading program request is awaiting an initial assessment. The administrator will schedule it and send you the details.</p></Card><Alert kind="warn">Note: Your program booking request will be confirmed once your initial assessment is completed. The admin will schedule and send you your specific initial assessment details (assessments are held between 9:00 AM – 10:00 AM).</Alert></div>;
     return (<div className="space-y-4">
       <Card>
         <h2 className="text-lg font-extrabold">Reading Programs</h2>
-        <p className="mt-1 text-sm text-slate-500">Submit a request for the Reading Program. The administrator will schedule your initial assessment, then confirm the program after it is completed.</p>
+        <p className="mt-1 text-sm text-slate-500">Choose your Reading Program schedule and submit the booking request. It will be confirmed after the initial assessment is completed.</p>
         <p className="mt-2 text-xs text-slate-400">Covers: {READING_SKILLS.join(" · ")}</p>
         {ageWarn && <div className="mt-3"><Alert kind="warn">Reading Programs are for ages 3–15; your child is {age}. You can still book — the admin will review.</Alert></div>}
       </Card>
-      {ok ? (<div className="space-y-3"><Alert kind="success">Program booking request received. Status: Pending Admin Assessment Scheduling.</Alert><Alert kind="warn">Note: Your program booking request will be confirmed once your initial assessment is completed. The admin will schedule and send you your specific initial assessment details (assessments are held between 9:00 AM – 10:00 AM).</Alert></div>) : (<Card className="max-w-xl space-y-4">
-          <Field label="Preferred assessment modality"><ModalityPicker value={modality} onChange={setModality}/></Field>
-          <Field label="Reading goals or areas of concern" hint={`Areas include: ${READING_SKILLS.join(", ")}`}><Textarea value={needs} onChange={(e) => setNeeds(e.target.value)} placeholder="Tell us what your child would like help with…"/></Field>
-          {err && <Alert kind="error">{err}</Alert>}
-          <Button onClick={async () => { const r = await s.requestAssessment(id, modality, needs); if (!r.ok) return setErr(r.error); setOk(true); }}>Submit program booking request</Button>
-        </Card>)}
+      <Card className="max-w-xl space-y-4">
+        {assessment?.status === "booked" && <Alert kind="info">Your initial assessment is scheduled for {fmtDate(assessment.date)} at {fmtTime(assessment.time)}. You can still select your Reading Program schedule now.</Alert>}
+        {assessment?.status === "pending_admin_scheduling" && <Alert kind="info">The admin will send your initial assessment schedule. You can select your Reading Program schedule now; it will be confirmed after the assessment is completed.</Alert>}
+        {assessment?.status === "completed" && <Alert kind="success">Your initial assessment is complete. Select your Reading Program schedule below.</Alert>}
+        <Field label="Modality"><ModalityPicker value={assessment?.modality || modality} onChange={setModality}/></Field>
+        <Field label="Reading goals or areas of concern" hint={`Areas include: ${READING_SKILLS.join(", ")}`}><Textarea value={assessment?.learningNeeds || needs} onChange={(e) => setNeeds(e.target.value)} placeholder="Tell us what your child would like help with…" disabled={!!assessment}/></Field>
+        <Button disabled={!gradeLevelForBooking(gradeChoiceForProfile(profile.gradeLevel))} onClick={() => setParams({ program: "reading", subject: "Reading", gradeLevel: gradeLevelForBooking(gradeChoiceForProfile(profile.gradeLevel)), modality: assessment?.modality || modality, learningNeeds: assessment?.learningNeeds || needs, assessmentId: assessment?.id })}>Choose schedule</Button>
+      </Card>
     </div>);
 }
 /* ---------------- Playgroup ---------------- */

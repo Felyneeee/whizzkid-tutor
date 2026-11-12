@@ -49,6 +49,10 @@ export async function POST(request) {
       const [booking] = permission.args;
       const validDate = (value) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
       const academicLimitValid = () => {
+        if (booking.program === "reading") {
+          const slots = booking.sessionSlots;
+          return Array.isArray(slots) && slots.length === booking.dates.length && slots.every((slot) => slot && booking.dates.includes(slot.date) && validDate(slot.date) && slot.subject === "Reading" && HOURS.includes(slot.time) && slot.time === booking.sessionTimes?.[slot.date] && slot.day === new Date(`${slot.date}T00:00:00Z`).getUTCDay() && slot.day !== 0 && !([1, 3, 5].includes(slot.day) && ["10:00", "10:45"].includes(slot.time)));
+        }
         if (booking.program !== "academic") return true;
         const recurrence = booking.recurrence;
         const slots = booking.sessionSlots;
@@ -95,7 +99,7 @@ export async function POST(request) {
         && academicLimitValid()
         && booking.dates.every((date) => {
           const day = new Date(`${date}T00:00:00Z`).getUTCDay();
-          const time = booking.program === "academic" ? booking.sessionTimes[date] : booking.time;
+          const time = booking.sessionTimes?.[date] ?? booking.time;
           return day === 1 || day === 3 || day === 5
             ? !["10:00", "10:45"].includes(time)
             : day === 2 || day === 4 || day === 6;
@@ -105,15 +109,15 @@ export async function POST(request) {
         return NextResponse.json({ error: "Booking details are invalid. Choose a valid program, grade, modality, future date(s), and time (up to 60 sessions)." }, { status: 400 });
       }
       if (booking.program === "reading") {
-        const assessment = state.assessments.find((entry) => entry.id === booking.assessmentId && entry.tuteeId === user.id && entry.status === "completed");
-        if (!assessment) {
+        const assessment = booking.assessmentId && state.assessments.find((entry) => entry.id === booking.assessmentId && entry.tuteeId === user.id && ["pending_admin_scheduling", "booked", "completed"].includes(entry.status));
+        if (booking.assessmentId && !assessment) {
           await connection.rollback();
-          return NextResponse.json({ error: "Complete a reading assessment before requesting a reading program." }, { status: 400 });
+          return NextResponse.json({ error: "This initial assessment request is no longer available. Refresh and try again." }, { status: 400 });
         }
       }
       const requestedSlots = booking.sessionSlots || booking.dates.map((date) => ({ date, time: booking.sessionTimes?.[date] ?? booking.time }));
       const duplicate = state.bookings.some((entry) => {
-        if (entry.tuteeId !== user.id || entry.program !== booking.program || !["awaiting_admin", "confirmed"].includes(entry.status)) return false;
+        if (entry.tuteeId !== user.id || entry.program !== booking.program || !["pending_assessment", "awaiting_admin", "confirmed"].includes(entry.status)) return false;
         const existingSlots = entry.sessionSlots || entry.dates.map((date) => ({ date, time: entry.sessionTimes?.[date] ?? entry.time }));
         return existingSlots.some((existing) => requestedSlots.some((requested) => existing.date === requested.date && existing.time === requested.time));
       });
@@ -132,7 +136,7 @@ export async function POST(request) {
           && (booking.program !== "academic" || ([2, 3, 4].includes(recurrence.cycleWeeks) && recurrence.days.length >= 1 && recurrence.days.length <= 5 && booking.dates.length <= 5 * recurrence.cycleWeeks));
         if (!recurrenceValid) {
           await connection.rollback();
-          return NextResponse.json({ error: "Recurring schedule details are invalid." }, { status: 400 });
+          return NextResponse.json({ error: "Weekly schedule details are invalid." }, { status: 400 });
         }
       }
     }

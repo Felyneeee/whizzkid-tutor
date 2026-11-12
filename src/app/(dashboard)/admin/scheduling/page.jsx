@@ -155,7 +155,7 @@ export default function Scheduling() {
           {contracts.map((b) => (<tr key={b.id}>
               <Td>{un(b.tuteeId)}</Td>
               <Td>{[...new Set(db.sessions.filter((session) => session.bookingId === b.id && session.status !== "cancelled").map((session) => session.tutorId))].map(tn).join(", ") || (b.tutorId ? tn(b.tutorId) : "—")}</Td>
-              <Td>{[...new Set(b.sessionSlots?.length ? b.sessionSlots.map((slot) => slot.subject) : Object.values(b.sessionSubjects || {}).length ? Object.values(b.sessionSubjects) : [b.subject])].join(", ")} <span className="text-xs text-slate-400">({b.bookingType})</span></Td>
+              <Td>{[...new Set(b.sessionSlots?.length ? b.sessionSlots.map((slot) => slot.subject) : Object.values(b.sessionSubjects || {}).length ? Object.values(b.sessionSubjects) : [b.subject])].join(", ")} <span className="text-xs text-slate-400">({b.cycleType === "1-month" ? "4-week cycle" : b.cycleType ? `${b.cycleType} cycle` : "schedule"})</span></Td>
               <Td>{db.sessions.filter((x) => x.bookingId === b.id && x.status === "completed").length}/{b.sessionSlots?.length ?? b.dates.length}</Td>
               <Td>₱{b.totalFee.toLocaleString()}</Td>
               <Td><Badge status={b.status}/></Td>

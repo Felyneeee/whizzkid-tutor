@@ -97,8 +97,8 @@ export const FAQS = [
         a: "The system checks subject expertise, grade level, learning needs, modality and each tutor's admin-approved availability. Our admin then reviews the recommendations and confirms the assignment.",
     },
     {
-        q: "Can I book a recurring schedule?",
-        a: "Academic Tutorial bookings are recurring only. Choose a 2, 3, or 4-week cycle and the tutor assigned to a selected weekday will cover that weekday throughout the cycle.",
+        q: "How do Academic Tutorial schedules work?",
+        a: "Choose a 2, 3, or 4-week cycle. The tutor assigned to each selected weekday will cover that weekday throughout the cycle.",
     },
     {
         q: "How much does it cost?",

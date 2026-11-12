@@ -10,8 +10,9 @@ export default function TuteeHome() {
     const profile = s.db.tutees.find((t) => t.userId === id);
     const today = todayISO();
     const upcoming = s.db.sessions.filter((x) => x.tuteeId === id && x.status === "scheduled" && x.date >= today).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
-    const pending = s.db.bookings.filter((b) => b.tuteeId === id && (b.status === "awaiting_admin" || !!b.scheduleProposal));
-    const assessments = s.db.assessments.filter((a) => a.tuteeId === id && a.status === "booked");
+    const pending = s.db.bookings.filter((b) => b.tuteeId === id && (["pending_assessment", "awaiting_admin"].includes(b.status) || !!b.scheduleProposal));
+    const linkedAssessmentIds = new Set(s.db.bookings.filter((b) => b.tuteeId === id && b.program === "reading" && b.status === "pending_assessment").map((b) => b.assessmentId));
+    const assessments = s.db.assessments.filter((a) => a.tuteeId === id && a.status === "booked" && !linkedAssessmentIds.has(a.id));
     const tutorName = (tid) => firstName(s.db.tutors.find((t) => t.userId === tid)?.fullName);
     return (<>
       <PageHeader title={`Hi${profile?.fullName ? `, ${profile.fullName.split(" ")[0]}'s family` : ""}! 👋`} subtitle="Here's what's happening with your learning journey."/>

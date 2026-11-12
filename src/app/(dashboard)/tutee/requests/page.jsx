@@ -7,8 +7,9 @@ export default function TuteeRequests() {
     const s = useStore();
     const [proposalMsg, setProposalMsg] = useState({});
     const id = s.me.id;
-    const bookings = s.db.bookings.filter((b) => b.tuteeId === id && (["awaiting_admin", "rejected", "cancelled", "expired"].includes(b.status) || !!b.scheduleProposal)).reverse();
-    const assessments = s.db.assessments.filter((a) => a.tuteeId === id && ["pending_admin_scheduling", "booked"].includes(a.status));
+    const bookings = s.db.bookings.filter((b) => b.tuteeId === id && (["pending_assessment", "awaiting_admin", "rejected", "cancelled", "expired"].includes(b.status) || !!b.scheduleProposal)).reverse();
+    const linkedAssessmentIds = new Set(s.db.bookings.filter((b) => b.tuteeId === id && b.program === "reading" && b.status === "pending_assessment").map((b) => b.assessmentId));
+    const assessments = s.db.assessments.filter((a) => a.tuteeId === id && ["pending_admin_scheduling", "booked"].includes(a.status) && !linkedAssessmentIds.has(a.id));
     const orders = s.db.purchases.filter((p) => p.tuteeId === id && p.status === "pending");
     return (<>
       <PageHeader title="Pending requests" subtitle="Everything waiting on admin review."/>
@@ -20,6 +21,7 @@ export default function TuteeRequests() {
               <div className="text-sm text-slate-500">
                 {a.date ? `${fmtDate(a.date)} · ${fmtTime(a.time)}` : "The admin will schedule and send your assessment details"} · {a.modality}
               </div>
+              <div className="mt-1 text-xs text-slate-500">The initial assessment is scheduled by the admin between 9:00 and 10:00 AM. Your Reading Program request is confirmed after it is completed.</div>
             </div>
             <div className="flex items-center gap-2">
               <Badge status={a.status}>{a.status === "pending_admin_scheduling" ? "Pending Admin Assessment Scheduling" : "Scheduled"}</Badge>
@@ -29,16 +31,17 @@ export default function TuteeRequests() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <div className="font-extrabold">
-                  {b.subject} · {b.bookingType}
+                  {b.subject} · {b.cycleType === "1-month" ? "4-week cycle" : b.cycleType ? `${b.cycleType} cycle` : "schedule"}
                 </div>
                 <div className="text-sm text-slate-500">
                   {(b.sessionSlots?.length ?? b.dates.length)} session(s) · {(b.sessionSlots || b.dates.map((date) => ({ date, subject: b.sessionSubjects?.[date], time: b.sessionTimes?.[date] ?? b.time }))).map((slot) => `${fmtDate(slot.date)} ${slot.subject ? `(${slot.subject}) ` : ""}at ${fmtTime(slot.time)}`).join(" · ")} · {b.modality} · {peso(b.totalFee)}
                 </div>
               </div>
-              <Badge status={b.status}/>
-              {b.status === "awaiting_admin" && <Button size="sm" variant="secondary" onClick={() => s.cancelTutorialBooking(b.id)}>Cancel request</Button>}
+              <Badge status={b.status}>{b.status === "pending_assessment" ? s.db.assessments.find((a) => a.id === b.assessmentId)?.status === "booked" ? "Awaiting assessment results" : "Awaiting initial assessment" : undefined}</Badge>
+              {["pending_assessment", "awaiting_admin"].includes(b.status) && <Button size="sm" variant="secondary" onClick={() => s.cancelTutorialBooking(b.id)}>Cancel request</Button>}
             </div>
-            {b.status === "awaiting_admin" && !b.scheduleProposal && <p className="mt-2 text-xs text-slate-500">Your slot is reserved while the admin reviews your request and finds a matching tutor.</p>}
+            {b.status === "pending_assessment" && <p className="mt-2 text-xs text-slate-500">Your selected schedule is saved. {s.db.assessments.find((a) => a.id === b.assessmentId)?.status === "booked" ? `Your initial assessment is scheduled for ${fmtDate(s.db.assessments.find((a) => a.id === b.assessmentId).date)} at ${fmtTime(s.db.assessments.find((a) => a.id === b.assessmentId).time)}.` : "The admin will send your initial assessment date and time, scheduled between 9:00 and 10:00 AM."} This request will move to tutor matching after assessment results are recorded.</p>}
+            {b.status === "awaiting_admin" && !b.scheduleProposal && <p className="mt-2 text-xs text-slate-500">Your assessment is complete. The admin is reviewing tutor matches for your selected schedule.</p>}
             {b.scheduleProposal && (<div className="mt-3 space-y-3 rounded-xl border border-sunny-200 bg-sunny-50 p-3">
                 <div className="font-bold">The admin proposed a schedule change. Please review it:</div>
                 <div className="text-sm">{b.scheduleProposal.sessions.map((session) => `${fmtDate(session.date)} at ${fmtTime(session.time)}`).join(" · ")}</div>
