@@ -1,5 +1,4 @@
 "use client";
-import Link from "next/link";
 import { useState } from "react";
 import { BadgeCheck, Clock3, GraduationCap, UsersRound } from "lucide-react";
 import { Card, PageHeader } from "@/components/ui";
@@ -11,7 +10,7 @@ const palette = { academic: "#2563eb", reading: "#ffb800", playgroup: "#3f3f46" 
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function Panel({ title, children, className = "" }) {
-  return <Card className={`overflow-hidden rounded-xl border-0 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,.14)] ${className}`}>
+  return <Card className={`overflow-hidden rounded-xl border-0 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,.22)] ${className}`}>
     <h2 className="mb-3 text-sm font-extrabold text-slate-800">{title}</h2>{children}
   </Card>;
 }
@@ -123,6 +122,5 @@ export default function AdminHome() {
       <Panel title="Number of Slots"><div className="flex h-[190px] items-end gap-3 px-1">{slots.map((item) => <div key={item.label} className="flex h-full flex-1 flex-col items-center justify-end gap-1"><div className="flex h-[145px] w-full items-end justify-center gap-1">{[[`${item.label}: ${item.open} approved available slots`, item.open, "bg-[#2563eb]"], [`${item.label}: ${item.booked} scheduled sessions`, item.booked, "bg-[#ffb800]"]].map(([detail, count, color], index) => <button type="button" key={index} onClick={() => setSelectedSlots((current) => current === detail ? "" : detail)} title={detail} aria-label={detail} className={`w-1/3 rounded-t ${color}`} style={{ height: `${count / maxSlots * 100}%`, minHeight: count ? 3 : 0 }}/>)}</div><span className="text-[9px] text-slate-600">{item.label}</span></div>)}</div><div className="mt-2 flex justify-center gap-4 text-[9px] text-slate-600"><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-blue-600"/>Available approved slots</span><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-amber-400"/>Scheduled sessions</span></div>{selectedSlots && <div className="mt-2 w-full text-center text-xs font-bold text-slate-700">{selectedSlots}</div>}</Panel>
       <Panel title="Monthly Sessions per Tutor"><div className="flex min-h-[190px] items-end gap-2 overflow-x-auto px-1">{tutorRows.length ? tutorRows.map(({ tutor, counts }) => <div key={tutor.userId} className="flex h-[170px] min-w-9 flex-1 flex-col items-center justify-end gap-1"><div className="flex h-[135px] w-full items-end justify-center"><div className="flex w-5/6 flex-col-reverse overflow-hidden rounded-t" style={{ height: `${counts.reduce((sum, n) => sum + n, 0) / maxTutor * 100}%`, minHeight: counts.some(Boolean) ? 3 : 0 }}>{counts.map((count, index) => { const detail = `${tutor.fullName} · ${["Academic", "Reading", "Playgroup"][index]}: ${count} sessions this month`; return <button type="button" key={index} onClick={() => setSelectedTutor((current) => current === detail ? "" : detail)} title={`${tutor.fullName} · ${["Academic", "Reading", "Playgroup"][index]}: ${count} sessions`} aria-label={`${tutor.fullName} · ${["Academic", "Reading", "Playgroup"][index]}: ${count} sessions`} style={{ height: `${count / Math.max(1, counts.reduce((sum, n) => sum + n, 0)) * 100}%`, minHeight: count ? 3 : 0, background: [palette.academic, palette.reading, palette.playgroup][index] }}/>})}</div></div><span className="max-w-12 truncate text-[8px] text-slate-600" title={tutor.fullName}>{tutor.fullName?.split(" ")[0] || "Tutor"}</span></div>) : <div className="grid h-[170px] w-full place-items-center text-xs text-slate-400">No tutor session data yet</div>}</div><div className="mt-1 flex justify-center gap-3 text-[9px] text-slate-600">{["Academic", "Reading", "Playgroup"].map((name, i) => <span key={name}><i className="mr-1 inline-block h-2 w-2 rounded-full" style={{ background: [palette.academic, palette.reading, palette.playgroup][i] }}/>{name}</span>)}</div>{selectedTutor && <div className="mt-2 w-full text-center text-xs font-bold text-slate-700">{selectedTutor}</div>}</Panel>
     </div>
-    {pending.length > 0 && <Link href="/admin/matching" className="block text-right text-xs font-bold text-blue-700">Review {pending.length} pending booking request{pending.length === 1 ? "" : "s"} →</Link>}
   </div>;
 }
