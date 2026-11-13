@@ -3,7 +3,7 @@ import { Star } from "lucide-react";
 import { useState } from "react";
 import { Calendar } from "@/components/Calendar";
 import { Badge, Button, Card, Empty, Modal, PageHeader, Textarea, cn } from "@/components/ui";
-import { addDays, firstName, fmtDate, fmtDateTime, fmtTime, todayISO } from "@/lib/dates";
+import { addDays, firstName, fmtDate, fmtDateTime, fmtTime, todayISO, weekday } from "@/lib/dates";
 import { useStore } from "@/lib/store";
 export default function TuteeSchedule() {
     const s = useStore();
@@ -80,7 +80,9 @@ export default function TuteeSchedule() {
           </Card>))}
           {(playgroupsByDate[selectedDate] || []).map((booking) => {
             const cohort = s.db.cohorts.find((item) => item.id === booking.cohortId);
-            return <Card key={`playgroup-${booking.id}`} className="flex flex-wrap items-center gap-3 border-mint-200 bg-mint-50/40"><div className="min-w-20 rounded-xl bg-mint-100 px-3 py-2 text-center font-extrabold text-mint-700">10:00 AM</div><div className="min-w-[180px] flex-1"><div className="font-bold">Playgroup · {cohort?.label || "Class"}</div><div className="mt-1 text-sm text-slate-500">10:00–11:30 AM · Face-to-Face · Tutor {booking.tutorId ? tutor(booking.tutorId) : "Unassigned"}</div></div><Badge status={booking.status}>{booking.tutorAssignmentStatus || (booking.tutorId ? "Assigned" : "Unassigned")}</Badge></Card>;
+            const assignedTutorId = booking.tutorAssignments?.[selectedDate] || cohort?.weekdayTutorIds?.[weekday(selectedDate)] || booking.tutorId;
+            const time = cohort?.time || booking.time || "10:00";
+            return <Card key={`playgroup-${booking.id}`} className="flex flex-wrap items-center gap-3 border-mint-200 bg-mint-50/40"><div className="min-w-20 rounded-xl bg-mint-100 px-3 py-2 text-center font-extrabold text-mint-700">{fmtTime(time)}</div><div className="min-w-[180px] flex-1"><div className="font-bold">Playgroup · {cohort?.label || "Class"}</div><div className="mt-1 text-sm text-slate-500">{fmtTime(time)} · {cohort?.modality || "Face-to-Face"} · Tutor {assignedTutorId ? tutor(assignedTutorId) : "Unassigned"}</div></div><Badge status={booking.status}>{assignedTutorId ? (booking.tutorAssignmentStatus || "Assigned") : "Unassigned"}</Badge></Card>;
           })}
         </section>
       </div>

@@ -31,10 +31,12 @@ export default function TuteeRequests() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <div className="font-extrabold">
-                  {b.subject} · {b.cycleType === "1-month" ? "4-week cycle" : b.cycleType ? `${b.cycleType} cycle` : "schedule"}
+                  {b.program === "playgroup" ? `Playgroup · ${s.db.cohorts.find((cohort) => cohort.id === b.cohortId)?.label || "cohort"}` : `${b.subject} · ${b.cycleType === "1-month" ? "4-week cycle" : b.cycleType ? `${b.cycleType} cycle` : "schedule"}`}
                 </div>
                 <div className="text-sm text-slate-500">
-                  {(b.sessionSlots?.length ?? b.dates.length)} session(s) · {(b.sessionSlots || b.dates.map((date) => ({ date, subject: b.sessionSubjects?.[date], time: b.sessionTimes?.[date] ?? b.time }))).map((slot) => `${fmtDate(slot.date)} ${slot.subject ? `(${slot.subject}) ` : ""}at ${fmtTime(slot.time)}`).join(" · ")} · {b.modality} · {peso(b.totalFee)}
+                  {b.program === "playgroup"
+                    ? `${b.dates.length} sessions · ${fmtDate(b.dates[0])} to ${fmtDate(b.dates[b.dates.length - 1])} · Monday/Wednesday/Friday · ${fmtTime(b.time || "10:00")} · ${b.modality} · ${peso(b.totalFee)}`
+                    : `${(b.sessionSlots?.length ?? b.dates.length)} session(s) · ${(b.sessionSlots || b.dates.map((date) => ({ date, subject: b.sessionSubjects?.[date], time: b.sessionTimes?.[date] ?? b.time }))).map((slot) => `${fmtDate(slot.date)} ${slot.subject ? `(${slot.subject}) ` : ""}at ${fmtTime(slot.time)}`).join(" · ")} · ${b.modality} · ${peso(b.totalFee)}`}
                 </div>
               </div>
               <Badge status={b.status}>{(b.status === "pending_assessment" || (b.program === "reading" && b.status === "pending")) ? s.db.assessments.find((a) => a.id === b.assessmentId)?.status === "booked" ? "Awaiting assessment results" : "Awaiting initial assessment" : undefined}</Badge>

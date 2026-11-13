@@ -14,7 +14,7 @@ const BUSINESS_ACTIONS = [
   "adminEditTutorAvailability", "setTutorWeeklySchedule", "rejectAvailability", "decideLeave", "adminLeave", "proposeBookingSchedule",
   "decideBookingScheduleProposal", "confirmBooking", "confirmBookingSession", "confirmReadingAssignment", "rejectReadingAssignment", "rejectBooking", "terminateBooking", "completeSession",
   "submitProgressReport", "checkInSession", "reassignSession", "proposeSessionReschedule", "cancelSession",
-  "updateCohort", "addCohort", "removeFromCohort", "assignPlaygroupBooking", "approvePlaygroupBooking", "updatePurchase", "addMaterial", "updateMaterial",
+  "updateCohort", "addCohort", "removeFromCohort", "assignPlaygroupBooking", "assignPlaygroupWeekday", "approvePlaygroupBooking", "updatePurchase", "addMaterial", "updateMaterial",
   "deleteMaterial", "logMaterialAccess",
 ];
 

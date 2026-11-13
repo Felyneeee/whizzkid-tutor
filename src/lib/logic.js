@@ -38,6 +38,13 @@ export function approvedSlot(db, tutorId, date, time, modality) {
         a.slots.includes(time) &&
         a.modalities.includes(modality));
 }
+/** Playgroup eligibility follows the tutor's working day, regardless of subject or modality profile. */
+export function tutorWorksPlaygroupDate(db, tutorId, date) {
+    const weekly = db.tutorSchedules?.[tutorId];
+    const day = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][weekday(date)];
+    if (weekly) return weekly.days?.[day] === true;
+    return db.availability.some((entry) => entry.tutorId === tutorId && entry.status === "approved" && entry.date === date && entry.slots.includes("10:00"));
+}
 export function tutorBusy(db, tutorId, date, time, ignoreBookingId, sessionType = "one-on-one") {
     const active = db.sessions.filter((s) => s.tutorId === tutorId && s.date === date && s.time === time &&
         (s.status === "scheduled" || s.status === "needs_reassignment") && s.bookingId !== ignoreBookingId);

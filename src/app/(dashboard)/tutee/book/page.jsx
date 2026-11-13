@@ -6,7 +6,7 @@ import { Calendar } from "@/components/Calendar";
 import { TutorialBooking } from "@/components/TutorialBooking";
 import { Alert, Badge, Button, Card, Chips, Field, PageHeader, Select, Textarea, cn, peso } from "@/components/ui";
 import { PLAYGROUP_SESSION_RATE, PROGRAMS, READING_SKILLS, SUBJECTS } from "@/lib/constants";
-import { addDays, fmtDate, fmtTime, parseISO, todayISO } from "@/lib/dates";
+import { fmtDate, fmtTime, parseISO, todayISO } from "@/lib/dates";
 import { cohortSessionDates } from "@/lib/logic";
 import { useStore } from "@/lib/store";
 const GRADE_CHOICES = ["Nursery", "Preschool", "Kinder", ...Array.from({ length: 10 }, (_, index) => `Grade ${index + 1}`)];
@@ -153,28 +153,29 @@ function PlaygroupFlow() {
     const s = useStore();
     const id = s.me.id;
     const profile = s.db.tutees.find((t) => t.userId === id);
-    const [date, setDate] = useState("");
+    const [selectedCohortId, setSelectedCohortId] = useState("");
     const [msg, setMsg] = useState(null);
     const months = ageMonths(profile.birthday);
     const eligible = months !== null && months >= 34 && months < 60; // 2.8 – 4.x yrs
     const today = todayISO();
     const cohorts = s.db.cohorts
-        .filter((c) => cohortSessionDates(c)[cohortSessionDates(c).length - 1] >= today)
-        .filter((c) => c.modality !== "online" || c.enrolled.includes(id))
+        .map((c) => ({ c, dates: cohortSessionDates(c).slice().sort() }))
+        .filter(({ dates }) => dates[0] >= today)
+        .filter(({ c }) => c.modality !== "online" || c.enrolled.includes(id))
         .map((c) => {
-          const active = s.db.bookings.filter((b) => b.program === "playgroup" && b.cohortId === c.id && ["pending", "approved", "confirmed", "awaiting_admin"].includes(b.status));
-          return { c, dates: cohortSessionDates(c), left: Math.max(0, 6 - active.length), active };
+          const active = s.db.bookings.filter((b) => b.program === "playgroup" && b.cohortId === c.c.id && ["pending", "approved", "confirmed", "awaiting_admin"].includes(b.status));
+          return { ...c, left: Math.max(0, 6 - active.length), active };
         });
-    const allDates = new Set(cohorts.flatMap((x) => x.dates));
-    const onDate = cohorts.filter((x) => (date ? x.dates.includes(date) : true));
-    const alternatives = cohorts.filter((x) => x.left > 0);
-    const book = async (cid) => {
-        const r = await s.bookPlaygroup(id, cid);
+    const selectedCohort = cohorts.find(({ c }) => c.id === selectedCohortId) || cohorts.find((cohort) => cohort.left > 0) || cohorts[0];
+    const alreadyReserved = selectedCohort?.active.some((booking) => booking.tuteeId === id);
+    const book = async () => {
+        const r = await s.bookPlaygroup(id, selectedCohort.c.id);
         setMsg(r.ok ? { kind: "success", text: "Booking submitted. It is pending administrator approval; tutor assignment may still be pending." } : { kind: "error", text: r.error });
     };
     return (<div className="space-y-4">
       <Card>
-        <h2 className="text-lg font-extrabold">Playgroup Class</h2>
+        <h2 className="text-lg font-extrabold">Playgroup cohort</h2>
+        <p className="mt-1 text-sm text-slate-600">Reserve one slot in a six-student cohort. The slot covers all 12 Monday, Wednesday and Friday sessions over four weeks.</p>
         {!eligible && (<div className="mt-3">
             <Alert kind="warn">
               {months === null ? "Add your child's birthday in the profile to check eligibility." : `Playgroup is for ages 2.8–4. Your child is ${(months / 12).toFixed(1)} years old, so booking is disabled.`}
@@ -182,46 +183,35 @@ function PlaygroupFlow() {
           </div>)}
       </Card>
       {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Calendar selected={date ? [date] : []} onSelect={(d) => setDate(date === d ? "" : d)} isDisabled={(d) => !allDates.has(d)} mark={(d) => {
-            const n = cohorts.filter((x) => x.dates.includes(d));
-            if (!n.length)
-                return null;
-            const left = n.reduce((a, x) => a + Math.max(0, x.left), 0);
-            return { text: left ? `${left} left` : "full", tone: left ? "mint" : "coral" };
-        }}/>
+      {cohorts.length === 0 ? <Card><p className="text-sm text-slate-500">There are no upcoming cohorts open for booking. The admin will post the next cohort when its start week is scheduled.</p></Card> : <div className="grid items-start gap-4 lg:grid-cols-2">
+        <Card className="space-y-3">
+          <div>
+            <h3 className="font-extrabold">Cohort dates</h3>
+            <p className="text-xs text-slate-500">All 12 dates in the selected cohort are highlighted.</p>
+          </div>
+          <Calendar selected={selectedCohort?.dates || []} initialMonth={selectedCohort?.dates[0] || today} readOnly mark={(date) => selectedCohort?.dates.includes(date) ? { text: "Playgroup", tone: "mint" } : null}/>
+          {selectedCohort && <p className="text-sm font-bold">{fmtDate(selectedCohort.dates[0])}–{fmtDate(selectedCohort.dates[selectedCohort.dates.length - 1])} · {selectedCohort.dates.length} sessions</p>}
+        </Card>
         <div className="space-y-3">
-          <p className="text-sm font-bold">{date ? `Classes on ${fmtDate(date)}` : "All upcoming classes"}</p>
-          {onDate.length === 0 && <p className="text-sm text-slate-400">No classes.</p>}
-          {onDate.map(({ c, dates, left, active }) => {
-            const enrolled = active.some((b) => b.tuteeId === id);
-            return (<Card key={c.id} className="!p-4">
+          <h3 className="font-extrabold">Choose a cohort</h3>
+          {cohorts.map(({ c, dates, left, active }) => {
+            const enrolled = active.some((booking) => booking.tuteeId === id);
+            const selected = c.id === selectedCohort?.c.id;
+            return <button key={c.id} type="button" onClick={() => { setSelectedCohortId(c.id); setMsg(null); }} className="block w-full text-left">
+              <Card className={`!p-4 ${selected ? "border-brand-300 ring-2 ring-brand-100" : "hover:border-brand-200"}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="font-extrabold">{c.label}</div>
-                    <div className="text-xs text-slate-500">
-                      {fmtTime(c.time)} · {c.modality ?? "face-to-face"} · {c.weekdays.map((w) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][w]).join("/")} · {fmtDate(dates[0])} → {fmtDate(dates[dates.length - 1])}
-                    </div>
-                    <div className="mt-1 text-xs">
-                      Capacity: {active.length}/6
-                    </div>
+                    <div className="mt-1 text-xs text-slate-500">{fmtDate(dates[0])}–{fmtDate(dates[dates.length - 1])} · 12 sessions · Mon/Wed/Fri · {fmtTime(c.time || "10:00")}</div>
                   </div>
-                  {enrolled ? <Badge status="confirmed">Enrolled</Badge> : left > 0 ? <Badge status="approved">{left} slot(s) left</Badge> : <Badge status="rejected">Full</Badge>}
+                  {enrolled ? <Badge status="confirmed">Already reserved</Badge> : left > 0 ? <Badge status="approved">{left} slots available</Badge> : <Badge status="rejected">Full</Badge>}
                 </div>
-                {!enrolled && (<Button size="sm" className="mt-3" disabled={left <= 0 || !eligible} onClick={() => book(c.id)}>
-                    Submit class booking
-                  </Button>)}
-              </Card>);
-        })}
-          {onDate.some((x) => x.left <= 0) && alternatives.length > 0 && (<Alert kind="warn">
-              Full class? Alternative available schedules: {alternatives.map((a) => `${a.c.label} (${a.left} left)`).join(" · ")}
-              <br />
-              <button className="mt-1 font-bold underline" onClick={() => setDate("")}>
-                Show all classes
-              </button>
-            </Alert>)}
+              </Card>
+            </button>;
+          })}
+          {selectedCohort && <Button disabled={!eligible || alreadyReserved || selectedCohort.left <= 0} onClick={book}>{alreadyReserved ? "Slot already reserved" : "Reserve a slot"}</Button>}
         </div>
       </div>
-      <span className="hidden">{addDays(today, 0)}</span>
+      }
     </div>);
 }

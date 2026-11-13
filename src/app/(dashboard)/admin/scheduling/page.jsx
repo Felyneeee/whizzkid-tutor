@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Calendar } from "@/components/Calendar";
 import { Alert, Badge, Button, Card, Empty, Field, Input, Modal, PageHeader, Select, Table, Tabs, Td, Textarea } from "@/components/ui";
-import { addDays, fmtDate, fmtDateTime, fmtTime, todayISO } from "@/lib/dates";
+import { addDays, fmtDate, fmtDateTime, fmtTime, todayISO, weekday } from "@/lib/dates";
 import { HOURS } from "@/lib/constants";
 import { approvedSlot, onApprovedLeave, tutorBusy } from "@/lib/logic";
 import { useStore } from "@/lib/store";
@@ -41,7 +41,16 @@ export default function Scheduling() {
     const assessmentsByDate = {};
     assessments.forEach((assessment) => { var _a; return (assessmentsByDate[_a = assessment.date] ?? (assessmentsByDate[_a] = [])).push(assessment); });
     const playgroupsByDate = {};
-    playgroupBookings.forEach((booking) => (booking.dates || []).forEach((date) => { (playgroupsByDate[date] ??= []).push(booking); }));
+    playgroupBookings.forEach((booking) => (booking.dates || []).forEach((date) => {
+      const groups = (playgroupsByDate[date] ??= []);
+      const key = booking.cohortId || booking.id;
+      let group = groups.find((item) => item.key === key);
+      if (!group) {
+        group = { key, cohortId: booking.cohortId, bookings: [] };
+        groups.push(group);
+      }
+      group.bookings.push(booking);
+    }));
     const daySessions = [...(sessionsByDate[selectedDate] ?? [])].sort((a, b) => a.time.localeCompare(b.time));
     const dayAssessments = [...(assessmentsByDate[selectedDate] ?? [])].sort((a, b) => a.time.localeCompare(b.time));
     const contracts = db.bookings.filter((b) => ["confirmed", "completed", "terminated"].includes(b.status));
@@ -137,9 +146,12 @@ export default function Scheduling() {
                 <Badge status={assessment.status}/>
               </Card>))}
             </div>}
-            {(playgroupsByDate[selectedDate] || []).length > 0 && <div className="space-y-2"><h3 className="font-extrabold">Playgroup classes</h3>{playgroupsByDate[selectedDate].map((booking) => {
-              const cohort = db.cohorts.find((item) => item.id === booking.cohortId);
-              return <Card key={`playgroup-${booking.id}`} className="flex flex-wrap items-center gap-3 border-mint-200 bg-mint-50/40"><div className="min-w-20 rounded-xl bg-mint-100 px-3 py-2 text-center font-extrabold text-mint-700">10:00 AM</div><div className="min-w-[180px] flex-1"><div className="font-bold">{un(booking.tuteeId)} · {cohort?.label || "Playgroup"}</div><div className="text-sm text-slate-500">10:00–11:30 AM · Face-to-Face · Tutor {booking.tutorId ? tn(booking.tutorId) : "Unassigned"}</div></div><Badge status={booking.status}/><Badge status={booking.tutorAssignmentStatus || (booking.tutorId ? "Assigned" : "Unassigned")}/></Card>;
+            {(playgroupsByDate[selectedDate] || []).length > 0 && <div className="space-y-2"><h3 className="font-extrabold">Playgroup classes</h3>{playgroupsByDate[selectedDate].map((group) => {
+              const cohort = db.cohorts.find((item) => item.id === group.cohortId);
+              const tutorId = group.bookings.map((booking) => booking.tutorAssignments?.[selectedDate] || booking.tutorId).find(Boolean) || cohort?.weekdayTutorIds?.[weekday(selectedDate)];
+              const time = cohort?.time || group.bookings[0]?.time || "10:00";
+              const students = group.bookings.map((booking) => un(booking.tuteeId)).join(", ");
+              return <Card key={`playgroup-${group.key}`} className="flex flex-wrap items-center gap-3 border-mint-200 bg-mint-50/40"><div className="min-w-20 rounded-xl bg-mint-100 px-3 py-2 text-center font-extrabold text-mint-700">{fmtTime(time)}</div><div className="min-w-[180px] flex-1"><div className="font-bold">{cohort?.label || "Playgroup"} · {group.bookings.length}/6 reserved</div><div className="text-sm text-slate-500">{fmtTime(time)} · {cohort?.modality || "Face-to-Face"} · Tutor {tutorId ? tn(tutorId) : "Unassigned"}</div><div className="mt-1 text-xs text-slate-500">{students}</div></div></Card>;
             })}</div>}
           </section>
         </div>) : (<>

@@ -10,7 +10,7 @@ const tone = {
     sunny: "bg-sunny-100 text-sunny-500",
     slate: "bg-slate-100 text-slate-500",
 };
-export function Calendar({ selected = [], onSelect, isDisabled, mark, initialMonth, highlight, allowPast = false }) {
+export function Calendar({ selected = [], onSelect, isDisabled, mark, initialMonth, highlight, allowPast = false, readOnly = false }) {
     const start = initialMonth ? parseISO(initialMonth) : new Date();
     const [cursor, setCursor] = useState({ y: start.getFullYear(), m: start.getMonth() });
     useEffect(() => {
@@ -49,10 +49,11 @@ export function Calendar({ selected = [], onSelect, isDisabled, mark, initialMon
         {cells.map((date, i) => {
             if (!date)
                 return <div key={i}/>;
-            const disabled = (!allowPast && date < today) || (isDisabled?.(date) ?? false);
+            const canSelect = !!onSelect && !readOnly;
+            const disabled = (!allowPast && date < today) || (isDisabled?.(date) ?? false) || !canSelect;
             const sel = selected.includes(date);
             const m = mark?.(date);
-            return (<button type="button" key={date} disabled={disabled || !onSelect} onClick={() => onSelect?.(date)} className={cn("flex min-h-[52px] flex-col items-center rounded-xl border p-1 text-sm font-bold transition", sel ? "border-brand-600 bg-brand-600 text-white" : "border-transparent", !sel && !disabled && "hover:border-brand-300 hover:bg-brand-50", !sel && highlight?.(date) && "bg-brand-50", disabled && "cursor-not-allowed text-slate-300", date === today && !sel && "ring-2 ring-sunny-300")}>
+            return (<button type="button" key={date} disabled={disabled} onClick={() => canSelect && onSelect(date)} className={cn("flex min-h-[52px] flex-col items-center rounded-xl border p-1 text-sm font-bold transition", sel ? "border-brand-600 bg-brand-600 text-white" : "border-transparent", canSelect && !sel && !disabled && "hover:border-brand-300 hover:bg-brand-50", !sel && highlight?.(date) && "bg-brand-50", disabled && !sel && "cursor-not-allowed text-slate-300", readOnly && "cursor-default", date === today && !sel && "ring-2 ring-sunny-300")}>
               <span>{Number(date.slice(8))}</span>
               {m?.text && <span className={cn("mt-0.5 rounded px-1 text-[9px] font-bold leading-4", sel ? "bg-white/25 text-white" : tone[m.tone || "brand"])}>{m.text}</span>}
               {m?.subtext && <span className={cn("max-w-full truncate rounded px-1 text-[8px] font-bold leading-3", sel ? "text-white" : tone[m.subtone || "brand"])}>{m.subtext}</span>}
