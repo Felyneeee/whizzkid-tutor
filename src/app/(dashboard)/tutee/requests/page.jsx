@@ -7,8 +7,8 @@ export default function TuteeRequests() {
     const s = useStore();
     const [proposalMsg, setProposalMsg] = useState({});
     const id = s.me.id;
-    const bookings = s.db.bookings.filter((b) => b.tuteeId === id && (["pending_assessment", "awaiting_admin", "rejected", "cancelled", "expired"].includes(b.status) || !!b.scheduleProposal)).reverse();
-    const linkedAssessmentIds = new Set(s.db.bookings.filter((b) => b.tuteeId === id && b.program === "reading" && b.status === "pending_assessment").map((b) => b.assessmentId));
+    const bookings = s.db.bookings.filter((b) => b.tuteeId === id && (["pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "rejected", "cancelled", "expired"].includes(b.status) || (b.program === "reading" && b.status === "pending") || !!b.scheduleProposal)).reverse();
+    const linkedAssessmentIds = new Set(s.db.bookings.filter((b) => b.tuteeId === id && b.program === "reading" && ["pending", "pending_assessment", "assessment_scheduled"].includes(b.status)).map((b) => b.assessmentId));
     const assessments = s.db.assessments.filter((a) => a.tuteeId === id && ["pending_admin_scheduling", "booked"].includes(a.status) && !linkedAssessmentIds.has(a.id));
     const orders = s.db.purchases.filter((p) => p.tuteeId === id && p.status === "pending");
     return (<>
@@ -21,7 +21,7 @@ export default function TuteeRequests() {
               <div className="text-sm text-slate-500">
                 {a.date ? `${fmtDate(a.date)} · ${fmtTime(a.time)}` : "The admin will schedule and send your assessment details"} · {a.modality}
               </div>
-              <div className="mt-1 text-xs text-slate-500">The initial assessment is scheduled by the admin between 9:00 and 10:00 AM. Your Reading Program request is confirmed after it is completed.</div>
+              <div className="mt-1 text-xs text-slate-500">The initial assessment is scheduled by the admin between 9:00 and 10:00 AM. After the admin records the results, they will match a tutor to your selected schedule.</div>
             </div>
             <div className="flex items-center gap-2">
               <Badge status={a.status}>{a.status === "pending_admin_scheduling" ? "Pending Admin Assessment Scheduling" : "Scheduled"}</Badge>
@@ -37,11 +37,9 @@ export default function TuteeRequests() {
                   {(b.sessionSlots?.length ?? b.dates.length)} session(s) · {(b.sessionSlots || b.dates.map((date) => ({ date, subject: b.sessionSubjects?.[date], time: b.sessionTimes?.[date] ?? b.time }))).map((slot) => `${fmtDate(slot.date)} ${slot.subject ? `(${slot.subject}) ` : ""}at ${fmtTime(slot.time)}`).join(" · ")} · {b.modality} · {peso(b.totalFee)}
                 </div>
               </div>
-              <Badge status={b.status}>{b.status === "pending_assessment" ? s.db.assessments.find((a) => a.id === b.assessmentId)?.status === "booked" ? "Awaiting assessment results" : "Awaiting initial assessment" : undefined}</Badge>
-              {["pending_assessment", "awaiting_admin"].includes(b.status) && <Button size="sm" variant="secondary" onClick={() => s.cancelTutorialBooking(b.id)}>Cancel request</Button>}
+              <Badge status={b.status}>{(b.status === "pending_assessment" || (b.program === "reading" && b.status === "pending")) ? s.db.assessments.find((a) => a.id === b.assessmentId)?.status === "booked" ? "Awaiting assessment results" : "Awaiting initial assessment" : undefined}</Badge>
+              {["pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin"].includes(b.status) || (b.program === "reading" && b.status === "pending") ? <Button size="sm" variant="secondary" onClick={() => s.cancelTutorialBooking(b.id)}>Cancel request</Button> : null}
             </div>
-            {b.status === "pending_assessment" && <p className="mt-2 text-xs text-slate-500">Your selected schedule is saved. {s.db.assessments.find((a) => a.id === b.assessmentId)?.status === "booked" ? `Your initial assessment is scheduled for ${fmtDate(s.db.assessments.find((a) => a.id === b.assessmentId).date)} at ${fmtTime(s.db.assessments.find((a) => a.id === b.assessmentId).time)}.` : "The admin will send your initial assessment date and time, scheduled between 9:00 and 10:00 AM."} This request will move to tutor matching after assessment results are recorded.</p>}
-            {b.status === "awaiting_admin" && !b.scheduleProposal && <p className="mt-2 text-xs text-slate-500">Your assessment is complete. The admin is reviewing tutor matches for your selected schedule.</p>}
             {b.scheduleProposal && (<div className="mt-3 space-y-3 rounded-xl border border-sunny-200 bg-sunny-50 p-3">
                 <div className="font-bold">The admin proposed a schedule change. Please review it:</div>
                 <div className="text-sm">{b.scheduleProposal.sessions.map((session) => `${fmtDate(session.date)} at ${fmtTime(session.time)}`).join(" · ")}</div>
@@ -57,8 +55,6 @@ export default function TuteeRequests() {
                 </div>
               </div>)}
             {proposalMsg[b.id] && <div className="mt-3"><Alert kind={proposalMsg[b.id].kind}>{proposalMsg[b.id].text}</Alert></div>}
-            {b.status === "rejected" && <p className="mt-2 text-xs text-coral-600">{b.terminationReason} Please book a new schedule.</p>}
-            {b.status === "expired" && <p className="mt-2 text-xs text-coral-600">This request expired and its temporary capacity reservation was released.</p>}
           </Card>))}
         {orders.map((o) => (<Card key={o.id} className="flex items-center justify-between !p-4">
             <div>

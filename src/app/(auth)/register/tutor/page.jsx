@@ -46,8 +46,7 @@ export default function RegisterTutor({ initialType = "new" }) {
     return (<>
       <Card className="p-7 sm:p-8">
       <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">{type === "new" ? "Application Form" : "Account Activation"}</h1>
-      <p className="mb-4 text-sm text-slate-500">{type === "new" ? "After filling out applicant form, an admin will review your resume and send an application status whether you’re rejected or scheduled for the interview." : "Already employed tutors must submit registration details to request account activation. An admin will verify your record and activate your access."}</p>
-      <form className="space-y-4" onSubmit={async (e) => {
+      <form className="mt-4 space-y-4" onSubmit={async (e) => {
             e.preventDefault();
             if (f.password.length < 12)
                 return setErr("Password must be at least 12 characters.");

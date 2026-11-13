@@ -94,7 +94,6 @@ export default function Scheduling() {
             <div className="flex flex-wrap items-end justify-between gap-2">
               <div>
                 <h2 className="text-xl font-extrabold">{fmtDate(selectedDate)}</h2>
-                <p className="text-sm text-slate-500">{daySessions.length} session{daySessions.length === 1 ? "" : "s"} · {dayAssessments.length} initial assessment{dayAssessments.length === 1 ? "" : "s"}</p>
               </div>
             </div>
             <h3 className="font-extrabold">Sessions </h3>
@@ -139,7 +138,6 @@ export default function Scheduling() {
           {assessments.length > 0 && <section className="mb-6 space-y-3">
             <div>
               <h2 className="text-lg font-extrabold">Initial assessment schedules</h2>
-              <p className="text-sm text-slate-500">Assessment appointments are listed separately and are not program sessions.</p>
             </div>
             <Table head={["Tutee", "Date", "Time", "Modality", "Status"]}>
               {assessments.sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)).map((assessment) => (<tr key={assessment.id}>
@@ -167,7 +165,6 @@ export default function Scheduling() {
 
       <Modal open={!!term} onClose={() => setTerm(null)} title="Terminate contract">
         <div className="space-y-4">
-          <p className="text-sm text-slate-600">Future sessions will be cancelled and both parties notified. This is recorded in activity history.</p>
           <Field label="Reason">
             <Textarea value={reason} onChange={(e) => setReason(e.target.value)}/>
           </Field>
@@ -176,7 +173,6 @@ export default function Scheduling() {
       </Modal>
       <Modal open={!!reschedule} onClose={() => setReschedule(null)} title="Propose session reschedule">
         <div className="space-y-4">
-          <p className="text-sm text-slate-500">The tutee must approve the change first. The assigned tutor must also have approved availability at the proposed time.</p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="New date"><Input type="date" min={today} value={reschedule?.date ?? ""} onChange={(e) => setReschedule((current) => current ? { ...current, date: e.target.value } : current)}/></Field>
             <Field label="New time">

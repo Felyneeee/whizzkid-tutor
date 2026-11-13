@@ -85,9 +85,6 @@ function SecureViewer({ m, viewer, onClose }) {
         </div>
         {blurred && <div className="absolute inset-0 grid place-items-center text-sm font-bold text-slate-700">Content hidden while window is unfocused</div>}
       </div>
-      <p className="mt-3 flex items-center gap-1 text-xs text-slate-500">
-        <ShieldAlert className="h-4 w-4"/> View-only. Downloading, copying and printing are disabled; every view is logged and watermarked with your account.
-      </p>
     </Modal>);
 }
 export function MaterialsView({ role, userId }) {
@@ -98,11 +95,6 @@ export function MaterialsView({ role, userId }) {
     const email = s.me?.email || "user";
     return (<>
       <PageHeader title="Learning Materials" subtitle="Protected, view-only resources shared by the admin."/>
-      <div className="mb-4">
-        <Alert kind="info">
-          <Lock className="mr-1 inline h-4 w-4"/> Materials are access-controlled and watermarked. Sharing screenshots or copies outside Whizzkids is not allowed.
-        </Alert>
-      </div>
       {list.length === 0 ? (<Empty>No materials available to you yet.</Empty>) : (<div className="grid gap-3 md:grid-cols-2">
           {list.map((m) => (<Card key={m.id} className="flex items-start justify-between gap-3 !p-4">
               <div>

@@ -11,9 +11,11 @@ export default function Assessments() {
   const [f, setF] = useState({ readingLevel: "", results: "", learningNeeds: "" });
   const [schedule, setSchedule] = useState({});
   const [errors, setErrors] = useState({});
-  const latestByTutee = new Map();
-  s.db.assessments.filter((a) => a.status !== "cancelled").forEach((a) => latestByTutee.set(a.tuteeId, a));
-  const list = [...latestByTutee.values()].sort((a, b) => (a.status === "pending_admin_scheduling" ? -1 : 1) - (b.status === "pending_admin_scheduling" ? -1 : 1) || `${a.date ?? ""}${a.time ?? ""}`.localeCompare(`${b.date ?? ""}${b.time ?? ""}`));
+  const activeAssessments = s.db.assessments.filter((a) => ["pending_admin_scheduling", "booked"].includes(a.status));
+  const activeTutees = new Set(activeAssessments.map((a) => a.tuteeId));
+  const latestCompleted = new Map();
+  s.db.assessments.filter((a) => a.status === "completed" && !activeTutees.has(a.tuteeId)).forEach((a) => latestCompleted.set(a.tuteeId, a));
+  const list = [...activeAssessments, ...latestCompleted.values()].sort((a, b) => (a.status === "pending_admin_scheduling" ? -1 : 1) - (b.status === "pending_admin_scheduling" ? -1 : 1) || `${a.date ?? ""}${a.time ?? ""}`.localeCompare(`${b.date ?? ""}${b.time ?? ""}`));
   const nm = (id) => s.db.tutees.find((t) => t.userId === id);
   const scheduleAssessment = async (assessment) => {
     setErrors((v) => ({ ...v, [assessment.id]: "" }));
@@ -34,11 +36,14 @@ export default function Assessments() {
     <PageHeader title="Reading assessments" subtitle="Schedule initial assessments for program requests, then record results and learning needs." />
     {list.length === 0 && <Empty>No assessment requests yet.</Empty>}
     <div className="space-y-3">
-      {list.map((a) => <Card key={a.id} className="space-y-3 !p-4">
+      {list.map((a) => {
+        const linkedBooking = s.db.bookings.find((booking) => booking.assessmentId === a.id && booking.program === "reading");
+        return <Card key={a.id} className="space-y-3 !p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="font-extrabold">{nm(a.tuteeId)?.fullName} <span className="text-sm font-normal text-slate-500">· {nm(a.tuteeId)?.gradeLevel}, {nm(a.tuteeId)?.age ?? "?"} y/o</span></div>
             <div className="mt-1 text-sm text-slate-600">{a.date ? `${fmtDate(a.date)} · ${fmtTime(a.time)}` : "Awaiting admin scheduling"} · <Badge status={a.modality} /></div>
+            {linkedBooking && <p className="mt-2 text-sm font-semibold text-brand-700">Linked Reading booking · {linkedBooking.sessionSlots?.length ?? linkedBooking.dates.length} tutoring sessions · {linkedBooking.status === "assessment_scheduled" ? "assessment scheduled" : linkedBooking.status === "ready_for_matching" ? "ready for tutor confirmation" : linkedBooking.status}</p>}
             {a.learningNeeds && <p className="mt-2 text-sm text-slate-600">{a.status === "pending_admin_scheduling" ? "Parent's reading goals" : "Learning needs"}: {a.learningNeeds}</p>}
             {a.status === "completed" && <p className="mt-2 text-sm text-slate-600"><b>Reading level: {a.readingLevel}</b><br />Assessment results: {a.results}</p>}
           </div>
@@ -54,7 +59,8 @@ export default function Assessments() {
         </div>}
         {a.status === "booked" && <Button size="sm" onClick={() => { setRec(a); setF({ readingLevel: "", results: "", learningNeeds: "" }); }}>Enter assessment results</Button>}
         {errors[a.id] && <Alert kind="error">{errors[a.id]}</Alert>}
-      </Card>)}
+        </Card>;
+      })}
     </div>
     <Modal open={!!rec} onClose={() => setRec(null)} title="Record assessment results">
       {rec && <form className="space-y-4" onSubmit={saveResults}>

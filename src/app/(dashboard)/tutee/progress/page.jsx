@@ -23,7 +23,6 @@ export default function TuteeProgressPage() {
                 <div>
                   <div className="text-xs font-bold uppercase tracking-wide text-brand-600">{report.subject}</div>
                   <h2 className="text-lg font-extrabold">{report.skill}</h2>
-                  <p className="text-sm text-slate-500">Session {fmtDate(report.sessionDate)}</p>
                 </div>
                 <Badge status={report.status}>{STATUS_LABELS[report.status] ?? report.status}</Badge>
               </div>

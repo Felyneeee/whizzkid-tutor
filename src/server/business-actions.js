@@ -87,6 +87,7 @@ export function createBusinessActions({ get, mutate }) {
           const a = n.assessments.find((x) => x.id === id && x.status === "pending_admin_scheduling");
           if (!a) return;
           a.date = date; a.time = time; a.status = "booked";
+          n.bookings.filter((booking) => booking.program === "reading" && booking.assessmentId === a.id && booking.status === "pending_assessment").forEach((booking) => { booking.status = "assessment_scheduled"; });
           n.assessments.filter((x) => x.tuteeId === a.tuteeId && x.id !== a.id && x.status === "pending_admin_scheduling").forEach((x) => { x.status = "cancelled"; });
           pushNotif(n, a.tuteeId, `Your initial assessment is scheduled for ${fmtDate(date)} at ${fmtTime(time)}.`, ["web", "email", "sms"]);
       });
@@ -108,16 +109,29 @@ export function createBusinessActions({ get, mutate }) {
           a.results = results;
           a.learningNeeds = learningNeeds;
           a.readingLevel = readingLevel;
-          const waitingBookings = n.bookings.filter((booking) => booking.program === "reading" && booking.assessmentId === a.id && booking.status === "pending_assessment");
+          let waitingBookings = n.bookings.filter((booking) => booking.program === "reading" && booking.assessmentId === a.id && ["pending_assessment", "assessment_scheduled"].includes(booking.status));
+          if (!waitingBookings.length && !a.bookingId) {
+              const legacyRequests = n.bookings.filter((booking) => {
+                  if (booking.program !== "reading" || booking.tuteeId !== a.tuteeId || !["pending_assessment", "assessment_scheduled"].includes(booking.status)) return false;
+                  const linkedAssessment = n.assessments.find((entry) => entry.id === booking.assessmentId);
+                  return !linkedAssessment?.bookingId;
+              });
+              if (legacyRequests.length === 1) {
+                  waitingBookings = legacyRequests;
+                  waitingBookings[0].assessmentId = a.id;
+                  a.bookingId = waitingBookings[0].id;
+              }
+          }
           waitingBookings.forEach((booking) => {
-              booking.status = "awaiting_admin";
+              booking.status = "ready_for_matching";
               booking.learningNeeds = learningNeeds;
-              booking.expiresAt = new Date(Date.now() + Math.max(1, Number(process.env.BOOKING_PENDING_TTL_HOURS) || 72) * 3600000).toISOString();
+              const matches = matchTutors(n, { program: "reading", subject: "Reading", gradeLevel: booking.gradeLevel, modality: booking.modality, learningNeeds, dates: booking.dates, times: booking.sessionTimes, time: booking.time, ignoreBookingId: booking.id });
+              booking.recommendations = matches.filter((match) => match.full).slice(0, 3).map((match) => match.tutor.userId);
           });
           pushNotif(n, a.tuteeId, waitingBookings.length
               ? "Your reading assessment is complete. Your selected Reading Program schedule is now being matched with a tutor."
               : "Your reading assessment is complete. You can now select a schedule for your Reading Program.", ["web", "email", "sms"]);
-          if (waitingBookings.length) pushAdmins(n, `Reading assessment completed for ${nameOf(n, a.tuteeId)}. Their selected schedule is ready for tutor matching.`);
+          if (waitingBookings.length) pushAdmins(n, `Reading assessment completed for ${nameOf(n, a.tuteeId)}. Suggested tutors are ready for admin confirmation.`);
           logAct(n, a.tuteeId, "match", `Assessment completed — level: ${readingLevel}`);
       });
       return { ok: true };
@@ -181,7 +195,7 @@ export function createBusinessActions({ get, mutate }) {
       if (v.program === "reading") v.sessionType = "one-on-one";
       if (v.dates.some((date) => date < todayISO()))
           return { ok: false, error: "Past dates cannot be booked. Please choose a future date." };
-      if (d.bookings.some((b) => b.tuteeId === v.tuteeId && b.program === v.program && ["pending_assessment", "awaiting_admin", "confirmed"].includes(b.status) && (b.sessionSlots || b.dates.map((date) => ({ date, time: b.sessionTimes?.[date] ?? b.time }))).some((existing) => (v.sessionSlots || v.dates.map((date) => ({ date, time: v.sessionTimes?.[date] ?? v.time }))).some((requested) => existing.date === requested.date && existing.time === requested.time))))
+      if (d.bookings.some((b) => b.tuteeId === v.tuteeId && b.program === v.program && ["pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "confirmed"].includes(b.status) && (b.sessionSlots || b.dates.map((date) => ({ date, time: b.sessionTimes?.[date] ?? b.time }))).some((existing) => (v.sessionSlots || v.dates.map((date) => ({ date, time: v.sessionTimes?.[date] ?? v.time }))).some((requested) => existing.date === requested.date && existing.time === requested.time))))
           return { ok: false, error: "You already have a request or booking for this program, date, and time." };
       if (v.program === "academic") {
           const cycleWeeks = v.recurrence?.cycleWeeks;
@@ -217,11 +231,16 @@ export function createBusinessActions({ get, mutate }) {
       });
       const bookingId = uid("b");
       const rate = computeRate(v.program, v.gradeLevel, v.modality);
+      let readingAssessmentComplete = false;
+      let bookingLearningNeeds = v.learningNeeds;
+      let bookingRecommendations = matches.slice(0, 3).map((m) => m.tutor.userId);
       mutate((n) => {
           let assessmentId = v.assessmentId;
           let assessment;
           if (v.program === "reading") {
-              assessment = n.assessments.find((entry) => entry.tuteeId === v.tuteeId && ["pending_admin_scheduling", "booked", "completed"].includes(entry.status));
+              assessment = [...n.assessments].reverse().find((entry) => entry.tuteeId === v.tuteeId && entry.id === v.assessmentId && ["pending_admin_scheduling", "booked", "completed"].includes(entry.status))
+                  || [...n.assessments].reverse().find((entry) => entry.tuteeId === v.tuteeId && ["pending_admin_scheduling", "booked"].includes(entry.status));
+              if (!assessment && !v.assessmentId) assessment = [...n.assessments].reverse().find((entry) => entry.tuteeId === v.tuteeId && entry.status === "completed");
               if (!assessment) {
                   assessmentId = uid("as");
                   assessment = { id: assessmentId, tuteeId: v.tuteeId, modality: v.modality, learningNeeds: String(v.learningNeeds || "").slice(0, 2000), status: "pending_admin_scheduling", program: "reading" };
@@ -230,8 +249,15 @@ export function createBusinessActions({ get, mutate }) {
               } else {
                   assessmentId = assessment.id;
               }
+              assessment.bookingId = bookingId;
+              readingAssessmentComplete = assessment.status === "completed";
+              if (readingAssessmentComplete) {
+                  bookingLearningNeeds = assessment.learningNeeds || v.learningNeeds;
+                  bookingRecommendations = matchTutors(n, { program: "reading", subject: "Reading", gradeLevel: v.gradeLevel, modality: v.modality, learningNeeds: bookingLearningNeeds, dates: v.dates, times: v.sessionTimes, time: v.time, ignoreBookingId: bookingId }).filter((match) => match.full).slice(0, 3).map((match) => match.tutor.userId);
+                  pushAdmins(n, `Reading Program booking from ${nameOf(n, v.tuteeId)} is ready for tutor confirmation. Suggested tutors are available in matching.`);
+              }
           }
-          const assessmentComplete = v.program !== "reading" || assessment?.status === "completed";
+          const assessmentComplete = v.program !== "reading" || readingAssessmentComplete;
           const b = {
               id: bookingId,
               tuteeId: v.tuteeId,
@@ -239,7 +265,7 @@ export function createBusinessActions({ get, mutate }) {
               subject: v.program === "reading" ? "Reading" : v.subject,
               gradeLevel: v.gradeLevel,
               modality: v.modality,
-              learningNeeds: v.learningNeeds,
+              learningNeeds: bookingLearningNeeds,
               bookingType: v.bookingType,
               sessionType: v.sessionType,
               dates: v.dates,
@@ -254,20 +280,22 @@ export function createBusinessActions({ get, mutate }) {
               cycleSessionAllowance: v.cycleSessionAllowance,
               ratePerHour: rate,
               totalFee: rate * (v.sessionSlots?.length ?? v.dates.length),
-              status: assessmentComplete ? "awaiting_admin" : "pending_assessment",
-              recommendations: matches.slice(0, 3).map((m) => m.tutor.userId),
+              status: v.program === "reading" ? readingAssessmentComplete ? "ready_for_matching" : "pending_assessment" : "awaiting_admin",
+              recommendations: bookingRecommendations,
               createdAt: nowISO(),
-              ...(assessmentComplete ? { expiresAt: new Date(Date.now() + Math.max(1, Number(process.env.BOOKING_PENDING_TTL_HOURS) || 72) * 3600000).toISOString() } : {}),
+              ...(v.program !== "reading" ? { expiresAt: new Date(Date.now() + Math.max(1, Number(process.env.BOOKING_PENDING_TTL_HOURS) || 72) * 3600000).toISOString() } : {}),
               assessmentId,
           };
           n.bookings.push(b);
           pushNotif(n, v.tuteeId, v.program === "reading" && !assessmentComplete
               ? "Your Reading Program schedule request was received. It will be confirmed after your initial assessment is complete. The admin will schedule the assessment between 9:00 and 10:00 AM and send you the date and time."
-              : matches.length
+              : v.program === "reading"
+                  ? "Your Reading Program booking and schedule were received. Your completed assessment is on file, and the admin will confirm a tutor for your selected schedule."
+                  : matches.length
                   ? "Booking request submitted. Your open slot is reserved while our admin reviews the tutor recommendations."
                   : "Booking request submitted. Your open slot is reserved while we wait for a matching tutor to become available.", ["web", "email"]);
           const sessionCount = v.sessionSlots?.length ?? v.dates.length;
-          if (v.program !== "reading" || assessmentComplete) pushAdmins(n, `New booking request from ${nameOf(n, v.tuteeId)} — ${b.subject}, ${sessionCount} session(s). ${matches.length ? "Review recommendations." : "No tutor matches yet; review when an eligible tutor's availability is approved."}`);
+          if (v.program !== "reading" || !readingAssessmentComplete && assessmentComplete) pushAdmins(n, `New booking request from ${nameOf(n, v.tuteeId)} — ${b.subject}, ${sessionCount} session(s). ${matches.length ? "Review recommendations." : "No tutor matches yet; review when an eligible tutor's availability is approved."}`);
           logAct(n, v.tuteeId, "booking", `Requested ${b.subject} schedule (${sessionCount} session/s)`);
       });
       return { ok: true, bookingId };
@@ -673,12 +701,68 @@ export function createBusinessActions({ get, mutate }) {
       });
       return { ok: true };
   },
+  confirmReadingAssignment(bookingIds, tutorId) {
+      const d = get();
+      if (!Array.isArray(bookingIds) || !bookingIds.length) return { ok: false, error: "Choose a Reading Program assignment." };
+      const bookings = bookingIds.map((id) => d.bookings.find((entry) => entry.id === id));
+      const first = bookings[0];
+      if (!first || first.program !== "reading" || bookings.some((booking) => !booking || booking.program !== "reading" || booking.status !== "ready_for_matching" || booking.tuteeId !== first.tuteeId || booking.assessmentId !== first.assessmentId || booking.scheduleProposal)) return { ok: false, error: "This Reading Program assignment is no longer ready for matching." };
+      if (!d.assessments.some((entry) => entry.id === first.assessmentId && entry.tuteeId === first.tuteeId && entry.status === "completed")) return { ok: false, error: "Complete the linked initial assessment before confirming a tutor." };
+      const tutor = d.tutors.find((entry) => entry.userId === tutorId);
+      const slotMap = new Map();
+      for (const booking of bookings) {
+          const slots = booking.sessionSlots ?? booking.dates.map((date) => ({ date, time: booking.sessionTimes?.[date] ?? booking.time, subject: "Reading" }));
+          for (const slot of slots) {
+              const key = `${slot.date}|${slot.time}`;
+              if (!slotMap.has(key)) slotMap.set(key, { ...slot, subject: "Reading", bookingId: booking.id });
+          }
+      }
+      const slots = [...slotMap.values()].sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+      const options = { program: "reading", subject: "Reading", gradeLevel: first.gradeLevel, modality: first.modality, sessionType: "one-on-one", ignoreBookingId: first.id };
+      if (!tutor || bookings.some((booking) => booking.gradeLevel !== first.gradeLevel || booking.modality !== first.modality) || slots.some((slot) => !tutorQualifies(tutor, options) || !tutorFreeOn(d, tutor, { ...options, time: slot.time }, slot.date))) return { ok: false, error: "This tutor is no longer eligible or available for every session in the combined Reading schedule." };
+      mutate((n) => {
+          const assignmentId = uid("ta");
+          for (const slot of slots) {
+              const booking = n.bookings.find((entry) => entry.id === slot.bookingId);
+              n.sessions.push({ id: uid("s"), assignmentId, bookingId: booking.id, tutorId, tuteeId: first.tuteeId, date: slot.date, time: slot.time, modality: first.modality, status: "scheduled" });
+          }
+          bookings.forEach((booking) => {
+              const target = n.bookings.find((entry) => entry.id === booking.id);
+              target.status = "confirmed";
+              target.tutorId = tutorId;
+          });
+          const name = nameOf(n, tutorId);
+          const scheduleText = slots.map((slot) => `${fmtDate(slot.date)} at ${fmtTime(slot.time)}`).join(", ");
+          pushNotif(n, first.tuteeId, `Your Reading Program assignment is confirmed with ${firstName(name, "Tutor")}. Sessions: ${scheduleText}.`, ["web", "email", "sms"]);
+          pushNotif(n, tutorId, `New Reading Program assignment: ${nameOf(n, first.tuteeId)}. Sessions: ${scheduleText} (${first.modality}).`, ["web", "email"]);
+          logAct(n, adminIdOf(n), "match", `Assigned ${name} to ${nameOf(n, first.tuteeId)} for one Reading Program assignment (${slots.length} sessions)`);
+          logAct(n, first.tuteeId, "match", `Reading Program assignment confirmed with ${firstName(name, "Tutor")}`);
+          logAct(n, tutorId, "match", `Assigned to ${nameOf(n, first.tuteeId)} for a Reading Program assignment`);
+      });
+      return { ok: true, sessions: slots.length };
+  },
+  rejectReadingAssignment(bookingIds, reason) {
+      if (!Array.isArray(bookingIds) || !bookingIds.length) return { ok: false, error: "Choose a Reading Program assignment." };
+      const bookings = get().bookings.filter((entry) => bookingIds.includes(entry.id));
+      const first = bookings[0];
+      if (!first || bookings.length !== bookingIds.length || bookings.some((booking) => booking.program !== "reading" || booking.status !== "ready_for_matching" || booking.tuteeId !== first.tuteeId || booking.assessmentId !== first.assessmentId)) return { ok: false, error: "This Reading Program assignment is no longer awaiting review." };
+      mutate((n) => {
+          bookings.forEach((booking) => {
+              const target = n.bookings.find((entry) => entry.id === booking.id);
+              target.status = "rejected";
+              target.terminationReason = String(reason || "The requested schedule is not available.");
+          });
+          pushNotif(n, first.tuteeId, `We couldn't confirm your Reading Program assignment. ${reason} Please choose another schedule.`, ["web", "email", "sms"]);
+          logAct(n, adminIdOf(n), "match", `Rejected a Reading Program assignment for ${nameOf(n, first.tuteeId)}`);
+      });
+      return { ok: true };
+  },
   confirmBooking(bookingId, tutorId, allowPartial = false) {
       const d = get();
       const b = d.bookings.find((x) => x.id === bookingId);
       if (!b)
           return { ok: false, error: "Booking not found." };
-      if (b.status !== "awaiting_admin")
+      if (b.status !== (b.program === "reading" ? "ready_for_matching" : "awaiting_admin"))
           return { ok: false, error: "Only pending requests can be assigned." };
       if (b.scheduleProposal)
           return { ok: false, error: "Wait for the tutee to approve or decline the proposed schedule first." };
@@ -743,7 +827,7 @@ export function createBusinessActions({ get, mutate }) {
   },
   cancelTutorialBooking(bookingId) {
       const booking = get().bookings.find((entry) => entry.id === bookingId);
-      if (!booking || !["pending_assessment", "awaiting_admin"].includes(booking.status)) return { ok: false, error: "Only pending requests can be cancelled." };
+      if (!booking || !["pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin"].includes(booking.status)) return { ok: false, error: "Only pending requests can be cancelled." };
       mutate((n) => {
           const target = n.bookings.find((entry) => entry.id === bookingId);
           target.status = "cancelled";

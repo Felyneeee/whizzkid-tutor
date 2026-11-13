@@ -40,10 +40,7 @@ export default function Home() {
           <h1 className="mt-4 text-4xl font-extrabold leading-tight tracking-tight text-slate-900 md:text-5xl">
             Where little <span className="text-brand-600">whizzes</span> grow big.
           </h1>
-          <p className="mt-4 max-w-md text-lg text-slate-600">
-            Playgroup classes, reading programs and academic tutorials — matched with the right tutor, at a schedule that works for your family.
-          </p>
-          <div className="mt-6 flex flex-wrap gap-3">
+          <div className="mt-4 flex flex-wrap gap-3">
             <Link href="/register/tutee">
               <Button size="md" className="!px-6 !py-3 text-base">
                 Enroll my child
@@ -71,7 +68,7 @@ export default function Home() {
           {Object.keys(PROGRAMS).map((k) => (<Card key={k}>
               <div className="text-3xl">{PROGRAMS[k].emoji}</div>
               <h3 className="mt-2 text-lg font-extrabold">{PROGRAMS[k].name}</h3>
-              <p className="text-xs font-bold uppercase text-brand-600">{PROGRAMS[k].ages}</p>
+              <p className="mt-1 text-xs font-bold uppercase text-brand-600">{PROGRAMS[k].ages}</p>
               <p className="mt-2 text-sm text-slate-600">{PROGRAMS[k].blurb}</p>
             </Card>))}
         </div>
@@ -80,18 +77,13 @@ export default function Home() {
       <section id="about" className="mx-auto max-w-6xl px-4 py-12">
         <div className="rounded-3xl bg-brand-600 p-8 text-white md:p-12">
           <h2 className="text-3xl font-extrabold">About the center</h2>
-          <p className="mt-3 max-w-2xl text-brand-100">
-            Whizzkids Academic Center is a learning hub that pairs every child with a vetted tutor. Every tutor handles both online and face-to-face sessions, and every
-            schedule you see is admin-approved — so what you book is what you get. Our team reviews each match personally before confirming it.
-          </p>
-          <div className="mt-6 grid gap-4 text-sm md:grid-cols-3">
+          <div className="mt-4 grid gap-4 text-sm md:grid-cols-3">
             {[
-            ["Vetted tutors", "Applications, interviews and verification handled by our admin team."],
-            ["Smart matching", "Subject, grade level, learning needs, modality and availability are all checked."],
-            ["Transparent rates", "See the hourly rate while you fill out the booking form."],
-        ].map(([t, d]) => (<div key={t} className="rounded-2xl bg-white/10 p-4">
+            "Vetted tutors",
+            "Smart matching",
+            "Transparent rates",
+        ].map((t) => (<div key={t} className="rounded-2xl bg-white/10 p-4">
                 <div className="font-extrabold">{t}</div>
-                <div className="mt-1 text-brand-100">{d}</div>
               </div>))}
           </div>
         </div>
@@ -99,12 +91,10 @@ export default function Home() {
 
       <section id="hiring" className="mx-auto max-w-6xl px-4 py-12">
         <h2 className="text-3xl font-extrabold">We&apos;re hiring</h2>
-        <p className="mt-1 text-slate-500">Passionate about teaching? Join our team of tutors.</p>
         <div className="mt-6 grid gap-4 md:grid-cols-3">
           {hirings.map((h) => (<Card key={h.id}>
               <Briefcase className="h-6 w-6 text-brand-600"/>
               <h3 className="mt-2 font-extrabold">{h.title}</h3>
-              <p className="mt-1 text-sm text-slate-600">{h.desc}</p>
               <Link href="/register/tutor" className="mt-3 inline-block text-sm font-bold text-brand-600">
                 Apply now →
               </Link>
@@ -120,7 +110,6 @@ export default function Home() {
                 {f.q}
                 <ChevronDown className="h-4 w-4 transition group-open:rotate-180"/>
               </summary>
-              <p className="mt-2 text-sm text-slate-600">{f.a}</p>
             </details>))}
         </div>
       </section>

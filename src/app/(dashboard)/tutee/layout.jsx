@@ -5,7 +5,7 @@ import { useStore } from "@/lib/store";
 export default function TuteeLayout({ children }) {
     const s = useStore();
     const id = s.me?.id;
-    const pending = s.db.bookings?.filter((b) => b.tuteeId === id && (["pending_assessment", "awaiting_admin"].includes(b.status) || !!b.scheduleProposal)).length ?? 0;
+    const pending = s.db.bookings?.filter((b) => b.tuteeId === id && (["pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin"].includes(b.status) || (b.program === "reading" && b.status === "pending") || !!b.scheduleProposal)).length ?? 0;
     const unread = s.db.notifications?.filter((n) => n.userId === id && !n.read).length ?? 0;
     const unreadMessages = s.db.notifications?.filter((n) => n.userId === id && !n.read && n.text.startsWith("New message")).length ?? 0;
     return (<DashboardShell role="tutee" nav={[

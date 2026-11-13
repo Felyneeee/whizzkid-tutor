@@ -74,7 +74,6 @@ export default function Approvals() {
       {tab === "schedules" && (<div className="space-y-4"><Card className="max-w-3xl space-y-5">
           <div>
             <h2 className="text-lg font-extrabold">Tutor weekly schedule</h2>
-            <p className="mt-1 text-sm text-slate-500">Assign five working days. All tutors follow the same standard working hours; the remaining day is the tutor’s day off.</p>
           </div>
           {activeTutors.length === 0 ? <Empty>No active tutors to edit.</Empty> : (<>
               <div className="grid gap-3 sm:grid-cols-2">

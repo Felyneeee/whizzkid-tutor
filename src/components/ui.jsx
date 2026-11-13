@@ -17,7 +17,7 @@ export function Button({ variant = "primary", size = "md", className, ...p }) {
 export function Card({ className, children }) {
     return <div className={cn("rounded-2xl border border-slate-100 bg-white p-5 shadow-sm", className)}>{children}</div>;
 }
-export function PageHeader({ title, subtitle: _subtitle, action }) {
+export function PageHeader({ title, action }) {
     return (<div className="mb-6 flex flex-wrap items-end justify-between gap-3">
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{title}</h1>
@@ -30,6 +30,9 @@ const BADGE = {
     pending_review: "bg-sunny-100 text-sunny-500",
     pending_verification: "bg-sunny-100 text-sunny-500",
     awaiting_admin: "bg-sunny-100 text-sunny-500",
+    pending_assessment: "bg-sunny-100 text-sunny-500",
+    assessment_scheduled: "bg-brand-100 text-brand-700",
+    ready_for_matching: "bg-sunny-100 text-sunny-500",
     booked: "bg-brand-100 text-brand-700",
     interview: "bg-brand-100 text-brand-700",
     scheduled: "bg-brand-100 text-brand-700",
@@ -54,11 +57,10 @@ export function Badge({ status, children }) {
       {children ?? status.replace(/_/g, " ")}
     </span>);
 }
-export function Field({ label, hint, children }) {
+export function Field({ label, children }) {
     return (<label className="block">
       <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">{label}</span>
       {children}
-      {hint && <span className="mt-1 block text-xs text-slate-400">{hint}</span>}
     </label>);
 }
 const inputCls = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 disabled:bg-slate-50";

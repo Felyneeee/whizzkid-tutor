@@ -45,7 +45,6 @@ export default function TutorLayout({ children }) {
           </Alert>)}
         {t.status === "pending_verification" && <Alert kind="warn">Your registration is pending verification by the admin.</Alert>}
         {t.status === "rejected" && <Alert kind="error">Your application was not approved. {t.rejectionReason}</Alert>}
-        <p className="text-xs text-slate-500">Once approved, your account becomes a Tutor account and the full dashboard unlocks.</p>
       </Card>
     </div>) : null;
     return (<DashboardShell role="tutor" nav={active ? full : limited} gate={gated ? gate : undefined}>

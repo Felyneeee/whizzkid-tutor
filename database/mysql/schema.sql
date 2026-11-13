@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   dates JSON NOT NULL, class_time VARCHAR(5) NOT NULL, session_times JSON NULL, session_subjects JSON NULL, session_slots JSON NULL,
   schedule_proposal JSON NULL, recurrence JSON NULL,
   rate_per_hour DECIMAL(10,2) NOT NULL DEFAULT 0, total_fee DECIMAL(10,2) NOT NULL DEFAULT 0,
-  status ENUM('awaiting_admin','confirmed','rejected','terminated','completed','expired','cancelled') NOT NULL,
+  status ENUM('pending_assessment','assessment_scheduled','ready_for_matching','awaiting_admin','confirmed','rejected','terminated','completed','expired','cancelled') NOT NULL,
   tutor_id VARCHAR(64) NULL, recommendations JSON NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   terminated_at DATETIME NULL, termination_reason TEXT NULL, cohort_id VARCHAR(64) NULL, assessment_id VARCHAR(64) NULL,
   INDEX idx_bookings_tutee_status (tutee_id,status),

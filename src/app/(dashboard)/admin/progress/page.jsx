@@ -66,12 +66,11 @@ export default function AdminProgressPage() {
 
         {selected && <>
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-            <div><h2 className="text-xl font-extrabold">{selected.fullName}</h2><p className="text-sm text-slate-500">{selected.gradeLevel || "Grade level not set"} · overall learning progress</p></div>
+            <div><h2 className="text-xl font-extrabold">{selected.fullName}</h2></div>
             {subjects.length > 0 && <div className="w-full sm:w-64"><Select aria-label="Subject for chart" value={currentSubject} onChange={(e) => setSubjectFilter(e.target.value)}>{subjects.map((subject) => <option key={subject} value={subject}>{subject}</option>)}</Select></div>}
           </div>
           <Card className="mb-5">
             <h3 className="mb-1 font-extrabold">Mastery checks over time{currentSubject ? ` · ${currentSubject}` : ""}</h3>
-            <p className="mb-4 text-xs text-slate-500">Only actual tutor-entered mastery-check scores are plotted.</p>
             {chartReports.length ? <ScoreChart reports={chartReports}/> : <Empty>No progress reports have been submitted for this student yet.</Empty>}
           </Card>
           {selectedReports.length > 0 && <>

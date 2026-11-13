@@ -60,9 +60,9 @@ function BookInner() {
               <Card className="h-full transition hover:border-brand-300 hover:shadow-md">
                 <div className="text-4xl">{PROGRAMS[k].emoji}</div>
                 <h3 className="mt-2 text-lg font-extrabold">{PROGRAMS[k].name}</h3>
-                <p className="text-xs font-bold uppercase text-brand-600">{PROGRAMS[k].ages}</p>
+                <p className="mt-1 text-xs font-bold uppercase text-brand-600">{PROGRAMS[k].ages}</p>
                 <p className="mt-2 text-sm text-slate-600">{PROGRAMS[k].blurb}</p>
-                {k === "playgroup" && <p className="mt-2 text-sm font-bold text-mint-600">{peso(PLAYGROUP_MONTHLY_FEE)} / month</p>}
+                {k === "playgroup" && <div className="mt-2 text-sm font-bold text-mint-600">{peso(PLAYGROUP_MONTHLY_FEE)} / month</div>}
               </Card>
             </button>))}
         </div>) : (<>
@@ -122,8 +122,8 @@ function ReadingFlow() {
     const id = s.me.id;
     const profile = s.db.tutees.find((t) => t.userId === id);
     const mine = s.db.assessments.filter((a) => a.tuteeId === id);
-    const assessment = [...mine].reverse().find((a) => ["pending_admin_scheduling", "booked", "completed"].includes(a.status));
-    const booking = [...s.db.bookings].reverse().find((b) => b.tuteeId === id && b.program === "reading" && ["pending_assessment", "awaiting_admin", "confirmed"].includes(b.status));
+    const booking = [...s.db.bookings].reverse().find((b) => b.tuteeId === id && b.program === "reading" && ["pending", "pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "confirmed"].includes(b.status));
+      const awaitingAssessment = booking && ["pending", "pending_assessment", "assessment_scheduled"].includes(booking.status);
     const [params, setParams] = useState(null);
     const [modality, setModality] = useState("online");
     const [needs, setNeeds] = useState("");
@@ -134,29 +134,17 @@ function ReadingFlow() {
     if (booking) {
       const slots = booking.sessionSlots || booking.dates.map((date) => ({ date, subject: "Reading", time: booking.sessionTimes?.[date] ?? booking.time }));
       const linkedAssessment = mine.find((a) => a.id === booking.assessmentId);
-      const message = booking.status === "pending_assessment"
-        ? linkedAssessment?.status === "booked"
-            ? `Your selected schedule is saved. Your initial assessment is scheduled for ${fmtDate(linkedAssessment.date)} at ${fmtTime(linkedAssessment.time)}. Your request will be confirmed after the assessment is completed.`
-            : "Your selected schedule is saved. The admin will send your initial assessment date and time. Your request will be confirmed after the assessment is completed."
-        : booking.status === "awaiting_admin"
-            ? "Your initial assessment is complete. The admin is now matching a tutor to your selected schedule."
-            : "Your Reading Program schedule is confirmed.";
-      return <div className="max-w-2xl space-y-4"><Card><h2 className="text-lg font-extrabold">{booking.status === "pending_assessment" ? "Reading Program request received" : booking.status === "awaiting_admin" ? "Assessment completed" : "Reading Program schedule confirmed"}</h2><p className="mt-2"><Badge status={booking.status}>{booking.status === "pending_assessment" ? linkedAssessment?.status === "booked" ? "Awaiting assessment results" : "Awaiting initial assessment" : undefined}</Badge></p><p className="mt-3 text-sm text-slate-600">{message}</p>{booking.status === "pending_assessment" && linkedAssessment?.status !== "booked" && <p className="mt-1 text-sm text-slate-500">Initial assessments are scheduled by the admin between 9:00 and 10:00 AM.</p>}<div className="mt-4 space-y-1 text-sm">{slots.map((slot, index) => <div key={`${slot.date}-${slot.time}-${index}`}>{fmtDate(slot.date)} · {fmtTime(slot.time)}</div>)}</div><p className="mt-3 text-sm font-bold">{slots.length} sessions · {peso(booking.totalFee)}</p><Link href="/tutee/requests" className="mt-4 inline-block"><Button variant="secondary">View pending requests</Button></Link></Card></div>;
+      return <div className="max-w-2xl"><Card><h2 className="text-lg font-extrabold">{awaitingAssessment ? "Reading Program request received" : ["awaiting_admin", "ready_for_matching"].includes(booking.status) ? "Assessment completed" : "Reading Program schedule confirmed"}</h2><div className="mt-2"><Badge status={booking.status}>{booking.status === "assessment_scheduled" ? "Initial assessment scheduled" : awaitingAssessment ? linkedAssessment?.status === "booked" ? "Awaiting assessment results" : "Awaiting initial assessment" : undefined}</Badge></div><div className="mt-4 space-y-1 text-sm">{slots.map((slot, index) => <div key={`${slot.date}-${slot.time}-${index}`}>{fmtDate(slot.date)} · {fmtTime(slot.time)}</div>)}</div><div className="mt-3 text-sm font-bold">{slots.length} sessions · {peso(booking.totalFee)}</div><Link href="/tutee/requests" className="mt-4 inline-block"><Button variant="secondary">View pending requests</Button></Link></Card></div>;
     }
     return (<div className="space-y-4">
       <Card>
         <h2 className="text-lg font-extrabold">Reading Programs</h2>
-        <p className="mt-1 text-sm text-slate-500">Choose your Reading Program schedule and submit the booking request. It will be confirmed after the initial assessment is completed.</p>
-        <p className="mt-2 text-xs text-slate-400">Covers: {READING_SKILLS.join(" · ")}</p>
         {ageWarn && <div className="mt-3"><Alert kind="warn">Reading Programs are for ages 3–15; your child is {age}. You can still book — the admin will review.</Alert></div>}
       </Card>
       <Card className="max-w-xl space-y-4">
-        {assessment?.status === "booked" && <Alert kind="info">Your initial assessment is scheduled for {fmtDate(assessment.date)} at {fmtTime(assessment.time)}. You can still select your Reading Program schedule now.</Alert>}
-        {assessment?.status === "pending_admin_scheduling" && <Alert kind="info">The admin will send your initial assessment schedule. You can select your Reading Program schedule now; it will be confirmed after the assessment is completed.</Alert>}
-        {assessment?.status === "completed" && <Alert kind="success">Your initial assessment is complete. Select your Reading Program schedule below.</Alert>}
-        <Field label="Modality"><ModalityPicker value={assessment?.modality || modality} onChange={setModality}/></Field>
-        <Field label="Reading goals or areas of concern" hint={`Areas include: ${READING_SKILLS.join(", ")}`}><Textarea value={assessment?.learningNeeds || needs} onChange={(e) => setNeeds(e.target.value)} placeholder="Tell us what your child would like help with…" disabled={!!assessment}/></Field>
-        <Button disabled={!gradeLevelForBooking(gradeChoiceForProfile(profile.gradeLevel))} onClick={() => setParams({ program: "reading", subject: "Reading", gradeLevel: gradeLevelForBooking(gradeChoiceForProfile(profile.gradeLevel)), modality: assessment?.modality || modality, learningNeeds: assessment?.learningNeeds || needs, assessmentId: assessment?.id })}>Choose schedule</Button>
+        <Field label="Modality"><ModalityPicker value={modality} onChange={setModality}/></Field>
+        <Field label="Reading goals or areas of concern" hint={`Areas include: ${READING_SKILLS.join(", ")}`}><Textarea value={needs} onChange={(e) => setNeeds(e.target.value)} placeholder="Tell us what your child would like help with…"/></Field>
+        <Button disabled={!gradeLevelForBooking(gradeChoiceForProfile(profile.gradeLevel))} onClick={() => setParams({ program: "reading", subject: "Reading", gradeLevel: gradeLevelForBooking(gradeChoiceForProfile(profile.gradeLevel)), modality, learningNeeds: needs })}>Choose schedule</Button>
       </Card>
     </div>);
 }
@@ -184,7 +172,6 @@ function PlaygroupFlow() {
     return (<div className="space-y-4">
       <Card>
         <h2 className="text-lg font-extrabold">Playgroup Class</h2>
-        <p className="mt-1 text-sm text-slate-500">1 month · 3× a week · {peso(PLAYGROUP_MONTHLY_FEE)} · Ages 2.8–4. Pick a date on the calendar to see classes running that day and their remaining slots.</p>
         {!eligible && (<div className="mt-3">
             <Alert kind="warn">
               {months === null ? "Add your child's birthday in the profile to check eligibility." : `Playgroup is for ages 2.8–4. Your child is ${(months / 12).toFixed(1)} years old, so booking is disabled.`}

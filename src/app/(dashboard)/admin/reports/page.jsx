@@ -11,7 +11,7 @@ export default function Reports() {
     const attended = done.filter((x) => x.attended !== false).length;
     const rated = db.sessions.filter((x) => typeof x.rating === "number");
     const avg = rated.length ? rated.reduce((a, x) => a + (x.rating || 0), 0) / rated.length : null;
-    const status = ["awaiting_admin", "confirmed", "completed", "rejected", "terminated"];
+    const status = ["pending_assessment", "assessment_scheduled", "awaiting_admin", "ready_for_matching", "confirmed", "completed", "rejected", "terminated"];
     const rows = db.tutors.filter((t) => t.status === "active").map((t) => {
         const mine = db.sessions.filter((x) => x.tutorId === t.userId);
         return {

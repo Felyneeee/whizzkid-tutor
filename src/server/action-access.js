@@ -3,7 +3,7 @@ import "server-only";
 const ADMIN_ACTIONS = new Set([
   "notify", "completeAssessment", "scheduleAssessment", "scheduleInterview", "evaluateApplicant", "verifyExistingTutor",
   "setTutorPay", "approveAvailability", "adminEditTutorAvailability", "setTutorWeeklySchedule", "rejectAvailability", "decideLeave",
-  "adminLeave", "proposeBookingSchedule", "confirmBooking", "confirmBookingSession", "rejectBooking", "terminateBooking",
+  "adminLeave", "proposeBookingSchedule", "confirmBooking", "confirmBookingSession", "confirmReadingAssignment", "rejectReadingAssignment", "rejectBooking", "terminateBooking",
   "completeSession", "reassignSession", "proposeSessionReschedule", "cancelSession", "updateCohort",
   "addCohort", "removeFromCohort", "updatePurchase", "addMaterial", "updateMaterial", "deleteMaterial",
 ]);

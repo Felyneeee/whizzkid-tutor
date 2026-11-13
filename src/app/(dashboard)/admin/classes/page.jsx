@@ -38,7 +38,6 @@ export default function Classes() {
         <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); s.addCohort({ ...c, tutorId: c.tutorId || undefined, sessionsCount: 12 }); setCohortOpen(false); }}>
           <Field label="Label"><Input required value={c.label} onChange={(e) => setC({ ...c, label: e.target.value })} placeholder="e.g. November Morning Group"/></Field>
           <Field label="Start date"><Input type="date" required value={c.startDate} onChange={(e) => setC({ ...c, startDate: e.target.value })}/></Field>
-          <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">Playgroup meets Monday, Wednesday and Friday, 10:00–11:30 AM. Face-to-Face only · maximum 6 children.</p>
           <Button type="submit">Create cohort</Button>
         </form>
       </Modal>

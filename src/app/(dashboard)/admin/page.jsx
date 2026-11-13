@@ -11,7 +11,7 @@ const palette = { academic: "#2563eb", reading: "#ffb800", playgroup: "#3f3f46" 
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function Panel({ title, children, className = "" }) {
-  return <Card className={`overflow-hidden rounded-xl border-0 bg-[#f8fbfd] p-4 shadow-[0_6px_18px_rgba(15,23,42,.08)] ${className}`}>
+  return <Card className={`overflow-hidden rounded-xl border-0 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,.14)] ${className}`}>
     <h2 className="mb-3 text-sm font-extrabold text-slate-800">{title}</h2>{children}
   </Card>;
 }
@@ -19,7 +19,7 @@ function Panel({ title, children, className = "" }) {
 function Donut({ values, labels }) {
   const [selected, setSelected] = useState(null);
   const total = values.reduce((sum, item) => sum + item.value, 0);
-  const colors = ["#b5d1ff", "#f7d978", "#b9dc8a", "#c9cdd2"];
+  const colors = ["#65a72f", "#f7d978", "#ef4444", "#c9cdd2"];
   let angle = 0;
   return <div className="grid min-h-[186px] grid-cols-[1fr_150px_1fr] items-center gap-1">
     <div className="space-y-3 text-right">{labels.slice(0, 2).map((item) => <div key={item.label} className="text-[10px] leading-tight text-slate-600">{item.label}<br/><b>{item.value} · {item.percent}%</b></div>)}</div>
@@ -64,7 +64,7 @@ export default function AdminHome() {
   const sessions = db.sessions ?? [];
   const bookings = db.bookings ?? [];
   const approved = sessions.filter((session) => ["scheduled", "completed"].includes(session.status));
-  const pending = bookings.filter((booking) => booking.status === "awaiting_admin");
+  const pending = bookings.filter((booking) => ["pending_assessment", "assessment_scheduled", "awaiting_admin", "ready_for_matching"].includes(booking.status));
   const thisWeek = (date) => {
     const monday = new Date(`${todayISO()}T12:00:00`);
     monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
@@ -108,12 +108,12 @@ export default function AdminHome() {
   const metrics = [
     { label: "Total Tutees", value: db.tutees?.length ?? 0, weekly: (db.users ?? []).filter((user) => user.role === "tutee" && thisWeek(user.createdAt)).length, color: "bg-[#dbe8f7] text-[#4e83eb]", icon: <GraduationCap/> },
     { label: "Total Tutors", value: db.tutors?.length ?? 0, weekly: (db.users ?? []).filter((user) => user.role === "tutor" && thisWeek(user.createdAt)).length, color: "bg-[#fbefc9] text-[#e5b923]", icon: <UsersRound/> },
-    { label: "Approved Sessions", value: approved.length, weekly: approved.filter((session) => thisWeek(session.date)).length, color: "bg-[#e1e1e1] text-[#747474]", icon: <BadgeCheck/> },
-    { label: "Pending Requests", value: pending.length, weekly: pending.filter((booking) => thisWeek(booking.createdAt)).length, color: "bg-[#dceccd] text-[#65a72f]", icon: <Clock3/> },
+    { label: "Approved Sessions", value: approved.length, weekly: approved.filter((session) => thisWeek(session.date)).length, color: "bg-[#dceccd] text-[#65a72f]", icon: <BadgeCheck/> },
+    { label: "Pending Requests", value: pending.length, weekly: pending.filter((booking) => thisWeek(booking.createdAt)).length, color: "bg-[#e1e1e1] text-[#747474]", icon: <Clock3/> },
   ];
-  return <div className="-mx-2 space-y-5 rounded-2xl bg-gradient-to-br from-[#fffdf0] via-[#f2f5f3] to-[#e4efff] p-4 sm:-mx-4 sm:p-6">
+  return <div className="-mx-2 space-y-5 rounded-2xl bg-white p-4 sm:-mx-4 sm:p-6">
     <PageHeader title={<>Admin <span className="text-brand-600">Dashboard</span></>}/>
-    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">{metrics.map((metric) => <div key={metric.label} className={`rounded-xl p-4 shadow-[0_5px_18px_rgba(15,23,42,.08)] ${metric.color}`}><div className="mb-1 [&>svg]:h-6 [&>svg]:w-6">{metric.icon}</div><div className="text-sm font-extrabold">{metric.label}</div><div className="text-2xl font-extrabold leading-tight">{metric.value}</div><div className="mt-1 text-xs font-semibold opacity-80">+{metric.weekly} this week</div></div>)}</div>
+    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">{metrics.map((metric) => <div key={metric.label} className={`rounded-xl p-4 shadow-[0_5px_18px_rgba(15,23,42,.14)] ${metric.color}`}><div className="mb-1 [&>svg]:h-6 [&>svg]:w-6">{metric.icon}</div><div className="text-sm font-extrabold">{metric.label}</div><div className="text-2xl font-extrabold leading-tight">{metric.value}</div><div className="mt-1 text-xs font-semibold opacity-80">+{metric.weekly} this week</div></div>)}</div>
     <div className="grid gap-5 lg:grid-cols-2">
       <Panel title="Booking Status"><Donut values={statuses} labels={statusLabels}/></Panel>
       <Panel title="Enrollment per Program"><div className="flex min-h-[186px] items-center"><div className="w-full space-y-3">{programs.map((item) => { const detail = `${item.program}: ${item.value} bookings`; return <div key={item.program} className="grid grid-cols-[70px_1fr_28px] items-center gap-2 text-[10px]"><span className="capitalize text-slate-600">{item.program}</span><div className="h-8 bg-slate-100"><button type="button" onClick={() => setSelectedProgram((current) => current === detail ? "" : detail)} title={detail} className="block h-full rounded-r-md" style={{ width: `${item.value / maxProgram * 100}%`, minWidth: item.value ? 3 : 0, background: palette[item.program] }}/></div><b className="text-right">{item.value}</b></div>; })}</div></div>{selectedProgram && <div className="mt-2 w-full text-center text-xs font-bold text-slate-700">{selectedProgram}</div>}</Panel>

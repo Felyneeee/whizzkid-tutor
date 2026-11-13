@@ -21,10 +21,9 @@ export default function LoginPage() {
     };
     return (<>
       <Card>
-      <header className="mb-2">
+      <header className="mb-5">
         <h1 className="text-2xl font-extrabold">Welcome back</h1>
       </header>
-      <p className="mb-5 text-sm text-slate-500">Log in with your email or username.</p>
       <form className="space-y-4" onSubmit={(e) => {
             e.preventDefault();
             void submit(id, pw);

@@ -9,6 +9,7 @@ import { isValidPdfDataUrl } from "@/lib/resumes";
 import { GRADE_LEVELS, HOURS, SUBJECTS } from "@/lib/constants";
 import { nowISO, todayISO, uid } from "@/lib/dates";
 import { expandBookingDates } from "@/lib/logic";
+import { queueCompletedReadingBookings } from "../reading-bookings";
 
 export const runtime = "nodejs";
 
@@ -33,7 +34,9 @@ export async function POST(request) {
     if (!initialized) {
       ({ state, initialized } = await readApplicationState(connection, { lock: true, create: true }));
     }
-    const permission = authorizeBusinessAction(state, user, body.action, body.args);
+    const authorizationState = structuredClone(state);
+    queueCompletedReadingBookings(authorizationState);
+    const permission = authorizeBusinessAction(authorizationState, user, body.action, body.args);
     if (!permission.ok) {
       await connection.rollback();
       return NextResponse.json({ error: permission.error }, { status: 403 });
@@ -117,7 +120,7 @@ export async function POST(request) {
       }
       const requestedSlots = booking.sessionSlots || booking.dates.map((date) => ({ date, time: booking.sessionTimes?.[date] ?? booking.time }));
       const duplicate = state.bookings.some((entry) => {
-        if (entry.tuteeId !== user.id || entry.program !== booking.program || !["pending_assessment", "awaiting_admin", "confirmed"].includes(entry.status)) return false;
+        if (entry.tuteeId !== user.id || entry.program !== booking.program || !["pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "confirmed"].includes(entry.status)) return false;
         const existingSlots = entry.sessionSlots || entry.dates.map((date) => ({ date, time: entry.sessionTimes?.[date] ?? entry.time }));
         return existingSlots.some((existing) => requestedSlots.some((requested) => existing.date === requested.date && existing.time === requested.time));
       });
@@ -159,6 +162,7 @@ export async function POST(request) {
     }
 
     let nextState = structuredClone(state);
+    queueCompletedReadingBookings(nextState);
     const now = Date.now();
     const warningHours = Math.max(1, Number(process.env.BOOKING_EXPIRY_WARNING_HOURS) || 12);
     for (const booking of nextState.bookings) {
@@ -193,6 +197,7 @@ export async function POST(request) {
       await connection.rollback();
       return NextResponse.json({ error: result.error, result }, { status: 409 });
     }
+    queueCompletedReadingBookings(nextState);
     await persistRelationalState(connection, nextState, state);
     await connection.execute(
       "UPDATE application_state SET revision = revision + 1 WHERE id = 1",
