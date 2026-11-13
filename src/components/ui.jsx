@@ -67,33 +67,14 @@ const inputCls = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 t
 export const Input = React.forwardRef(function Input({ className, ...p }, ref) {
     return <input ref={ref} {...p} className={cn(inputCls, className)}/>;
 });
-const PHONE_COUNTRIES = [
-    { code: "PH", flag: "🇵🇭", name: "Philippines", dial: "63", length: 10 },
-    { code: "US", flag: "🇺🇸", name: "United States", dial: "1", length: 10 },
-    { code: "CA", flag: "🇨🇦", name: "Canada", dial: "1", length: 10 },
-    { code: "GB", flag: "🇬🇧", name: "United Kingdom", dial: "44", length: 10 },
-    { code: "AU", flag: "🇦🇺", name: "Australia", dial: "61", length: 9 },
-    { code: "SG", flag: "🇸🇬", name: "Singapore", dial: "65", length: 8 },
-    { code: "IN", flag: "🇮🇳", name: "India", dial: "91", length: 10 },
-    { code: "AE", flag: "🇦🇪", name: "United Arab Emirates", dial: "971", length: 9 },
-];
 export function PhoneInput({ value = "", onChange, required = false }) {
     const digits = String(value).replace(/\D/g, "");
-    const country = PHONE_COUNTRIES.find((item) => value.startsWith(`+${item.dial}`)) || PHONE_COUNTRIES[0];
-    const national = value.startsWith(`+${country.dial}`) ? digits.slice(country.dial.length) : digits.replace(/^0+/, "");
-    const setCountry = (event) => {
-        const next = PHONE_COUNTRIES.find((item) => item.code === event.target.value) || PHONE_COUNTRIES[0];
-        onChange(`+${next.dial}${national}`);
-    };
+    const national = value.startsWith("+63") ? digits.slice(2) : digits.replace(/^0+/, "");
     return <div className="flex overflow-hidden rounded-xl border border-slate-200 bg-white focus-within:border-brand-400 focus-within:ring-2 focus-within:ring-brand-100">
-      <div className="flex shrink-0 items-center gap-1 border-r border-slate-200 px-2">
-        <span aria-hidden="true">{country.flag}</span>
-        <select aria-label="Country code" value={country.code} onChange={setCountry} className="max-w-20 bg-transparent py-2 text-sm outline-none">
-          {PHONE_COUNTRIES.map((item) => <option key={item.code} value={item.code}>{item.name} (+{item.dial})</option>)}
-        </select>
-        <span className="text-xs text-slate-500">+{country.dial}</span>
+      <div className="flex shrink-0 items-center gap-2 border-r border-slate-200 px-3">
+        <span aria-hidden="true">🇵🇭</span><span className="text-sm text-slate-600">+63</span>
       </div>
-      <input type="tel" inputMode="numeric" autoComplete="tel-national" required={required} value={national} onChange={(event) => onChange(`+${country.dial}${event.target.value.replace(/\D/g, "")}`)} pattern={`[0-9]{${country.length}}`} title={`${country.name} phone numbers should have ${country.length} digits`} placeholder={`${"0".repeat(country.length)}`} className="min-w-0 flex-1 px-3 py-2 text-sm outline-none"/>
+      <input type="tel" inputMode="numeric" autoComplete="tel-national" required={required} value={national} onChange={(event) => onChange(`+63${event.target.value.replace(/\D/g, "")}`)} pattern="[0-9]{10}" title="Philippines phone numbers should have 10 digits after +63" placeholder="000-000-0000" className="min-w-0 flex-1 px-3 py-2 text-sm outline-none"/>
     </div>;
 }
 export function Textarea({ className, ...p }) {
