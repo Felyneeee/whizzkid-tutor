@@ -26,6 +26,7 @@ export default function Scheduling() {
     const flagged = db.sessions.filter((x) => x.status === "needs_reassignment");
     const sessions = db.sessions.filter((x) => x.status !== "cancelled");
     const assessments = db.assessments.filter((x) => x.date && ["booked", "completed"].includes(x.status));
+    const playgroupBookings = db.bookings.filter((b) => b.program === "playgroup" && ["pending", "approved", "confirmed"].includes(b.status));
     const completeSession = async (sessionId, attended) => {
       setCompletingSession(sessionId);
       setCompletionErrors((current) => ({ ...current, [sessionId]: "" }));
@@ -39,6 +40,8 @@ export default function Scheduling() {
     sessions.forEach((session) => { var _a; return (sessionsByDate[_a = session.date] ?? (sessionsByDate[_a] = [])).push(session); });
     const assessmentsByDate = {};
     assessments.forEach((assessment) => { var _a; return (assessmentsByDate[_a = assessment.date] ?? (assessmentsByDate[_a] = [])).push(assessment); });
+    const playgroupsByDate = {};
+    playgroupBookings.forEach((booking) => (booking.dates || []).forEach((date) => { (playgroupsByDate[date] ??= []).push(booking); }));
     const daySessions = [...(sessionsByDate[selectedDate] ?? [])].sort((a, b) => a.time.localeCompare(b.time));
     const dayAssessments = [...(assessmentsByDate[selectedDate] ?? [])].sort((a, b) => a.time.localeCompare(b.time));
     const contracts = db.bookings.filter((b) => ["confirmed", "completed", "terminated"].includes(b.status));
@@ -77,11 +80,12 @@ export default function Scheduling() {
             <Calendar selected={[selectedDate]} onSelect={setSelectedDate} allowPast initialMonth={selectedDate} mark={(date) => {
                 const count = sessionsByDate[date]?.length ?? 0;
                 const assessmentCount = assessmentsByDate[date]?.length ?? 0;
-                if (!count && !assessmentCount) return null;
+                const playgroupCount = playgroupsByDate[date]?.length ?? 0;
+                if (!count && !assessmentCount && !playgroupCount) return null;
                 return {
-                  text: count ? `${count} session${count === 1 ? "" : "s"}` : `${assessmentCount} assessment${assessmentCount === 1 ? "" : "s"}`,
-                  tone: count ? "brand" : "sunny",
-                  ...(count && assessmentCount ? { subtext: `${assessmentCount} assessment${assessmentCount === 1 ? "" : "s"}`, subtone: "sunny" } : {}),
+                  text: playgroupCount ? `${playgroupCount} Playgroup` : count ? `${count} session${count === 1 ? "" : "s"}` : `${assessmentCount} assessment${assessmentCount === 1 ? "" : "s"}`,
+                  tone: playgroupCount ? "mint" : count ? "brand" : "sunny",
+                  ...((count || assessmentCount) && playgroupCount ? { subtext: `${count + assessmentCount} other item${count + assessmentCount === 1 ? "" : "s"}`, subtone: count ? "brand" : "sunny" } : {}),
                 };
             }}/>
             <div className="mt-4 flex items-center justify-between gap-2">
@@ -97,7 +101,7 @@ export default function Scheduling() {
               </div>
             </div>
             <h3 className="font-extrabold">Sessions </h3>
-            {daySessions.length === 0 && dayAssessments.length === 0 && <Card><Empty>No sessions or initial assessments on this day.</Empty></Card>}
+            {daySessions.length === 0 && dayAssessments.length === 0 && !(playgroupsByDate[selectedDate]?.length) && <Card><Empty>No sessions or initial assessments on this day.</Empty></Card>}
             {daySessions.map((x) => {
                 const proposal = db.bookings.find((booking) => booking.id === x.bookingId)?.scheduleProposal;
                 const proposedSession = proposal?.sessionId === x.id ? proposal.sessions[0] : undefined;
@@ -133,6 +137,10 @@ export default function Scheduling() {
                 <Badge status={assessment.status}/>
               </Card>))}
             </div>}
+            {(playgroupsByDate[selectedDate] || []).length > 0 && <div className="space-y-2"><h3 className="font-extrabold">Playgroup classes</h3>{playgroupsByDate[selectedDate].map((booking) => {
+              const cohort = db.cohorts.find((item) => item.id === booking.cohortId);
+              return <Card key={`playgroup-${booking.id}`} className="flex flex-wrap items-center gap-3 border-mint-200 bg-mint-50/40"><div className="min-w-20 rounded-xl bg-mint-100 px-3 py-2 text-center font-extrabold text-mint-700">10:00 AM</div><div className="min-w-[180px] flex-1"><div className="font-bold">{un(booking.tuteeId)} · {cohort?.label || "Playgroup"}</div><div className="text-sm text-slate-500">10:00–11:30 AM · Face-to-Face · Tutor {booking.tutorId ? tn(booking.tutorId) : "Unassigned"}</div></div><Badge status={booking.status}/><Badge status={booking.tutorAssignmentStatus || (booking.tutorId ? "Assigned" : "Unassigned")}/></Card>;
+            })}</div>}
           </section>
         </div>) : (<>
           {assessments.length > 0 && <section className="mb-6 space-y-3">

@@ -5,7 +5,7 @@ const ADMIN_ACTIONS = new Set([
   "setTutorPay", "approveAvailability", "adminEditTutorAvailability", "setTutorWeeklySchedule", "rejectAvailability", "decideLeave",
   "adminLeave", "proposeBookingSchedule", "confirmBooking", "confirmBookingSession", "confirmReadingAssignment", "rejectReadingAssignment", "rejectBooking", "terminateBooking",
   "completeSession", "reassignSession", "proposeSessionReschedule", "cancelSession", "updateCohort",
-  "addCohort", "removeFromCohort", "updatePurchase", "addMaterial", "updateMaterial", "deleteMaterial",
+  "addCohort", "removeFromCohort", "assignPlaygroupBooking", "approvePlaygroupBooking", "updatePurchase", "addMaterial", "updateMaterial", "deleteMaterial",
 ]);
 
 const TUTEE_ACTIONS = new Set([

@@ -1,14 +1,14 @@
-import { BASE_RATES, FACE_TO_FACE_PREMIUM, HOURS, PLAYGROUP_MONTHLY_FEE, READING_PREMIUM, bandOf, } from "./constants";
+import { BASE_RATES, FACE_TO_FACE_PREMIUM, HOURS, PLAYGROUP_SESSION_RATE, bandOf, } from "./constants";
 import { addDays, parseISO, rangeDates, todayISO, weekday } from "./dates";
 // ---------- Rates ----------
 export function computeRate(program, grade, modality) {
     if (program === "playgroup")
-        return PLAYGROUP_MONTHLY_FEE;
+        return PLAYGROUP_SESSION_RATE;
+    if (program === "reading")
+        return 500;
     if (program === "academic")
         return 600;
     let rate = BASE_RATES[bandOf(grade || "Grade 1")];
-    if (program === "reading")
-        rate += READING_PREMIUM;
     if (modality === "face-to-face")
         rate += FACE_TO_FACE_PREMIUM;
     return rate;

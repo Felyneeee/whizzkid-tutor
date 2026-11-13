@@ -7,7 +7,7 @@ export default function TuteeRequests() {
     const s = useStore();
     const [proposalMsg, setProposalMsg] = useState({});
     const id = s.me.id;
-    const bookings = s.db.bookings.filter((b) => b.tuteeId === id && (["pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "rejected", "cancelled", "expired"].includes(b.status) || (b.program === "reading" && b.status === "pending") || !!b.scheduleProposal)).reverse();
+    const bookings = s.db.bookings.filter((b) => b.tuteeId === id && (["pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "rejected", "cancelled", "expired"].includes(b.status) || (b.program === "reading" && b.status === "pending") || (b.program === "playgroup" && ["pending", "approved", "confirmed", "declined"].includes(b.status)) || !!b.scheduleProposal)).reverse();
     const linkedAssessmentIds = new Set(s.db.bookings.filter((b) => b.tuteeId === id && b.program === "reading" && ["pending", "pending_assessment", "assessment_scheduled"].includes(b.status)).map((b) => b.assessmentId));
     const assessments = s.db.assessments.filter((a) => a.tuteeId === id && ["pending_admin_scheduling", "booked"].includes(a.status) && !linkedAssessmentIds.has(a.id));
     const orders = s.db.purchases.filter((p) => p.tuteeId === id && p.status === "pending");
@@ -40,6 +40,7 @@ export default function TuteeRequests() {
               <Badge status={b.status}>{(b.status === "pending_assessment" || (b.program === "reading" && b.status === "pending")) ? s.db.assessments.find((a) => a.id === b.assessmentId)?.status === "booked" ? "Awaiting assessment results" : "Awaiting initial assessment" : undefined}</Badge>
               {["pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin"].includes(b.status) || (b.program === "reading" && b.status === "pending") ? <Button size="sm" variant="secondary" onClick={() => s.cancelTutorialBooking(b.id)}>Cancel request</Button> : null}
             </div>
+            {b.program === "playgroup" && <div className="mt-2 text-xs text-slate-600">Booking: {b.bookingStatus || b.status} · Tutor: {b.tutorAssignmentStatus || (b.tutorId ? "Assigned" : "Unassigned")}{b.tutorId ? ` (${s.db.tutors.find((t) => t.userId === b.tutorId)?.fullName || "Tutor"})` : ""}</div>}
             {b.scheduleProposal && (<div className="mt-3 space-y-3 rounded-xl border border-sunny-200 bg-sunny-50 p-3">
                 <div className="font-bold">The admin proposed a schedule change. Please review it:</div>
                 <div className="text-sm">{b.scheduleProposal.sessions.map((session) => `${fmtDate(session.date)} at ${fmtTime(session.time)}`).join(" · ")}</div>

@@ -45,7 +45,7 @@ export const BASE_RATES = {
 };
 export const READING_PREMIUM = 50;
 export const FACE_TO_FACE_PREMIUM = 50;
-export const PLAYGROUP_MONTHLY_FEE = 3200;
+export const PLAYGROUP_SESSION_RATE = 500;
 export const ASSESSMENT_FEE = 500;
 export const PROGRAMS = {
     reading: {
@@ -64,7 +64,7 @@ export const PROGRAMS = {
     },
     playgroup: {
         name: "Playgroup Class",
-        blurb: "Fun, structured activities for little ones — 1 month, 3x a week.",
+        blurb: "Fun, structured activities for little ones — 1 month, 3x a week at ₱500 per session.",
         ages: "Ages 2.8–4",
         emoji: "🧸",
         color: "bg-coral-100 text-coral-600",
@@ -102,6 +102,6 @@ export const FAQS = [
     },
     {
         q: "How much does it cost?",
-        a: "The hourly rate is computed while you fill out the booking form, based on grade level, program and modality. Playgroup is a flat monthly fee.",
+        a: "The rate is ₱500 per session for Reading and Playgroup. Academic tutorial rates are computed while you fill out the booking form, based on grade level and modality.",
     },
 ];

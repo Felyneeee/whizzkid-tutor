@@ -2,7 +2,7 @@ import "server-only";
 import { ADMIN_ID } from "@/lib/seed";
 import { ageFromBirthday, firstName, nowISO, todayISO, uid, fmtDate, fmtTime, addDays, rangeDates, weekday } from "@/lib/dates";
 import { cohortSessionDates, computeRate, matchTutors, onApprovedLeave, tutorBusy, tutorFreeOn, tutorQualifies, approvedSlot, slotOccupied, slotRequestable } from "@/lib/logic";
-import { HOURS, PLAYGROUP_MONTHLY_FEE, SHOP_ITEMS, SUBJECTS } from "@/lib/constants";
+import { HOURS, PLAYGROUP_SESSION_RATE, SHOP_ITEMS, SUBJECTS } from "@/lib/constants";
 
 export function createBusinessActions({ get, mutate }) {
   const pushNotif = (d, userId, text, channels = ["web", "email"], threadId) => {
@@ -14,6 +14,17 @@ export function createBusinessActions({ get, mutate }) {
   const nameOf = (d, id) => d.tutees.find((t) => t.userId === id)?.fullName || d.tutors.find((t) => t.userId === id)?.fullName ||
     (d.users.find((u) => u.id === id)?.role === "admin" || id === ADMIN_ID ? "Admin" : id);
   const firstNameOf = (d, id) => firstName(nameOf(d, id), "User");
+  const playgroupTutorFree = (d, tutorId, dates, ignoreBookingId, ignoreCohortId) => dates.every((date) => {
+    const overlappingSession = d.sessions.some((session) => {
+      if (session.tutorId !== tutorId || session.date !== date || !["scheduled", "needs_reassignment"].includes(session.status) || session.bookingId === ignoreBookingId) return false;
+      const [hour, minute] = session.time.split(":").map(Number);
+      const start = hour * 60 + minute;
+      const end = start + (Number(session.durationMinutes) || 45);
+      return start < 690 && end > 600;
+    });
+    const overlappingCohort = d.cohorts.some((cohort) => cohort.id !== ignoreCohortId && cohort.tutorId === tutorId && cohortSessionDates(cohort).includes(date) && d.bookings.some((booking) => booking.cohortId === cohort.id && ["pending", "approved", "confirmed", "awaiting_admin"].includes(booking.status)));
+    return !overlappingSession && !overlappingCohort;
+  });
   const actions = {
 // ---------- Generic ----------
   notify(userId, text, channels = ["web", "email"]) {
@@ -148,18 +159,25 @@ export function createBusinessActions({ get, mutate }) {
       const c = d.cohorts.find((x) => x.id === cohortId);
       if (!c)
           return { ok: false, error: "Class not found." };
-      if (c.enrolled.includes(tuteeId))
+      if (d.bookings.some((b) => b.program === "playgroup" && b.cohortId === cohortId && b.tuteeId === tuteeId && !["declined", "rejected", "cancelled", "terminated", "completed"].includes(b.status)))
           return { ok: false, error: "You are already enrolled in this class." };
-      if (c.enrolled.length >= Math.min(c.capacity, 6))
+      const activeBookings = d.bookings.filter((b) => b.program === "playgroup" && b.cohortId === cohortId && ["pending", "approved", "confirmed", "awaiting_admin"].includes(b.status));
+      if (activeBookings.length >= 6)
           return { ok: false, error: "This class is full. Please choose another schedule." };
       if ((c.modality ?? "face-to-face") !== "face-to-face" || c.time !== "10:00" || JSON.stringify(c.weekdays) !== JSON.stringify([1, 3, 5]))
           return { ok: false, error: "Playgroup classes must meet Monday, Wednesday and Friday at 10:00 AM, Face-to-Face." };
       const bookingId = uid("b");
       const tutee = d.tutees.find((t) => t.userId === tuteeId);
+      const dates = cohortSessionDates(c);
+      const assignedTutor = c.assignmentMode === "manual" || c.assignmentMode === "fixed"
+          ? (d.tutors.some((t) => t.userId === c.tutorId && t.status === "active") && dates.every((date) => approvedSlot(d, c.tutorId, date, "10:00", "face-to-face") && !onApprovedLeave(d, c.tutorId, date)) && playgroupTutorFree(d, c.tutorId, dates, undefined, cohortId) ? c.tutorId : undefined)
+          : d.tutors
+          .filter((t) => t.status === "active" && tutorQualifies(t, { program: "academic", subject: t.subjects?.[0], gradeLevel: "Nursery", modality: "face-to-face" }))
+          .filter((t) => dates.every((date) => approvedSlot(d, t.userId, date, "10:00", "face-to-face") && !onApprovedLeave(d, t.userId, date) && !tutorBusy(d, t.userId, date, "10:00", undefined)) && playgroupTutorFree(d, t.userId, dates, undefined, cohortId))
+          .sort((a, b) => ((c.rotationOrder || {})[a.userId] ?? 999) - ((c.rotationOrder || {})[b.userId] ?? 999) || d.bookings.filter((booking) => booking.program === "playgroup" && booking.tutorId === a.userId && !["declined", "rejected", "cancelled", "terminated", "completed"].includes(booking.status)).length - d.bookings.filter((booking) => booking.program === "playgroup" && booking.tutorId === b.userId && !["declined", "rejected", "cancelled", "terminated", "completed"].includes(booking.status)).length)[0]?.userId;
       mutate((n) => {
           const cc = n.cohorts.find((x) => x.id === cohortId);
           cc.enrolled.push(tuteeId);
-          const dates = cohortSessionDates(cc);
           n.bookings.push({
               id: bookingId,
               tuteeId,
@@ -171,15 +189,20 @@ export function createBusinessActions({ get, mutate }) {
               bookingType: "recurring",
               dates,
               time: cc.time,
-              ratePerHour: PLAYGROUP_MONTHLY_FEE,
-              totalFee: PLAYGROUP_MONTHLY_FEE,
-              status: "confirmed",
+              ratePerHour: PLAYGROUP_SESSION_RATE,
+              totalFee: PLAYGROUP_SESSION_RATE * dates.length,
+              status: "pending",
+              bookingStatus: "pending",
+              tutorAssignmentStatus: assignedTutor ? (cc.assignmentMode === "manual" || cc.assignmentMode === "fixed" ? "Admin-Assigned" : "Automatically Assigned") : "Unassigned",
+              assignmentMode: cc.assignmentMode || "automatic",
               recommendations: [],
               createdAt: nowISO(),
               cohortId,
-              tutorId: cc.tutorId,
+              tutorId: assignedTutor,
           });
-          pushNotif(n, tuteeId, `Playgroup slot reserved: ${cc.label}, starting ${fmtDate(cc.startDate)}.`, ["web", "email", "sms"]);
+          if (assignedTutor && !n.cohorts.find((x) => x.id === cohortId).tutorId) n.cohorts.find((x) => x.id === cohortId).tutorId = assignedTutor;
+          if (!assignedTutor) pushAdmins(n, `Playgroup booking from ${nameOf(n, tuteeId)} in ${cc.label} has no available tutor and needs assignment.`);
+          pushNotif(n, tuteeId, `Playgroup booking received: ${cc.label}, starting ${fmtDate(cc.startDate)}. Status: Pending${assignedTutor ? "; tutor assignment is pending administrator approval" : "; tutor unassigned"}.`, ["web", "email", "sms"]);
           pushAdmins(n, `${nameOf(n, tuteeId)} reserved a slot in ${cc.label} (${cc.enrolled.length}/${cc.capacity})`);
           logAct(n, tuteeId, "booking", `Reserved playgroup slot: ${cc.label}`);
       });
@@ -1021,6 +1044,33 @@ export function createBusinessActions({ get, mutate }) {
           const c = n.cohorts.find((x) => x.id === id);
           if (c) Object.assign(c, p, { weekdays: [1, 3, 5], time: "10:00", capacity: 6, modality: "face-to-face" });
       });
+  },
+  assignPlaygroupBooking(bookingId, tutorId) {
+      const d = get();
+      const booking = d.bookings.find((b) => b.id === bookingId && b.program === "playgroup");
+      const tutor = d.tutors.find((t) => t.userId === tutorId && t.status === "active");
+      if (!booking || !tutor) return { ok: false, error: "Choose an active tutor and a Playgroup booking." };
+      if (["approved", "confirmed"].includes(booking.status) && booking.tutorId && booking.tutorId !== tutorId) return { ok: false, error: "This confirmed assignment requires administrator approval before it can be changed." };
+      if (!booking.dates.every((date) => approvedSlot(d, tutorId, date, "10:00", "face-to-face") && !onApprovedLeave(d, tutorId, date) && !tutorBusy(d, tutorId, date, "10:00", booking.id)) || !playgroupTutorFree(d, tutorId, booking.dates, booking.id, booking.cohortId)) return { ok: false, error: "That tutor is unavailable for one or more Playgroup dates." };
+      mutate((n) => {
+          const target = n.bookings.find((b) => b.id === bookingId);
+          target.tutorId = tutorId;
+          target.tutorAssignmentStatus = "Admin-Assigned";
+          pushNotif(n, target.tuteeId, `A tutor has been assigned to your Playgroup booking: ${firstNameOf(n, tutorId)}. Booking status remains ${target.status}.`, ["web", "email", "sms"]);
+      });
+      return { ok: true };
+  },
+  approvePlaygroupBooking(bookingId) {
+      const booking = get().bookings.find((b) => b.id === bookingId && b.program === "playgroup");
+      if (!booking || booking.status !== "pending") return { ok: false, error: "This Playgroup booking is no longer pending." };
+      if (!booking.tutorId) return { ok: false, error: "Assign an available tutor before approving this booking." };
+      mutate((n) => {
+          const target = n.bookings.find((b) => b.id === bookingId);
+          target.status = "approved"; target.bookingStatus = "approved"; target.tutorAssignmentStatus = "Confirmed";
+          pushNotif(n, target.tuteeId, `Your Playgroup booking is approved with ${firstNameOf(n, target.tutorId)}.`, ["web", "email", "sms"]);
+          pushNotif(n, target.tutorId, `Your Playgroup assignment is confirmed for ${target.dates.length} sessions starting ${fmtDate(target.dates[0])}.`, ["web", "email"]);
+      });
+      return { ok: true };
   },
   addCohort(c) {
       mutate((n) => {

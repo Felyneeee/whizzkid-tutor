@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS cohorts (
   id VARCHAR(64) PRIMARY KEY, label VARCHAR(200) NOT NULL, start_date DATE NOT NULL,
   weekdays JSON NOT NULL, class_time VARCHAR(5) NOT NULL, modality ENUM('online','face-to-face') NULL,
   capacity SMALLINT UNSIGNED NOT NULL, enrolled JSON NOT NULL, tutor_id VARCHAR(64) NULL,
-  sessions_count SMALLINT UNSIGNED NOT NULL,
+  sessions_count SMALLINT UNSIGNED NOT NULL, assignment_mode ENUM('automatic','fixed','manual') NOT NULL DEFAULT 'automatic', rotation_order JSON NULL,
   FOREIGN KEY (tutor_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
@@ -97,9 +97,10 @@ CREATE TABLE IF NOT EXISTS bookings (
   dates JSON NOT NULL, class_time VARCHAR(5) NOT NULL, session_times JSON NULL, session_subjects JSON NULL, session_slots JSON NULL,
   schedule_proposal JSON NULL, recurrence JSON NULL,
   rate_per_hour DECIMAL(10,2) NOT NULL DEFAULT 0, total_fee DECIMAL(10,2) NOT NULL DEFAULT 0,
-  status ENUM('pending_assessment','assessment_scheduled','ready_for_matching','awaiting_admin','confirmed','rejected','terminated','completed','expired','cancelled') NOT NULL,
+  status ENUM('pending','approved','declined','pending_assessment','assessment_scheduled','ready_for_matching','awaiting_admin','confirmed','rejected','terminated','completed','expired','cancelled') NOT NULL,
   tutor_id VARCHAR(64) NULL, recommendations JSON NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   terminated_at DATETIME NULL, termination_reason TEXT NULL, cohort_id VARCHAR(64) NULL, assessment_id VARCHAR(64) NULL,
+  booking_status VARCHAR(20) NULL, tutor_assignment_status VARCHAR(30) NULL, assignment_mode VARCHAR(20) NULL,
   INDEX idx_bookings_tutee_status (tutee_id,status),
   FOREIGN KEY (tutee_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (tutor_id) REFERENCES users(id) ON DELETE SET NULL,

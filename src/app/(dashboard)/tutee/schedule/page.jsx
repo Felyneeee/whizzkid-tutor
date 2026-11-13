@@ -13,10 +13,13 @@ export default function TuteeSchedule() {
     const [selectedDate, setSelectedDate] = useState(today);
     const sessions = s.db.sessions.filter((x) => x.tuteeId === id).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
     const assessments = s.db.assessments.filter((a) => a.tuteeId === id && a.date && ["booked", "completed"].includes(a.status));
+    const playgroupBookings = s.db.bookings.filter((b) => b.tuteeId === id && b.program === "playgroup" && ["pending", "approved", "confirmed"].includes(b.status));
     const sessionsByDate = {};
     sessions.forEach((session) => { (sessionsByDate[session.date] ??= []).push(session); });
     const assessmentsByDate = {};
     assessments.forEach((assessment) => { (assessmentsByDate[assessment.date] ??= []).push(assessment); });
+    const playgroupsByDate = {};
+    playgroupBookings.forEach((booking) => (booking.dates || []).forEach((date) => { (playgroupsByDate[date] ??= []).push(booking); }));
     const daySessions = [...(sessionsByDate[selectedDate] ?? [])].sort((a, b) => a.time.localeCompare(b.time));
     const dayAssessments = [...(assessmentsByDate[selectedDate] ?? [])].sort((a, b) => a.time.localeCompare(b.time));
     const tutor = (tid) => firstName(s.db.tutors.find((t) => t.userId === tid)?.fullName);
@@ -28,11 +31,12 @@ export default function TuteeSchedule() {
           <Calendar selected={[selectedDate]} onSelect={setSelectedDate} allowPast initialMonth={selectedDate} mark={(date) => {
               const sessionCount = sessionsByDate[date]?.length ?? 0;
               const assessmentCount = assessmentsByDate[date]?.length ?? 0;
-              if (!sessionCount && !assessmentCount) return null;
+              const playgroupCount = playgroupsByDate[date]?.length ?? 0;
+              if (!sessionCount && !assessmentCount && !playgroupCount) return null;
               return {
-                text: sessionCount ? `${sessionCount} session${sessionCount === 1 ? "" : "s"}` : `${assessmentCount} assessment${assessmentCount === 1 ? "" : "s"}`,
-                tone: sessionCount ? "brand" : "sunny",
-                ...(sessionCount && assessmentCount ? { subtext: `${assessmentCount} assessment${assessmentCount === 1 ? "" : "s"}`, subtone: "sunny" } : {}),
+                text: playgroupCount ? `${playgroupCount} Playgroup` : sessionCount ? `${sessionCount} session${sessionCount === 1 ? "" : "s"}` : `${assessmentCount} assessment${assessmentCount === 1 ? "" : "s"}`,
+                tone: playgroupCount ? "mint" : sessionCount ? "brand" : "sunny",
+                ...((sessionCount || assessmentCount) && playgroupCount ? { subtext: `${sessionCount + assessmentCount} other item${sessionCount + assessmentCount === 1 ? "" : "s"}`, subtone: sessionCount ? "brand" : "sunny" } : {}),
               };
           }}/>
           <div className="mt-4 flex items-center justify-between gap-2">
@@ -44,7 +48,7 @@ export default function TuteeSchedule() {
         <section className="space-y-3">
           <div>
             <h2 className="text-xl font-extrabold">{fmtDate(selectedDate)}</h2>
-            <p className="text-sm text-slate-500">{daySessions.length} session{daySessions.length === 1 ? "" : "s"} · {dayAssessments.length} initial assessment{dayAssessments.length === 1 ? "" : "s"}</p>
+            <p className="text-sm text-slate-500">{daySessions.length} session{daySessions.length === 1 ? "" : "s"} · {dayAssessments.length} initial assessment{dayAssessments.length === 1 ? "" : "s"} · {playgroupsByDate[selectedDate]?.length ?? 0} Playgroup class{(playgroupsByDate[selectedDate]?.length ?? 0) === 1 ? "" : "es"}</p>
           </div>
           {daySessions.length === 0 && dayAssessments.length === 0 && <Empty>No sessions or initial assessments on this day.</Empty>}
           {daySessions.map((x) => (<Card key={x.id} className="flex flex-wrap items-center gap-3">
@@ -74,6 +78,10 @@ export default function TuteeSchedule() {
             </div>
             <Badge status={assessment.status}/>
           </Card>))}
+          {(playgroupsByDate[selectedDate] || []).map((booking) => {
+            const cohort = s.db.cohorts.find((item) => item.id === booking.cohortId);
+            return <Card key={`playgroup-${booking.id}`} className="flex flex-wrap items-center gap-3 border-mint-200 bg-mint-50/40"><div className="min-w-20 rounded-xl bg-mint-100 px-3 py-2 text-center font-extrabold text-mint-700">10:00 AM</div><div className="min-w-[180px] flex-1"><div className="font-bold">Playgroup · {cohort?.label || "Class"}</div><div className="mt-1 text-sm text-slate-500">10:00–11:30 AM · Face-to-Face · Tutor {booking.tutorId ? tutor(booking.tutorId) : "Unassigned"}</div></div><Badge status={booking.status}>{booking.tutorAssignmentStatus || (booking.tutorId ? "Assigned" : "Unassigned")}</Badge></Card>;
+          })}
         </section>
       </div>
       <Modal open={!!rating} onClose={() => setRating(null)} title="Rate your tutor">

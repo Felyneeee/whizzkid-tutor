@@ -5,7 +5,7 @@ import { Suspense, useState } from "react";
 import { Calendar } from "@/components/Calendar";
 import { TutorialBooking } from "@/components/TutorialBooking";
 import { Alert, Badge, Button, Card, Chips, Field, PageHeader, Select, Textarea, cn, peso } from "@/components/ui";
-import { PLAYGROUP_MONTHLY_FEE, PROGRAMS, READING_SKILLS, SUBJECTS } from "@/lib/constants";
+import { PLAYGROUP_SESSION_RATE, PROGRAMS, READING_SKILLS, SUBJECTS } from "@/lib/constants";
 import { addDays, fmtDate, fmtTime, parseISO, todayISO } from "@/lib/dates";
 import { cohortSessionDates } from "@/lib/logic";
 import { useStore } from "@/lib/store";
@@ -62,7 +62,7 @@ function BookInner() {
                 <h3 className="mt-2 text-lg font-extrabold">{PROGRAMS[k].name}</h3>
                 <p className="mt-1 text-xs font-bold uppercase text-brand-600">{PROGRAMS[k].ages}</p>
                 <p className="mt-2 text-sm text-slate-600">{PROGRAMS[k].blurb}</p>
-                {k === "playgroup" && <div className="mt-2 text-sm font-bold text-mint-600">{peso(PLAYGROUP_MONTHLY_FEE)} / month</div>}
+                {k === "playgroup" && <div className="mt-2 text-sm font-bold text-mint-600">{peso(PLAYGROUP_SESSION_RATE)} / session</div>}
               </Card>
             </button>))}
         </div>) : (<>
@@ -161,13 +161,16 @@ function PlaygroupFlow() {
     const cohorts = s.db.cohorts
         .filter((c) => cohortSessionDates(c)[cohortSessionDates(c).length - 1] >= today)
         .filter((c) => c.modality !== "online" || c.enrolled.includes(id))
-        .map((c) => ({ c, dates: cohortSessionDates(c), left: c.capacity - c.enrolled.length }));
+        .map((c) => {
+          const active = s.db.bookings.filter((b) => b.program === "playgroup" && b.cohortId === c.id && ["pending", "approved", "confirmed", "awaiting_admin"].includes(b.status));
+          return { c, dates: cohortSessionDates(c), left: Math.max(0, 6 - active.length), active };
+        });
     const allDates = new Set(cohorts.flatMap((x) => x.dates));
     const onDate = cohorts.filter((x) => (date ? x.dates.includes(date) : true));
     const alternatives = cohorts.filter((x) => x.left > 0);
     const book = async (cid) => {
         const r = await s.bookPlaygroup(id, cid);
-        setMsg(r.ok ? { kind: "success", text: "Slot reserved! Booking confirmation sent." } : { kind: "error", text: r.error });
+        setMsg(r.ok ? { kind: "success", text: "Booking submitted. It is pending administrator approval; tutor assignment may still be pending." } : { kind: "error", text: r.error });
     };
     return (<div className="space-y-4">
       <Card>
@@ -190,8 +193,8 @@ function PlaygroupFlow() {
         <div className="space-y-3">
           <p className="text-sm font-bold">{date ? `Classes on ${fmtDate(date)}` : "All upcoming classes"}</p>
           {onDate.length === 0 && <p className="text-sm text-slate-400">No classes.</p>}
-          {onDate.map(({ c, dates, left }) => {
-            const enrolled = c.enrolled.includes(id);
+          {onDate.map(({ c, dates, left, active }) => {
+            const enrolled = active.some((b) => b.tuteeId === id);
             return (<Card key={c.id} className="!p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -200,7 +203,7 @@ function PlaygroupFlow() {
                       {fmtTime(c.time)} · {c.modality ?? "face-to-face"} · {c.weekdays.map((w) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][w]).join("/")} · {fmtDate(dates[0])} → {fmtDate(dates[dates.length - 1])}
                     </div>
                     <div className="mt-1 text-xs">
-                      Capacity: {c.enrolled.length}/{c.capacity}
+                      Capacity: {active.length}/6
                     </div>
                   </div>
                   {enrolled ? <Badge status="confirmed">Enrolled</Badge> : left > 0 ? <Badge status="approved">{left} slot(s) left</Badge> : <Badge status="rejected">Full</Badge>}

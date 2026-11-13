@@ -100,13 +100,13 @@ const tables = [
       id: c.id, label: c.label, start_date: c.startDate,
       weekdays: jsonText(c.weekdays, []), class_time: c.time,
       modality: c.modality ?? null, capacity: c.capacity, enrolled: jsonText(c.enrolled, []),
-      tutor_id: c.tutorId ?? null, sessions_count: c.sessionsCount,
+      tutor_id: c.tutorId ?? null, sessions_count: c.sessionsCount, assignment_mode: c.assignmentMode ?? "automatic", rotation_order: jsonText(c.rotationOrder, {}),
     }),
     fromRow: (r) => ({
       id: r.id, label: r.label, startDate: dateOnly(r.start_date),
       weekdays: parseJson(r.weekdays, []), time: r.class_time, modality: r.modality,
       capacity: Number(r.capacity), enrolled: parseJson(r.enrolled, []),
-      tutorId: r.tutor_id, sessionsCount: Number(r.sessions_count),
+      tutorId: r.tutor_id, sessionsCount: Number(r.sessions_count), assignmentMode: r.assignment_mode ?? "automatic", rotationOrder: parseJson(r.rotation_order, {}),
     }),
   },
   {
@@ -143,7 +143,8 @@ const tables = [
       tutor_id: b.tutorId ?? null, recommendations: jsonText(b.recommendations, []),
       created_at: sqlDateTime(b.createdAt), terminated_at: sqlDateTime(b.terminatedAt),
       termination_reason: b.terminationReason ?? null, cohort_id: b.cohortId ?? null,
-      assessment_id: b.assessmentId ?? null,
+      assessment_id: b.assessmentId ?? null, booking_status: b.bookingStatus ?? null,
+      tutor_assignment_status: b.tutorAssignmentStatus ?? null, assignment_mode: b.assignmentMode ?? null,
     }),
     fromRow: (r) => ({
       id: r.id, tuteeId: r.tutee_id, program: r.program, subject: r.subject,
@@ -166,6 +167,9 @@ const tables = [
       ...(r.termination_reason == null ? {} : { terminationReason: r.termination_reason }),
       ...(r.cohort_id == null ? {} : { cohortId: r.cohort_id }),
       ...(r.assessment_id == null ? {} : { assessmentId: r.assessment_id }),
+      ...(r.booking_status == null ? {} : { bookingStatus: r.booking_status }),
+      ...(r.tutor_assignment_status == null ? {} : { tutorAssignmentStatus: r.tutor_assignment_status }),
+      ...(r.assignment_mode == null ? {} : { assignmentMode: r.assignment_mode }),
     }),
   },
   {
