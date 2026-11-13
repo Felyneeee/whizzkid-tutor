@@ -98,11 +98,30 @@ export default function AdminHome() {
   }).sort((a, b) => b.counts.reduce((sum, n) => sum + n, 0) - a.counts.reduce((sum, n) => sum + n, 0)).slice(0, 6);
   const maxTutor = Math.max(1, ...tutorRows.map((row) => row.counts.reduce((sum, n) => sum + n, 0)));
   const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const slots = weekdays.map((label, index) => ({
-    label,
-    open: (db.availability ?? []).filter((slot) => slot.status === "approved" && slot.date >= todayISO() && new Date(`${slot.date}T12:00:00`).getDay() === (index + 1) % 7).reduce((sum, slot) => sum + (slot.slots?.length ?? 0), 0) + (db.tutors ?? []).filter((tutor) => tutor.status === "active" && db.tutorSchedules?.[tutor.userId]?.days?.[{ 0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday" }[(index + 1) % 7]]).length * HOURS.length,
-    booked: sessions.filter((session) => ["scheduled", "completed"].includes(session.status) && new Date(`${session.date}T12:00:00`).getDay() === (index + 1) % 7).length,
-  }));
+  const weekdayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const slots = weekdays.map((label, index) => {
+    const day = index + 1;
+    const tutors = (db.tutors ?? []).filter((tutor) => tutor.status === "active");
+    const occurrences = new Map();
+    tutors.forEach((tutor) => {
+      const schedule = db.tutorSchedules?.[tutor.userId];
+      if (schedule) {
+        if (schedule.days?.[weekdayNames[day]]) HOURS.forEach((time) => occurrences.set(`${tutor.userId}|weekly|${time}`, { tutorId: tutor.userId, time }));
+        return;
+      }
+      (db.availability ?? []).filter((entry) => entry.tutorId === tutor.userId && entry.status === "approved" && entry.date >= todayISO() && new Date(`${entry.date}T12:00:00`).getDay() === day)
+        .forEach((entry) => (entry.slots ?? []).forEach((time) => occurrences.set(`${tutor.userId}|${entry.date}|${time}`, { tutorId: tutor.userId, date: entry.date, time })));
+    });
+    let booked = 0;
+    let open = 0;
+    occurrences.forEach(({ tutorId, date, time }) => {
+      const occupying = sessions.filter((session) => session.tutorId === tutorId && session.time === time && (!date || session.date === date) && new Date(`${session.date}T12:00:00`).getDay() === day && ["scheduled", "needs_reassignment", "completed"].includes(session.status));
+      const groupOccupants = occupying.filter((session) => db.bookings?.find((booking) => booking.id === session.bookingId)?.sessionType === "group");
+      booked += occupying.length;
+      open += groupOccupants.length === 1 ? 1 : occupying.length === 0 ? 1 : 0;
+    });
+    return { label, open, booked };
+  });
   const maxSlots = Math.max(1, ...slots.flatMap((item) => [item.open, item.booked]));
   const metrics = [
     { label: "Total Tutees", value: db.tutees?.length ?? 0, weekly: (db.users ?? []).filter((user) => user.role === "tutee" && thisWeek(user.createdAt)).length, color: "bg-[#dbe8f7] text-[#4e83eb]", icon: <GraduationCap/> },
@@ -119,7 +138,7 @@ export default function AdminHome() {
     </div>
     <Panel title="Monthly Booking Trends" className="bg-gradient-to-br from-[#f4efd7] to-[#dbe7ff]"><MonthlyTrend data={monthly}/></Panel>
     <div className="grid gap-5 lg:grid-cols-2">
-      <Panel title="Number of Slots"><div className="flex h-[190px] items-end gap-3 px-1">{slots.map((item) => <div key={item.label} className="flex h-full flex-1 flex-col items-center justify-end gap-1"><div className="flex h-[145px] w-full items-end justify-center gap-1">{[[`${item.label}: ${item.open} approved available slots`, item.open, "bg-[#2563eb]"], [`${item.label}: ${item.booked} scheduled sessions`, item.booked, "bg-[#ffb800]"]].map(([detail, count, color], index) => <button type="button" key={index} onClick={() => setSelectedSlots((current) => current === detail ? "" : detail)} title={detail} aria-label={detail} className={`w-1/3 rounded-t ${color}`} style={{ height: `${count / maxSlots * 100}%`, minHeight: count ? 3 : 0 }}/>)}</div><span className="text-[9px] text-slate-600">{item.label}</span></div>)}</div><div className="mt-2 flex justify-center gap-4 text-[9px] text-slate-600"><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-blue-600"/>Available approved slots</span><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-amber-400"/>Scheduled sessions</span></div>{selectedSlots && <div className="mt-2 w-full text-center text-xs font-bold text-slate-700">{selectedSlots}</div>}</Panel>
+      <Panel title="Number of Slots"><div className="flex h-[190px] items-end gap-3 px-1">{slots.map((item) => <div key={item.label} className="flex h-full flex-1 flex-col items-center justify-end gap-1"><div className="flex h-[145px] w-full items-end justify-center gap-1">{[[`${item.label}: ${item.open} unbooked slots`, item.open, "bg-[#2563eb]"], [`${item.label}: ${item.booked} booked slots`, item.booked, "bg-[#ffb800]"]].map(([detail, count, color], index) => <button type="button" key={index} onClick={() => setSelectedSlots((current) => current === detail ? "" : detail)} title={detail} aria-label={detail} className={`w-1/3 rounded-t ${color}`} style={{ height: `${count / maxSlots * 100}%`, minHeight: count ? 3 : 0 }}/>)}</div><span className="text-[9px] text-slate-600">{item.label}</span></div>)}</div><div className="mt-2 flex justify-center gap-4 text-[9px] text-slate-600"><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-blue-600"/>Unbooked</span><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-amber-400"/>Booked</span></div>{selectedSlots && <div className="mt-2 w-full text-center text-xs font-bold text-slate-700">{selectedSlots}</div>}</Panel>
       <Panel title="Monthly Sessions per Tutor"><div className="flex min-h-[190px] items-end gap-2 overflow-x-auto px-1">{tutorRows.length ? tutorRows.map(({ tutor, counts }) => <div key={tutor.userId} className="flex h-[170px] min-w-9 flex-1 flex-col items-center justify-end gap-1"><div className="flex h-[135px] w-full items-end justify-center"><div className="flex w-5/6 flex-col-reverse overflow-hidden rounded-t" style={{ height: `${counts.reduce((sum, n) => sum + n, 0) / maxTutor * 100}%`, minHeight: counts.some(Boolean) ? 3 : 0 }}>{counts.map((count, index) => { const detail = `${tutor.fullName} · ${["Academic", "Reading", "Playgroup"][index]}: ${count} sessions this month`; return <button type="button" key={index} onClick={() => setSelectedTutor((current) => current === detail ? "" : detail)} title={`${tutor.fullName} · ${["Academic", "Reading", "Playgroup"][index]}: ${count} sessions`} aria-label={`${tutor.fullName} · ${["Academic", "Reading", "Playgroup"][index]}: ${count} sessions`} style={{ height: `${count / Math.max(1, counts.reduce((sum, n) => sum + n, 0)) * 100}%`, minHeight: count ? 3 : 0, background: [palette.academic, palette.reading, palette.playgroup][index] }}/>})}</div></div><span className="max-w-12 truncate text-[8px] text-slate-600" title={tutor.fullName}>{tutor.fullName?.split(" ")[0] || "Tutor"}</span></div>) : <div className="grid h-[170px] w-full place-items-center text-xs text-slate-400">No tutor session data yet</div>}</div><div className="mt-1 flex justify-center gap-3 text-[9px] text-slate-600">{["Academic", "Reading", "Playgroup"].map((name, i) => <span key={name}><i className="mr-1 inline-block h-2 w-2 rounded-full" style={{ background: [palette.academic, palette.reading, palette.playgroup][i] }}/>{name}</span>)}</div>{selectedTutor && <div className="mt-2 w-full text-center text-xs font-bold text-slate-700">{selectedTutor}</div>}</Panel>
     </div>
   </div>;

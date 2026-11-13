@@ -2,8 +2,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ArrowLeft, Eye, EyeOff } from "lucide-react";
-import { Alert, Button, Card, Chips, Field, Input } from "@/components/ui";
+import { ArrowLeft, CloudUpload, Eye, EyeOff, FileText } from "lucide-react";
+import { Alert, Button, Card, Chips, Field, Input, PhoneInput } from "@/components/ui";
 import { SUBJECTS } from "@/lib/constants";
 import { ageFromBirthday, todayISO } from "@/lib/dates";
 import { readFileAsDataURL, readPdfAsDataURL } from "@/lib/files";
@@ -46,6 +46,7 @@ export default function RegisterTutor({ initialType = "new" }) {
     return (<>
       <Card className="p-7 sm:p-8">
       <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">{type === "new" ? "Application Form" : "Account Activation"}</h1>
+      <p className="mt-1 text-sm text-slate-500">{type === "new" ? "After filling out applicant form, an admin will review your resume and send an application status whether you’re rejected or scheduled for the interview." : "Already employed tutors must submit registration details to request account activation. An admin will verify your record and activate your access."}</p>
       <form className="mt-4 space-y-4" onSubmit={async (e) => {
             e.preventDefault();
             if (f.password.length < 12)
@@ -103,7 +104,7 @@ export default function RegisterTutor({ initialType = "new" }) {
             <Input type="date" required max={todayISO()} value={f.birthday} onChange={set("birthday")}/>
           </Field>
           <Field label="Contact number">
-            <Input required value={f.contact} onChange={set("contact")}/>
+            <PhoneInput required value={f.contact} onChange={(contact) => setF((current) => ({ ...current, contact }))}/>
           </Field>
         </div>
         <Field label="Subject expertise">
@@ -112,8 +113,18 @@ export default function RegisterTutor({ initialType = "new" }) {
         <Field label="Grade levels you can teach">
           <Chips multi options={GRADE_CHOICES} value={bands} onChange={setBands}/>
         </Field>
-        {type === "new" && <Field label="Resume (PDF)" hint={resume.name || undefined}>
-          <Input type="file" accept=".pdf,application/pdf" required onChange={(e) => upload(e.target.files?.[0], "resume")}/>
+        {type === "new" && <Field label="Resume (PDF)">
+          <div className="flex flex-col gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 sm:flex-row sm:items-center">
+            <FileText className="h-8 w-8 shrink-0 text-slate-500" aria-hidden="true"/>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-slate-800">{resume.name || "Upload your resume"}</p>
+              <p className="text-xs text-slate-500">PDF file only</p>
+            </div>
+            <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700">
+              <CloudUpload className="h-4 w-4" aria-hidden="true"/>Browse files
+              <input type="file" accept=".pdf,application/pdf" className="sr-only" onChange={(e) => upload(e.target.files?.[0], "resume")}/>
+            </label>
+          </div>
         </Field>}
         {err && <Alert kind="error">{err}</Alert>}
         {success && <Alert kind="success">{success}</Alert>}

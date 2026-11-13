@@ -17,6 +17,7 @@ export default function RegisterTutee() {
     return (<>
       <Card className="p-7 sm:p-9">
       <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Registration Form</h1>
+      <p className="mt-1 text-sm text-slate-500">Create a tutee account first before setting your profile.</p>
       <form className="mt-4 space-y-4" onSubmit={async (e) => {
             e.preventDefault();
             if (f.password.length < 12)

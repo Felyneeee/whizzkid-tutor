@@ -31,10 +31,12 @@ export default function RegisterChoice() {
       <Card className="space-y-4 p-7 sm:p-8">
         <div className="mb-5">
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Join Whizzkids</h1>
+          <p className="text-sm text-slate-500">Select which account to create:</p>
         </div>
         {choices.map((choice) => (
           <Link key={choice.title} href={choice.href} className={`block rounded-2xl border-[3px] px-6 py-5 transition-colors ${choice.color}`}>
             <h2 className="text-xl font-extrabold text-black">{choice.title}</h2>
+            <p className="mt-1 text-sm text-slate-500">{choice.description}</p>
           </Link>
         ))}
         <p className="pt-1 text-center text-xs font-semibold text-slate-500">
