@@ -243,6 +243,7 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
         </div>;
       })}
     </Card>)}</div>}
+    {isAcademic && <Alert kind="warn">Note: A subject can be scheduled for up to 2 sessions per day. If it is already used in two sessions that day, it cannot be selected again.</Alert>}
     <Card className="space-y-3 p-5 sm:p-6">
       <h3 className="font-extrabold">Booking summary</h3>
       {isAcademic && selectedSubjects.length > 1 && (missingSubjects.length ? <Alert kind="warn">Would you like to proceed with booking? {missingSubjects.join(" and ")} still {missingSubjects.length === 1 ? "needs" : "need"} a schedule, since you selected {selectedSubjects.join(" and ")}. Please add {missingSubjects.length === 1 ? "a" : "the required"} session{missingSubjects.length === 1 ? "" : "s"} and assign {missingSubjects.length === 1 ? "it" : "each subject"} before continuing.</Alert> : <Alert kind="success">All selected subjects are included in your schedule: {selectedSubjects.join(", ")}.</Alert>)}
