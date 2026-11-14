@@ -26,15 +26,20 @@ export async function POST(request) {
         await connection.beginTransaction();
         await connection.execute("INSERT INTO users (id, role, email, username, password_hash) VALUES (?, 'tutee', ?, ?, ?)", [id, email, username, passwordHash]);
         await connection.execute("INSERT INTO tutee_profiles (user_id) VALUES (?)", [id]);
-        await connection.commit();
         const user = { id, role: "tutee", email, username, createdAt: createdAt.toISOString() };
         const response = NextResponse.json({ user }, { status: 201 });
-        await issueSession(id, response);
+        await issueSession(id, response, connection);
+        await connection.commit();
         return response;
     }
     catch (error) {
         if (connection)
             await connection.rollback().catch(() => undefined);
+        console.error("Tutee registration failed:", {
+            code: error?.code,
+            sqlState: error?.sqlState,
+            message: error?.message,
+        });
         if (error.code === "ER_DUP_ENTRY") {
             return NextResponse.json({ error: "That email or username is already registered." }, { status: 409 });
         }

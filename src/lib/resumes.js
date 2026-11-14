@@ -1,5 +1,5 @@
 const PDF_DATA_URL = /^data:application\/pdf;base64,((?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?)$/;
-const MAX_RESUME_BYTES = 1_500_000;
+export const MAX_RESUME_BYTES = 600_000;
 
 export function isValidPdfDataUrl(data) {
   if (typeof data !== "string") return false;

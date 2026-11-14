@@ -1,4 +1,4 @@
-import { isValidPdfDataUrl } from "@/lib/resumes";
+import { isValidPdfDataUrl, MAX_RESUME_BYTES } from "@/lib/resumes";
 
 /** Read a File into a data URL (mock storage — use signed object storage in production). */
 export function readFileAsDataURL(file, maxBytes = 1500000) {
@@ -13,7 +13,10 @@ export function readFileAsDataURL(file, maxBytes = 1500000) {
 }
 
 export async function readPdfAsDataURL(file) {
-    const data = await readFileAsDataURL(file);
+    if (file.size > MAX_RESUME_BYTES) {
+        throw new Error("Resume file exceeds the 600 KB limit. Choose a smaller PDF.");
+    }
+    const data = await readFileAsDataURL(file, MAX_RESUME_BYTES);
     const payload = data.slice(data.indexOf(",") + 1);
     const pdfData = `data:application/pdf;base64,${payload}`;
     if (!isValidPdfDataUrl(pdfData)) {

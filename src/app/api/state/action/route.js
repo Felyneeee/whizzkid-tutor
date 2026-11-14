@@ -195,7 +195,7 @@ export async function POST(request) {
     const result = await handler(...permission.args);
     if (result && result.ok === false) {
       await connection.rollback();
-      return NextResponse.json({ error: result.error, result }, { status: 409 });
+      return NextResponse.json({ error: result.error, result, db: stateVisibleToUser(nextState, user) }, { status: 409 });
     }
     queueCompletedReadingBookings(nextState);
     await persistRelationalState(connection, nextState, state);

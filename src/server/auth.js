@@ -32,10 +32,10 @@ export async function verifyPassword(password, encoded) {
 function tokenHash(token) {
     return createHash("sha256").update(token).digest("hex");
 }
-export async function issueSession(userId, response) {
+export async function issueSession(userId, response, connection = mysqlPool) {
     const token = randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
-    await mysqlPool.execute("INSERT INTO auth_sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)", [tokenHash(token), userId, expiresAt]);
+    await connection.execute("INSERT INTO auth_sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)", [tokenHash(token), userId, expiresAt]);
     response.cookies.set(SESSION_COOKIE, token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",

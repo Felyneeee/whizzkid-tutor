@@ -118,7 +118,7 @@ export default function RegisterTutor({ initialType = "new" }) {
             <FileText className="h-8 w-8 shrink-0 text-slate-500" aria-hidden="true"/>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-bold text-slate-800">{resume.name || "Upload your resume"}</p>
-              <p className="text-xs text-slate-500">PDF file only</p>
+              <p className="text-xs text-slate-500">PDF file only · up to 600 KB</p>
             </div>
             <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700">
               <CloudUpload className="h-4 w-4" aria-hidden="true"/>Browse files

@@ -253,7 +253,7 @@ export function createBusinessActions({ get, mutate }) {
           ? v.sessionSlots.filter((slot) => !slotRequestable(d, slot.date, slot.time, { ...capacityOptions, subject: slot.subject })).map((slot) => slot.date)
           : v.dates.filter((date) => slotOccupied(d, date, v.time, undefined, undefined, capacityOptions));
       if (occupied.length)
-          return { ok: false, error: `That time is no longer open on: ${occupied.map(fmtDate).join(", ")}. Please choose another slot.` };
+          return { ok: false, error: `That time is no longer open on: ${[...new Set(occupied)].map(fmtDate).join(", ")}. Please choose another slot.`, unavailableDates: [...new Set(occupied)] };
       const matches = matchTutors(d, {
           program: v.program,
           subject: v.subject,
@@ -416,6 +416,7 @@ export function createBusinessActions({ get, mutate }) {
           if (!t)
               return;
           t.status = accept ? "active" : "rejected";
+          t.verifiedAt = accept ? nowISO() : undefined;
           t.rejectionReason = accept ? undefined : reason;
           pushNotif(n, tutorId, accept ? "Congratulations! Your application is approved. Your account is now a Tutor account." : `Your application was not approved. ${reason || ""}`, ["web", "email", "sms"]);
       });
@@ -426,6 +427,7 @@ export function createBusinessActions({ get, mutate }) {
           if (!t)
               return;
           t.status = approve ? "active" : "rejected";
+          t.verifiedAt = approve ? nowISO() : undefined;
           t.rejectionReason = approve ? undefined : reason;
           pushNotif(n, tutorId, approve ? "Your tutor account is verified and active." : `Verification not approved: ${reason || "Please contact the admin."}`, ["web", "email"]);
       });
@@ -1051,10 +1053,63 @@ export function createBusinessActions({ get, mutate }) {
       });
   },
   updateCohort(id, p) {
+      const d = get();
+      const cohort = d.cohorts.find((x) => x.id === id);
+      if (!cohort) return { ok: false, error: "Cohort not found." };
+      const label = String(p?.label ?? cohort.label).trim();
+      const startDate = p?.startDate ?? cohort.startDate;
+      if (!label) return { ok: false, error: "Enter a cohort name." };
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || Number.isNaN(Date.parse(`${startDate}T00:00:00Z`)) || new Date(`${startDate}T00:00:00Z`).toISOString().slice(0, 10) !== startDate || weekday(startDate) !== 1) return { ok: false, error: "Choose a Monday to set the cohort’s start week." };
+      const updated = { ...cohort, label, startDate, weekdays: [1, 3, 5], sessionsCount: 12 };
+      const nextDates = cohortSessionDates(updated);
+      const nextDateSet = new Set(nextDates);
+      if (d.cohorts.some((other) => other.id !== id && cohortSessionDates(other).some((date) => nextDateSet.has(date)))) return { ok: false, error: "Those cycle dates overlap another Playgroup cohort. Choose different dates." };
+      const dateChanged = startDate !== cohort.startDate;
+      const bookings = d.bookings.filter((booking) => booking.program === "playgroup" && booking.cohortId === id && ["pending", "approved", "confirmed", "awaiting_admin"].includes(booking.status));
+      if (dateChanged && bookings.some((booking) => ["approved", "confirmed"].includes(booking.status))) return { ok: false, error: "This cycle has approved bookings. Contact the administrator before changing its dates." };
       mutate((n) => {
-          const c = n.cohorts.find((x) => x.id === id);
-          if (c) Object.assign(c, p, { weekdays: [1, 3, 5], time: "10:00", capacity: 6, modality: "face-to-face" });
+          const target = n.cohorts.find((x) => x.id === id);
+          Object.assign(target, p, { label, startDate, weekdays: [1, 3, 5], time: "10:00", sessionsCount: 12, capacity: 6, modality: "face-to-face" });
+          if (dateChanged) {
+              n.bookings.filter((booking) => booking.program === "playgroup" && booking.cohortId === id && ["pending", "awaiting_admin"].includes(booking.status)).forEach((booking) => {
+                  const priorAssignments = booking.tutorAssignments || {};
+                  const nextAssignments = {};
+                  nextDates.forEach((date) => {
+                      const day = weekday(date);
+                      const priorDate = booking.dates.find((oldDate) => weekday(oldDate) === day);
+                      const tutorId = target.weekdayTutorIds?.[day] || priorAssignments[priorDate];
+                      if (tutorId && tutorWorksPlaygroupDate(n, tutorId, date) && !onApprovedLeave(n, tutorId, date) && !tutorBusy(n, tutorId, date, "10:00", booking.id) && playgroupTutorFree(n, tutorId, [date], booking.id, id)) nextAssignments[date] = tutorId;
+                  });
+                  booking.dates = nextDates;
+                  booking.tutorAssignments = nextAssignments;
+                  const assignedIds = [...new Set(Object.values(nextAssignments))];
+                  booking.tutorId = assignedIds.length === 1 ? assignedIds[0] : undefined;
+                  booking.tutorAssignmentStatus = nextDates.every((date) => nextAssignments[date]) ? "Admin-Assigned" : "Unassigned";
+                  pushNotif(n, booking.tuteeId, `The dates for your Playgroup cycle ${label} have changed. Check your schedule for the updated sessions.`, ["web", "email", "sms"]);
+                  if (!nextDates.every((date) => nextAssignments[date])) pushAdmins(n, `The updated Playgroup cycle ${label} needs tutor assignments for one or more dates.`);
+              });
+          }
       });
+      return { ok: true };
+  },
+  deleteCohort(id) {
+      const d = get();
+      const cohort = d.cohorts.find((item) => item.id === id);
+      if (!cohort) return { ok: false, error: "Cohort not found." };
+      const bookings = d.bookings.filter((booking) => booking.program === "playgroup" && booking.cohortId === id && !["cancelled", "declined", "rejected", "terminated", "completed"].includes(booking.status));
+      mutate((n) => {
+          bookings.forEach((booking) => {
+              const target = n.bookings.find((item) => item.id === booking.id);
+              if (!target) return;
+              target.status = "cancelled";
+              target.bookingStatus = "cancelled";
+              target.cohortId = undefined;
+              pushNotif(n, target.tuteeId, `The Playgroup cycle ${cohort.label} was cancelled by the administrator. Your slot is released.`, ["web", "email", "sms"]);
+              [...new Set(Object.values(target.tutorAssignments || {}))].forEach((tutorId) => pushNotif(n, tutorId, `The Playgroup cycle ${cohort.label} was cancelled by the administrator.`, ["web", "email"]));
+          });
+          n.cohorts = n.cohorts.filter((item) => item.id !== id);
+      });
+      return { ok: true };
   },
   assignPlaygroupBooking(bookingId, tutorId) {
       const d = get();
@@ -1079,15 +1134,15 @@ export function createBusinessActions({ get, mutate }) {
       const tutor = d.tutors.find((item) => item.userId === tutorId && item.status === "active");
       if (!cohort || !tutor) return { ok: false, error: "Choose an active tutor and Playgroup cohort." };
       const bookings = d.bookings.filter((booking) => booking.program === "playgroup" && booking.cohortId === cohortId && ["pending", "approved", "confirmed"].includes(booking.status));
-      if (bookings.some((booking) => ["approved", "confirmed"].includes(booking.status) && booking.dates.some((date) => weekday(date) === Number(weekdayNumber) && booking.tutorAssignments?.[date] !== tutorId))) return { ok: false, error: "This weekday has a confirmed tutor. Get administrator approval before changing it." };
-      const dates = [...new Set((bookings.length ? bookings.flatMap((booking) => booking.dates) : cohortSessionDates(cohort)).filter((date) => weekday(date) === Number(weekdayNumber)))];
+      if (bookings.some((booking) => ["approved", "confirmed"].includes(booking.status) && booking.dates.some((date) => date >= todayISO() && weekday(date) === Number(weekdayNumber) && booking.tutorAssignments?.[date] !== tutorId))) return { ok: false, error: "This weekday has a confirmed tutor. Get administrator approval before changing it." };
+      const dates = [...new Set((bookings.length ? bookings.flatMap((booking) => booking.dates) : cohortSessionDates(cohort)).filter((date) => date >= todayISO() && weekday(date) === Number(weekdayNumber)))];
       if (!dates.every((date) => tutorWorksPlaygroupDate(d, tutorId, date) && !onApprovedLeave(d, tutorId, date) && !tutorBusy(d, tutorId, date, "10:00", undefined)) || !playgroupTutorFree(d, tutorId, dates, undefined, cohortId)) return { ok: false, error: "That tutor is not scheduled to work or has a conflict on one or more dates for this weekday." };
       mutate((n) => {
           const targetCohort = n.cohorts.find((item) => item.id === cohortId);
           targetCohort.weekdayTutorIds = { ...(targetCohort.weekdayTutorIds || {}), [weekdayNumber]: tutorId };
           n.bookings.filter((booking) => booking.program === "playgroup" && booking.cohortId === cohortId && ["pending", "approved", "confirmed"].includes(booking.status)).forEach((booking) => {
               booking.tutorAssignments ||= {};
-              booking.dates.filter((date) => weekday(date) === Number(weekdayNumber)).forEach((date) => { booking.tutorAssignments[date] = tutorId; });
+              booking.dates.filter((date) => date >= todayISO() && weekday(date) === Number(weekdayNumber)).forEach((date) => { booking.tutorAssignments[date] = tutorId; });
               const assignedIds = [...new Set(Object.values(booking.tutorAssignments))];
               booking.tutorId = assignedIds.length === 1 ? assignedIds[0] : undefined;
               booking.tutorAssignmentStatus = booking.dates.every((date) => booking.tutorAssignments[date]) ? "Admin-Assigned" : "Unassigned";
@@ -1113,9 +1168,18 @@ export function createBusinessActions({ get, mutate }) {
       return { ok: true };
   },
   addCohort(c) {
+      const d = get();
+      const label = String(c?.label ?? "").trim();
+      if (!label) return { ok: false, error: "Enter a cohort name." };
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(c.startDate || "") || Number.isNaN(Date.parse(`${c.startDate}T00:00:00Z`)) || new Date(`${c.startDate}T00:00:00Z`).toISOString().slice(0, 10) !== c.startDate || weekday(c.startDate) !== 1) return { ok: false, error: "Choose a Monday to set the cohort’s start week." };
+      const proposedDates = cohortSessionDates({ ...c, weekdays: [1, 3, 5], sessionsCount: 12 });
+      if (proposedDates.length !== 12) return { ok: false, error: "Choose a valid start date for the 12-session cycle." };
+      const dateSet = new Set(proposedDates);
+      if (d.cohorts.some((cohort) => cohortSessionDates(cohort).some((date) => dateSet.has(date)))) return { ok: false, error: "Those cycle dates overlap another Playgroup cohort. Choose different dates." };
       mutate((n) => {
-          n.cohorts.push({ ...c, weekdays: [1, 3, 5], time: "10:00", capacity: 6, modality: "face-to-face", id: uid("pg"), enrolled: [] });
+          n.cohorts.push({ ...c, label, weekdays: [1, 3, 5], time: "10:00", capacity: 6, sessionsCount: 12, modality: "face-to-face", id: uid("pg"), enrolled: [] });
       });
+      return { ok: true };
   },
   removeFromCohort(cohortId, tuteeId) {
       mutate((n) => {

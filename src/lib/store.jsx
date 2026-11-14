@@ -14,7 +14,7 @@ const BUSINESS_ACTIONS = [
   "adminEditTutorAvailability", "setTutorWeeklySchedule", "rejectAvailability", "decideLeave", "adminLeave", "proposeBookingSchedule",
   "decideBookingScheduleProposal", "confirmBooking", "confirmBookingSession", "confirmReadingAssignment", "rejectReadingAssignment", "rejectBooking", "terminateBooking", "completeSession",
   "submitProgressReport", "checkInSession", "reassignSession", "proposeSessionReschedule", "cancelSession",
-  "updateCohort", "addCohort", "removeFromCohort", "assignPlaygroupBooking", "assignPlaygroupWeekday", "approvePlaygroupBooking", "updatePurchase", "addMaterial", "updateMaterial",
+  "updateCohort", "addCohort", "deleteCohort", "removeFromCohort", "assignPlaygroupBooking", "assignPlaygroupWeekday", "approvePlaygroupBooking", "updatePurchase", "addMaterial", "updateMaterial",
   "deleteMaterial", "logMaterialAccess",
 ];
 
@@ -80,7 +80,10 @@ export function StoreProvider({ children }) {
     }
     try {
       const result = await requestJson("/api/state/action", { method: "POST", body: { action: name, args } });
-      if (!result.ok) return { ok: false, error: result.error };
+      if (!result.ok) {
+        if (result.payload?.db) acceptState(result.payload.db);
+        return { ...(result.payload?.result || {}), ok: false, error: result.error };
+      }
       if (result.payload.db) acceptState(result.payload.db);
       return result.payload.result ?? { ok: true };
     } finally {
@@ -114,6 +117,12 @@ export function StoreProvider({ children }) {
     acceptState(data.db);
     return { ok: true, payload: data };
   }, [acceptState]);
+
+  const refreshSlotAvailability = useCallback(async (request) => {
+    const response = await requestJson("/api/state/slot-availability", { method: "POST", body: request });
+    if (!response.ok) return { ok: false, error: response.error };
+    return { ok: true, available: response.payload.available || {} };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -169,7 +178,7 @@ export function StoreProvider({ children }) {
     const actions = Object.fromEntries(BUSINESS_ACTIONS.map((name) => [name, (...args) => runBusinessAction(name, args)]));
 
     return {
-      db, ready, me, actionFeedback,
+      db, ready, me, actionFeedback, refreshSlotAvailability,
       login,
       logout() {
         void requestJson("/api/auth/logout", { method: "POST" });
@@ -181,7 +190,7 @@ export function StoreProvider({ children }) {
       registerTutor(value) { return register("/api/auth/register/tutor", value); },
       ...actions,
     };
-  }, [acceptState, actionFeedback, db, loadState, ready, me, runBusinessAction]);
+  }, [acceptState, actionFeedback, db, loadState, ready, me, refreshSlotAvailability, runBusinessAction]);
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }

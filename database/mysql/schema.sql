@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS tutor_profiles (
   bio TEXT NOT NULL, subjects JSON NOT NULL, grade_bands JSON NOT NULL,
   hourly_rate DECIMAL(10,2) NOT NULL DEFAULT 0, fixed_salary DECIMAL(10,2) NOT NULL DEFAULT 0,
   interview_at DATETIME NULL, interview_notes TEXT NULL, rejection_reason TEXT NULL,
+  verified_at DATETIME NULL,
   birthday DATE NULL, last_greeting_year SMALLINT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;

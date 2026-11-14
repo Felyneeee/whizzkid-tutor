@@ -35,10 +35,13 @@ export async function POST(request) {
             return NextResponse.json({ error: "Complete all required tutor application fields." }, { status: 400 });
         }
         if ((applicantType === "new" && !resumeData) || (resumeData && !isValidPdfDataUrl(resumeData))) {
-            return NextResponse.json({ error: "Upload a valid PDF resume no larger than 1.5 MB." }, { status: 400 });
+            return NextResponse.json({ error: "Upload a valid PDF resume no larger than 600 KB." }, { status: 400 });
         }
         if (photo.length > 2000000) {
             return NextResponse.json({ error: "Profile photo is too large." }, { status: 400 });
+        }
+        if (photo.length + resumeData.length > 850000) {
+            return NextResponse.json({ error: "The resume and profile image are too large together. Please use smaller files." }, { status: 413 });
         }
         const id = randomUUID();
         const createdAt = new Date();
@@ -73,19 +76,27 @@ export async function POST(request) {
             }
             await connection.execute("UPDATE application_state SET revision = revision + 1 WHERE id = 1");
         }
-        await connection.commit();
         const user = { id, role: "tutor", email, username, createdAt: createdAt.toISOString() };
         const response = NextResponse.json({ user }, { status: 201 });
-        await issueSession(id, response);
+        await issueSession(id, response, connection);
+        await connection.commit();
         return response;
     }
     catch (error) {
         if (connection)
             await connection.rollback().catch(() => undefined);
-        if (error.code === "ER_DUP_ENTRY") {
+        console.error("Tutor registration failed:", {
+            code: error?.code,
+            sqlState: error?.sqlState,
+            message: error?.message,
+        });
+        if (error?.code === "ER_DUP_ENTRY") {
             return NextResponse.json({ error: "That email or username is already registered." }, { status: 409 });
         }
-        return NextResponse.json({ error: "Could not create the account. Check the database setup and try again." }, { status: 503 });
+        const detail = error?.code
+            ? ` (Error code: ${error.code})`
+            : process.env.NODE_ENV === "production" ? "" : ` (${error?.message || "unknown error"})`;
+        return NextResponse.json({ error: `Could not create the account. Check the database setup and try again.${detail}` }, { status: 503 });
     }
     finally {
         connection?.release();

@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Badge, Button, Card, Field, Input, Modal, PageHeader, Select } from "@/components/ui";
+import { Alert, Badge, Button, Card, Field, Input, Modal, PageHeader, Select } from "@/components/ui";
 import { DAY_NAMES, addDays, fmtDate, fmtTime, todayISO, weekday } from "@/lib/dates";
 import { cohortSessionDates, onApprovedLeave, tutorBusy, tutorWorksPlaygroupDate } from "@/lib/logic";
 import { useStore } from "@/lib/store";
@@ -25,6 +25,8 @@ export default function Classes() {
     const today = todayISO();
     const [cohortOpen, setCohortOpen] = useState(false);
     const [cohortError, setCohortError] = useState("");
+    const [pageError, setPageError] = useState("");
+    const [editingCohortId, setEditingCohortId] = useState(null);
     const [c, setC] = useState({ label: "", startDate: "", weekdays: COHORT_WEEKDAYS, time: "10:00", modality: "face-to-face", capacity: 6, sessionsCount: 12, assignmentMode: "manual", weekdayTutorIds: {} });
     const nm = (id) => s.db.tutees.find((t) => t.userId === id)?.fullName || id;
     const tutors = s.db.tutors.filter((t) => t.status === "active");
@@ -33,7 +35,7 @@ export default function Classes() {
       ? cohortSessionDates({ ...c, weekdays: COHORT_WEEKDAYS, sessionsCount: 12 }).slice().sort()
       : [];
     const tutorOptionsForDay = (cohort, day, dates) => {
-      const sessionDates = dates.filter((date) => weekday(date) === day);
+      const sessionDates = dates.filter((date) => date >= today && weekday(date) === day);
       return tutors.filter((tutor) => {
         if (!sessionDates.length) return false;
         return sessionDates.every((date) => (
@@ -44,11 +46,18 @@ export default function Classes() {
       });
     };
     const openCohortForm = () => {
+      setEditingCohortId(null);
       setC({ label: "", startDate: earliestStartWeek, weekdays: COHORT_WEEKDAYS, time: "10:00", modality: "face-to-face", capacity: 6, sessionsCount: 12, assignmentMode: "manual", weekdayTutorIds: {} });
       setCohortError("");
       setCohortOpen(true);
     };
-    const createCohort = async (event) => {
+    const openEditForm = (cohort) => {
+      setEditingCohortId(cohort.id);
+      setC({ label: cohort.label, startDate: cohort.startDate, weekdays: COHORT_WEEKDAYS, time: "10:00", modality: "face-to-face", capacity: 6, sessionsCount: 12, assignmentMode: cohort.assignmentMode || "manual", weekdayTutorIds: cohort.weekdayTutorIds || {} });
+      setCohortError("");
+      setCohortOpen(true);
+    };
+    const saveCohort = async (event) => {
       event.preventDefault();
       if (!c.label.trim()) {
         setCohortError("Enter a cohort name.");
@@ -58,12 +67,18 @@ export default function Classes() {
         setCohortError("Choose a Monday to set the cohort’s start week.");
         return;
       }
-      if (c.startDate < earliestStartWeek) {
+      if (!editingCohortId && c.startDate < earliestStartWeek) {
         setCohortError(`Choose a start week on or after ${fmtDate(earliestStartWeek)}. Cohorts cannot overlap.`);
         return;
       }
+      if (editingCohortId && c.startDate !== s.db.cohorts.find((cohort) => cohort.id === editingCohortId)?.startDate && c.startDate < today) {
+        setCohortError("A cycle can only be moved to a future date.");
+        return;
+      }
       try {
-        const result = await s.addCohort({ ...c, label: c.label.trim(), weekdays: COHORT_WEEKDAYS, time: "10:00", modality: "face-to-face", capacity: 6, sessionsCount: 12, assignmentMode: "manual", weekdayTutorIds: {} });
+        const result = editingCohortId
+          ? await s.updateCohort(editingCohortId, { label: c.label.trim(), startDate: c.startDate })
+          : await s.addCohort({ ...c, label: c.label.trim(), weekdays: COHORT_WEEKDAYS, time: "10:00", modality: "face-to-face", capacity: 6, sessionsCount: 12, assignmentMode: "manual", weekdayTutorIds: {} });
         if (result === false || result?.ok === false) {
           setCohortError(result.error || "The cohort could not be created.");
           return;
@@ -73,8 +88,17 @@ export default function Classes() {
         setCohortError(error instanceof Error ? error.message : "The cohort could not be created.");
       }
     };
+    const deleteCohort = async (cohort) => {
+      const activeCount = s.db.bookings.filter((booking) => booking.program === "playgroup" && booking.cohortId === cohort.id && activeBookingStatuses.includes(booking.status)).length;
+      const detail = activeCount ? ` This will cancel ${activeCount} active booking(s) and notify their families and assigned tutors.` : "";
+      if (!confirm(`Delete ${cohort.label}?${detail}`)) return;
+      setPageError("");
+      const result = await s.deleteCohort(cohort.id);
+      if (!result.ok) setPageError(result.error || "The cohort could not be deleted.");
+    };
     return (<>
       <PageHeader title="Playgroup cohorts" subtitle="One cohort has six slots for 12 sessions: Monday, Wednesday and Friday over four weeks." action={<Button onClick={openCohortForm}>Schedule cohort</Button>}/>
+      {pageError && <div className="mb-4"><Alert kind="error">{pageError}</Alert></div>}
       <div className="space-y-4">
         {s.db.cohorts.length === 0 && <Card><p className="text-sm text-slate-500">No cohorts scheduled yet. Create a cohort to open six slots for the next four-week playgroup cycle.</p></Card>}
         {s.db.cohorts.map((cohort) => {
@@ -82,13 +106,11 @@ export default function Classes() {
           const activeBookings = s.db.bookings.filter((booking) => booking.program === "playgroup" && booking.cohortId === cohort.id && activeBookingStatuses.includes(booking.status));
           const startDate = dates[0];
           const endDate = dates[dates.length - 1];
-          const canChangeTutors = !!startDate && startDate > today;
+          const canChangeTutors = dates.some((date) => date >= today);
           return <Card key={cohort.id} className="space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-extrabold">{cohort.label}</h2>
-                <p className="text-sm text-slate-500">12 sessions · Monday, Wednesday and Friday · {fmtTime(cohort.time || "10:00")} · {fmtDate(startDate)}–{fmtDate(endDate)}</p>
-              </div>
+              <div><h2 className="text-lg font-extrabold">{cohort.label}</h2><p className="text-sm text-slate-500">12 sessions · Monday, Wednesday and Friday · {fmtTime(cohort.time || "10:00")} · {fmtDate(startDate)}–{fmtDate(endDate)}</p></div>
+              <div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => openEditForm(cohort)}>Edit</Button><Button size="sm" variant="danger" onClick={() => deleteCohort(cohort)}>Delete</Button></div>
             </div>
 
             <section className="space-y-3 rounded-xl bg-slate-50 p-4">
@@ -136,13 +158,13 @@ export default function Classes() {
           </Card>;
         })}
       </div>
-      <Modal open={cohortOpen} onClose={() => setCohortOpen(false)} title="Schedule a playgroup cohort">
-        <form className="space-y-4" onSubmit={createCohort}>
+      <Modal open={cohortOpen} onClose={() => setCohortOpen(false)} title={editingCohortId ? "Edit playgroup cohort" : "Schedule a playgroup cohort"}>
+        <form className="space-y-4" onSubmit={saveCohort}>
           <Field label="Cohort name"><Input required value={c.label} onChange={(event) => setC({ ...c, label: event.target.value })} placeholder="e.g. December Playgroup"/></Field>
-          <Field label="Start week (Monday)"><Input type="date" required min={earliestStartWeek} value={c.startDate} onChange={(event) => { setC({ ...c, startDate: event.target.value }); setCohortError(event.target.value && weekday(event.target.value) === 1 ? "" : "Choose a Monday to set the cohort’s start week."); }}/><p className="mt-1 text-xs text-slate-500">Next available start week: {fmtDate(earliestStartWeek)}. Cohort dates cannot overlap.</p></Field>
+          <Field label="Start week (Monday)"><Input type="date" required min={editingCohortId ? undefined : earliestStartWeek} value={c.startDate} onChange={(event) => { setC({ ...c, startDate: event.target.value }); setCohortError(event.target.value && weekday(event.target.value) === 1 ? "" : "Choose a Monday to set the cohort’s start week."); }}/><p className="mt-1 text-xs text-slate-500">{editingCohortId ? "Cycle dates cannot overlap another cohort." : `Next available start week: ${fmtDate(earliestStartWeek)}. Cohort dates cannot overlap.`}</p></Field>
           {draftDates.length > 0 && <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">12 sessions · Monday, Wednesday and Friday · {fmtDate(draftDates[0])}–{fmtDate(draftDates[draftDates.length - 1])} · maximum 6 students.</div>}
           {cohortError && <p className="text-sm text-red-600">{cohortError}</p>}
-          <Button type="submit">Create cohort</Button>
+          <Button type="submit">{editingCohortId ? "Save changes" : "Create cohort"}</Button>
         </form>
       </Modal>
     </>);
