@@ -23,6 +23,11 @@ export default function TuteeSchedule() {
     const daySessions = [...(sessionsByDate[selectedDate] ?? [])].sort((a, b) => a.time.localeCompare(b.time));
     const dayAssessments = [...(assessmentsByDate[selectedDate] ?? [])].sort((a, b) => a.time.localeCompare(b.time));
     const tutor = (tid) => firstName(s.db.tutors.find((t) => t.userId === tid)?.fullName);
+    const canRate = (session) => {
+        const bookingSessions = s.db.sessions.filter((item) => item.bookingId === session.bookingId && item.status !== "cancelled");
+        const finalSession = bookingSessions.slice().sort((a, b) => `${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`))[0];
+        return session.status === "completed" && session.id === finalSession?.id && bookingSessions.length > 0 && bookingSessions.every((item) => item.status === "completed");
+    };
     const subj = (bid, date, time) => { const booking = s.db.bookings.find((b) => b.id === bid); return booking?.sessionSlots?.find((slot) => slot.date === date && slot.time === time)?.subject || booking?.sessionSubjects?.[date] || booking?.subject || ""; };
     return (<>
       <PageHeader title="My schedule" subtitle="Confirmed matches are added automatically."/>
@@ -64,10 +69,10 @@ export default function TuteeSchedule() {
                     : x.tuteeCheckedInAt && <div className="mt-1 text-xs font-semibold text-mint-600">Checked in {fmtDateTime(x.tuteeCheckedInAt)}</div>}
               </div>
               <div className="flex items-center gap-2">
-                {x.status === "completed" && !x.rating && (<Button size="sm" variant="sunny" onClick={() => setRating({ id: x.id, stars: 5, text: "" })}>
-                    Rate
+                {canRate(x) && !x.hasRating && (<Button size="sm" variant="sunny" onClick={() => setRating({ id: x.id, stars: 5, text: "" })}>
+                    Rate tutor
                   </Button>)}
-                {x.rating && <span className="text-sunny-500">{"★".repeat(x.rating)}</span>}
+                {canRate(x) && x.hasRating && <span className="text-sm text-slate-500">Rating submitted</span>}
               </div>
           </Card>))}
           {dayAssessments.map((assessment) => (<Card key={assessment.id} className="flex flex-wrap items-center gap-3 border-sunny-200 bg-sunny-50/50">

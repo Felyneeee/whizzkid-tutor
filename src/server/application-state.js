@@ -271,6 +271,13 @@ export function stateVisibleToUser(state, user) {
       : profile);
   visible.bookings = ownBookings;
   visible.sessions = ownSessions;
+  // Ratings and written feedback are restricted to administrators. Keep the
+  // session records available for scheduling, but remove rating fields from
+  // every non-admin state response.
+  visible.sessions = visible.sessions.map(({ rating, feedback, ...session }) => ({
+    ...session,
+    ...(rating == null ? {} : { hasRating: true }),
+  }));
   visible.progressReports = state.progressReports.filter((report) => tuteeIds.has(report.tuteeId) || tutorIds.has(report.tutorId));
   visible.assessments = user.role === "tutee" ? state.assessments.filter((item) => item.tuteeId === user.id) : [];
   visible.availability = state.availability.filter((item) => item.status === "approved" && (tutorIds.has(item.tutorId) || (user.role === "tutee" && activeTutorIds.has(item.tutorId))));
@@ -283,7 +290,7 @@ export function stateVisibleToUser(state, user) {
   visible.purchases = state.purchases.filter((item) => item.tuteeId === user.id);
   visible.materials = state.materials.filter((item) => !item.revoked && (!Array.isArray(item.allowedUserIds) || item.allowedUserIds.length === 0 || item.allowedUserIds.includes(user.id)) && (user.role === "tutor" ? item.allowTutors : item.allowTutees));
   visible.materialLogs = state.materialLogs.filter((item) => item.userId === user.id);
-  visible.activities = state.activities.filter((item) => item.userId === user.id);
+  visible.activities = state.activities.filter((item) => item.userId === user.id && item.kind !== "rating");
   visible.cohorts = state.cohorts.map((cohort) => ({
     ...cohort,
     enrolled: cohort.enrolled.map((id, index) => id === user.id ? id : `occupied-${index}`),

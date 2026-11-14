@@ -131,7 +131,7 @@ export function HistoryView({ userId, isAdmin }) {
     if (kind !== "all")
         list = list.filter((a) => a.kind === kind);
     return (<>
-      <PageHeader title="Activity History" subtitle={isAdmin ? "Ratings, matches, uploads, terminated contracts and bookings." : "Your matches, uploads, ratings and terminated contracts."}/>
+      <PageHeader title="Activity History" subtitle={isAdmin ? "Ratings, matches, uploads, terminated contracts and bookings." : "Your matches, uploads and terminated contracts."}/>
       <div className="mb-4 flex flex-wrap gap-2">
         {KINDS.map((k) => (<button key={k} onClick={() => setKind(k)} className={cn("rounded-full border px-3 py-1 text-xs font-bold capitalize", kind === k ? "border-brand-500 bg-brand-500 text-white" : "border-slate-200 bg-white text-slate-500")}>
             {k}

@@ -10,7 +10,7 @@ const palette = { academic: "#2563eb", reading: "#ffb800", playgroup: "#3f3f46" 
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function Panel({ title, children, className = "" }) {
-  return <Card className={`overflow-hidden rounded-xl border-0 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,.22)] ${className}`}>
+  return <Card className={`overflow-hidden rounded-xl border-0 bg-white p-4 !shadow-[0_8px_24px_rgba(15,23,42,.26)] ${className}`}>
     <h2 className="mb-3 text-sm font-extrabold text-slate-800">{title}</h2>{children}
   </Card>;
 }

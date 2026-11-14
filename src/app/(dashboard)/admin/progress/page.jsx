@@ -69,7 +69,7 @@ export default function AdminProgressPage() {
             <div><h2 className="text-xl font-extrabold">{selected.fullName}</h2></div>
             {subjects.length > 0 && <div className="w-full sm:w-64"><Select aria-label="Subject for chart" value={currentSubject} onChange={(e) => setSubjectFilter(e.target.value)}>{subjects.map((subject) => <option key={subject} value={subject}>{subject}</option>)}</Select></div>}
           </div>
-          <Card className="mb-5">
+          <Card className="mb-5 !shadow-[0_8px_24px_rgba(15,23,42,.26)]">
             <h3 className="mb-1 font-extrabold">Mastery checks over time{currentSubject ? ` · ${currentSubject}` : ""}</h3>
             {chartReports.length ? <ScoreChart reports={chartReports}/> : <Empty>No progress reports have been submitted for this student yet.</Empty>}
           </Card>

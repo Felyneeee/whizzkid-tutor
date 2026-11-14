@@ -74,7 +74,16 @@ export function authorizeBusinessAction(state, user, action, args) {
   }
   if (action === "rateSession") {
     const session = state.sessions.find((entry) => entry.id === safeArgs[0]);
+    const bookingSessions = session && state.sessions.filter((entry) => entry.bookingId === session.bookingId && entry.status !== "cancelled");
+    const finalSession = bookingSessions?.slice().sort((a, b) => `${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`))[0];
     if (!session || session.tuteeId !== user.id) return deny();
+    if (session.status !== "completed" || !bookingSessions?.length || bookingSessions.some((entry) => entry.status !== "completed") || finalSession.id !== session.id) {
+      return deny("You can rate your tutor after the final session is complete.");
+    }
+    if (!Number.isInteger(safeArgs[1]) || safeArgs[1] < 1 || safeArgs[1] > 5 || typeof safeArgs[2] !== "string" || safeArgs[2].length > 2000) {
+      return deny("Choose a rating from 1 to 5 stars and keep feedback under 2,000 characters.");
+    }
+    if (session.rating != null) return deny("This tutor has already been rated for this booking.");
   }
   if (action === "submitProgressReport") {
     const session = state.sessions.find((entry) => entry.id === safeArgs[0]);

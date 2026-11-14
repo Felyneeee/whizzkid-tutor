@@ -351,7 +351,9 @@ export function createBusinessActions({ get, mutate }) {
   rateSession(sessionId, rating, feedback) {
       mutate((n) => {
           const se = n.sessions.find((x) => x.id === sessionId);
-          if (!se)
+          const bookingSessions = se && n.sessions.filter((x) => x.bookingId === se.bookingId && x.status !== "cancelled");
+          const finalSession = bookingSessions?.slice().sort((a, b) => `${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`))[0];
+          if (!se || se.status !== "completed" || !bookingSessions?.length || bookingSessions.some((x) => x.status !== "completed") || finalSession.id !== se.id || se.rating != null || !Number.isInteger(rating) || rating < 1 || rating > 5 || typeof feedback !== "string" || feedback.length > 2000)
               return;
           se.rating = rating;
           se.feedback = feedback;
@@ -921,8 +923,8 @@ export function createBusinessActions({ get, mutate }) {
               booking.scheduleProposal = undefined;
               pushNotif(n, s.tuteeId, "The pending schedule proposal was withdrawn because the session was completed.", ["web"]);
           }
-          if (attended)
-              pushNotif(n, s.tuteeId, `Session on ${fmtDate(s.date)} marked completed. Please rate your tutor!`, ["web"]);
+          if (!open)
+              pushNotif(n, s.tuteeId, `Your final session on ${fmtDate(s.date)} is complete. You can now rate your tutor.`, ["web"]);
       });
   },
   submitProgressReport(sessionId, report, tutorId) {
