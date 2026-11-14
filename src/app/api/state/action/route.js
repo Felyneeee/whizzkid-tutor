@@ -70,17 +70,14 @@ export async function POST(request) {
           if (!current) templates.set(slot.seriesKey, slot);
           perDate.set(slot.date, (perDate.get(slot.date) || 0) + 1);
         }
-        const perSubject = new Map();
         const perDay = new Map();
         for (const template of templates.values()) {
-          perSubject.set(template.subject, (perSubject.get(template.subject) || 0) + 1);
           perDay.set(template.day, (perDay.get(template.day) || 0) + 1);
         }
         const weeks = recurrence.cycleWeeks;
         return booking.dates.length > 0 && booking.dates.length <= 5 * weeks && templates.size <= 5
           && [...perDate.values()].every((count) => count <= 2)
           && [...perDay.values()].every((count) => count <= 2)
-          && [...perSubject.values()].every((count) => count <= 2)
           && slots.length === templates.size * weeks
           && new Set(slots.map((slot) => slot.date)).size === booking.dates.length
           && booking.dates.length === recurrence.days.length * weeks;

@@ -67,11 +67,9 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
   const subjectForSlot = useCallback((day, index) => subjects[slotKey(day, index)] || selectedSubjects[0], [slotKey, subjects, selectedSubjects]);
   const subjectCountForOtherSlots = (subject, day, index) => {
     let count = 0;
-    for (const otherDay of days) {
-      for (let otherIndex = 0; otherIndex < slotCount(otherDay); otherIndex += 1) {
-        if (otherDay === day && otherIndex === index) continue;
-        if (subjectForSlot(otherDay, otherIndex) === subject) count += 1;
-      }
+    for (let otherIndex = 0; otherIndex < slotCount(day); otherIndex += 1) {
+      if (otherIndex === index) continue;
+      if (subjectForSlot(day, otherIndex) === subject) count += 1;
     }
     return count;
   };
@@ -117,9 +115,13 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
       return next;
     });
   }, [availability, days, slotCount, times, slotKey]);
-  const weeklySubjectCounts = days.reduce((counts, day) => { Array.from({ length: slotCount(day) }, (_, index) => subjectForSlot(day, index)).forEach((subject) => { counts[subject] = (counts[subject] || 0) + 1; }); return counts; }, {});
-  const missingSubjects = isAcademic ? selectedSubjects.filter((subject) => !weeklySubjectCounts[subject]) : [];
-  const subjectLimitOk = !isAcademic || Object.values(weeklySubjectCounts).every((count) => count <= 2);
+  const dailySubjectLimitOk = days.every((day) => {
+    const counts = Array.from({ length: slotCount(day) }, (_, index) => subjectForSlot(day, index)).reduce((all, subject) => ({ ...all, [subject]: (all[subject] || 0) + 1 }), {});
+    return Object.values(counts).every((count) => count <= 2);
+  });
+  const scheduledSubjects = days.map((day) => Array.from({ length: slotCount(day) }, (_, index) => subjectForSlot(day, index))).flat();
+  const missingSubjects = isAcademic ? selectedSubjects.filter((subject) => !scheduledSubjects.includes(subject)) : [];
+  const subjectLimitOk = !isAcademic || dailySubjectLimitOk;
   const sessionSlots = days.flatMap((day) => Array.from({ length: slotCount(day) }, (_, index) => byDay(day).map((date) => ({ seriesKey: slotKey(day, index), day, date, time: times[slotKey(day, index)], subject: subjectForSlot(day, index) })))).flat();
   const noAvailabilityDays = days.filter((day) => Array.from({ length: slotCount(day) }, (_, index) => availability(day, index).length === 0).some(Boolean));
   const hasUnavailableSelectedTime = days.some((day) => Array.from({ length: slotCount(day) }, (_, index) => {
@@ -135,7 +137,7 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
   if (start && days.length === 0) bookingBlockers.push("Select at least one weekday on the calendar.");
   if (days.length > 5 || weeklySlotCount > 5) bookingBlockers.push("Choose no more than five sessions per week.");
   if (weeks !== null && start && dates.length !== days.length * weeks) bookingBlockers.push("The selected dates do not cover the full cycle.");
-  if (!subjectLimitOk) bookingBlockers.push("Choose each subject no more than twice per week.");
+  if (!subjectLimitOk) bookingBlockers.push("Choose each subject no more than twice per day.");
   if (missingSubjects.length) bookingBlockers.push(`${missingSubjects.join(" and ")} still ${missingSubjects.length === 1 ? "needs" : "need"} a schedule. Add another session and assign ${missingSubjects.length === 1 ? "it" : "them"} before booking.`);
   if (noAvailabilityDays.length) bookingBlockers.push(`No times are available for ${noAvailabilityDays.map((day) => ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][day]).join(", ")} across this cycle. Change the cycle or selected weekdays.`);
   else if (hasMissingTime) bookingBlockers.push("Choose an available time for every selected session.");
@@ -173,7 +175,9 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
       setSelectedDays(nextDays);
       if (!nextDays.length) setFirstWeekStart("");
     } else {
-      if (!firstWeekStart) setFirstWeekStart(addDays(date, -day));
+      // Anchor the cycle on the first date the user selected. Anchoring to
+      // Sunday would make a Wednesday selection start the cycle on Sunday.
+      if (!firstWeekStart) setFirstWeekStart(date);
       setSelectedDays([...selectedDays, day]);
     }
   };
@@ -212,7 +216,7 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
           {weeks === null && <p className="text-sm text-slate-500">Choose a cycle length, then select weekdays on the calendar.</p>}
           {weeks !== null && !start && <p className="text-sm text-slate-500">Select a date on the calendar to set the first week.</p>}
           {cycleReady && <p className="text-sm text-slate-500">Select weekdays on the calendar. Each selected weekday will repeat every week of the cycle.</p>}
-          {days.length >= 1 && !subjectLimitOk && <Alert kind="warn">Choose each subject no more than twice per week.</Alert>}
+          {days.length >= 1 && !subjectLimitOk && <Alert kind="warn">Choose each subject no more than twice per day.</Alert>}
           <Button variant="danger" onClick={resetSchedule}>Reset schedule</Button>
         </div>
       </div>
@@ -229,7 +233,7 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
             <select value={subjectForSlot(day, index)} onChange={(e) => { setSubjects((old) => ({ ...old, [key]: e.target.value })); }} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100">
               {selectedSubjects.map((subject) => <option key={subject} value={subject} disabled={isAcademic && subject !== subjectForSlot(day, index) && subjectCountForOtherSlots(subject, day, index) >= 2}>{subject}</option>)}
             </select>
-            {isAcademic && hasSubjectAtLimit && <p className="mt-1 text-xs text-red-600">A subject already used in two other weekly sessions can’t be selected here.</p>}
+            {isAcademic && hasSubjectAtLimit && <p className="mt-1 text-xs text-red-600">A subject already used in two other sessions that day can’t be selected here.</p>}
           </Field>
           <select value={selectedTime || ""} onChange={(e) => { setTimes((old) => ({ ...old, [key]: e.target.value })); }} disabled={!availableTimes.length} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400">
             <option value="">{availableTimes.length ? "Please select an available time" : "No available times"}</option>

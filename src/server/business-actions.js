@@ -235,16 +235,13 @@ export function createBusinessActions({ get, mutate }) {
           const cycleWeeks = v.recurrence?.cycleWeeks;
           const slots = v.sessionSlots;
           const templates = new Map((slots || []).map((slot) => [slot.seriesKey, slot]));
-          const weeklySubjects = new Map([...templates.values()].map((slot) => [slot.seriesKey, slot.subject]));
-          const perSubject = new Map();
-          for (const subject of weeklySubjects.values()) perSubject.set(subject, (perSubject.get(subject) || 0) + 1);
           const perDate = new Map();
           for (const slot of slots || []) perDate.set(slot.date, (perDate.get(slot.date) || 0) + 1);
           const perDay = new Map();
           for (const slot of templates.values()) perDay.set(slot.day, (perDay.get(slot.day) || 0) + 1);
           const maxSessions = v.bookingType === "recurring" && [2, 3, 4].includes(cycleWeeks) ? 5 * cycleWeeks : 0;
-          if (!Array.isArray(slots) || !slots.length || !maxSessions || slots.length > maxSessions || v.dates.length < 1 || [...perDate.values()].some((count) => count > 2) || new Set(slots.map((slot) => `${slot.date}|${slot.time}`)).size !== slots.length || new Set(slots.map((slot) => slot.date)).size !== v.dates.length || !v.recurrence || !Array.isArray(v.recurrence.days) || v.recurrence.days.length < 1 || v.recurrence.days.length > 5 || v.dates.length !== v.recurrence.days.length * cycleWeeks || slots.length !== templates.size * cycleWeeks || templates.size > 5 || [...perDay.values()].some((count) => count > 2) || perSubject.size > 5 || [...perSubject.values()].some((count) => count > 2) || slots.some((slot) => !slot.seriesKey || !v.dates.includes(slot.date) || !HOURS.includes(slot.time) || !SUBJECTS.includes(slot.subject) || templates.get(slot.seriesKey)?.subject !== slot.subject || templates.get(slot.seriesKey)?.time !== slot.time || templates.get(slot.seriesKey)?.day !== slot.day))
-              return { ok: false, error: "Choose 1–5 sessions per week, with each subject selected no more than twice per week." };
+          if (!Array.isArray(slots) || !slots.length || !maxSessions || slots.length > maxSessions || v.dates.length < 1 || [...perDate.values()].some((count) => count > 2) || new Set(slots.map((slot) => `${slot.date}|${slot.time}`)).size !== slots.length || new Set(slots.map((slot) => slot.date)).size !== v.dates.length || !v.recurrence || !Array.isArray(v.recurrence.days) || v.recurrence.days.length < 1 || v.recurrence.days.length > 5 || v.dates.length !== v.recurrence.days.length * cycleWeeks || slots.length !== templates.size * cycleWeeks || templates.size > 5 || [...perDay.values()].some((count) => count > 2) || slots.some((slot) => !slot.seriesKey || !v.dates.includes(slot.date) || !HOURS.includes(slot.time) || !SUBJECTS.includes(slot.subject) || templates.get(slot.seriesKey)?.subject !== slot.subject || templates.get(slot.seriesKey)?.time !== slot.time || templates.get(slot.seriesKey)?.day !== slot.day))
+              return { ok: false, error: "Choose 1–5 sessions per week, with no more than two sessions for the same subject per day." };
       }
       if (v.program === "reading" && (!Array.isArray(v.sessionSlots) || v.sessionSlots.length !== v.dates.length || v.sessionSlots.some((slot) => !v.dates.includes(slot.date) || slot.subject !== "Reading" || !HOURS.includes(slot.time) || slot.time !== v.sessionTimes?.[slot.date])))
           return { ok: false, error: "Choose an available time for each Reading Program session." };

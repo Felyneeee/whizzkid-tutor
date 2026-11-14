@@ -19,7 +19,9 @@ export function expandBookingDates(opts) {
         return opts.date ? [opts.date] : [];
     if (!opts.start || !opts.end || !opts.days?.length)
         return [];
-    return rangeDates(opts.start, opts.end).filter((d) => opts.days.includes(weekday(d)));
+    // `start` is the first schedule day, not merely the start of a calendar
+    // week. Never backfill an earlier selected weekday in that first week.
+    return rangeDates(opts.start, opts.end).filter((d) => d >= opts.start && opts.days.includes(weekday(d)));
 }
 // ---------- Leave / availability / sessions ----------
 export function onApprovedLeave(db, tutorId, date) {
