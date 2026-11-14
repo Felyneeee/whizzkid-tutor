@@ -239,9 +239,14 @@ export function createBusinessActions({ get, mutate }) {
           for (const slot of slots || []) perDate.set(slot.date, (perDate.get(slot.date) || 0) + 1);
           const perDay = new Map();
           for (const slot of templates.values()) perDay.set(slot.day, (perDay.get(slot.day) || 0) + 1);
-          const maxSessions = v.bookingType === "recurring" && [2, 3, 4].includes(cycleWeeks) ? 5 * cycleWeeks : 0;
-          if (!Array.isArray(slots) || !slots.length || !maxSessions || slots.length > maxSessions || v.dates.length < 1 || [...perDate.values()].some((count) => count > 2) || new Set(slots.map((slot) => `${slot.date}|${slot.time}`)).size !== slots.length || new Set(slots.map((slot) => slot.date)).size !== v.dates.length || !v.recurrence || !Array.isArray(v.recurrence.days) || v.recurrence.days.length < 1 || v.recurrence.days.length > 5 || v.dates.length !== v.recurrence.days.length * cycleWeeks || slots.length !== templates.size * cycleWeeks || templates.size > 5 || [...perDay.values()].some((count) => count > 2) || slots.some((slot) => !slot.seriesKey || !v.dates.includes(slot.date) || !HOURS.includes(slot.time) || !SUBJECTS.includes(slot.subject) || templates.get(slot.seriesKey)?.subject !== slot.subject || templates.get(slot.seriesKey)?.time !== slot.time || templates.get(slot.seriesKey)?.day !== slot.day))
-              return { ok: false, error: "Choose 1–5 sessions per week, with no more than two sessions for the same subject per day." };
+          const maxSessions = v.bookingType === "recurring" && [2, 3, 4].includes(cycleWeeks) ? 18 * cycleWeeks : 0;
+          const perDaySubject = new Map();
+          for (const slot of templates.values()) {
+            const key = `${slot.day}|${slot.subject}`;
+            perDaySubject.set(key, (perDaySubject.get(key) || 0) + 1);
+          }
+          if (!Array.isArray(slots) || !slots.length || !maxSessions || slots.length > maxSessions || v.dates.length < 1 || [...perDate.values()].some((count) => count > 3) || new Set(slots.map((slot) => `${slot.date}|${slot.time}`)).size !== slots.length || new Set(slots.map((slot) => slot.date)).size !== v.dates.length || !v.recurrence || !Array.isArray(v.recurrence.days) || v.recurrence.days.length < 1 || v.recurrence.days.length > 6 || v.dates.length !== v.recurrence.days.length * cycleWeeks || slots.length !== templates.size * cycleWeeks || templates.size > 18 || [...perDay.values()].some((count) => count > 3) || [...perDaySubject.values()].some((count) => count > 2) || !Array.isArray(v.subjects) || v.subjects.length < 1 || v.subjects.length > 5 || v.subjects.some((subject) => !SUBJECTS.includes(subject)) || new Set(v.subjects).size !== v.subjects.length || slots.some((slot) => !slot.seriesKey || !v.dates.includes(slot.date) || !HOURS.includes(slot.time) || !SUBJECTS.includes(slot.subject) || !v.subjects.includes(slot.subject) || templates.get(slot.seriesKey)?.subject !== slot.subject || templates.get(slot.seriesKey)?.time !== slot.time || templates.get(slot.seriesKey)?.day !== slot.day))
+              return { ok: false, error: "Choose 1–3 sessions per day and no more than 18 per week, with at most two sessions for the same subject per day and five subjects per request." };
       }
       if (v.program === "reading" && (!Array.isArray(v.sessionSlots) || v.sessionSlots.length !== v.dates.length || v.sessionSlots.some((slot) => !v.dates.includes(slot.date) || slot.subject !== "Reading" || !HOURS.includes(slot.time) || slot.time !== v.sessionTimes?.[slot.date])))
           return { ok: false, error: "Choose an available time for each Reading Program session." };
@@ -873,6 +878,24 @@ export function createBusinessActions({ get, mutate }) {
       });
       return { ok: true };
   },
+  cancelPlaygroupBooking(bookingId) {
+      const booking = get().bookings.find((entry) => entry.id === bookingId);
+      if (!booking || booking.program !== "playgroup" || !["pending", "approved", "confirmed", "awaiting_admin"].includes(booking.status))
+          return { ok: false, error: "Only an active Playgroup booking can be cancelled." };
+      mutate((n) => {
+          const target = n.bookings.find((entry) => entry.id === bookingId);
+          target.status = "cancelled";
+          target.bookingStatus = "cancelled";
+          target.tutorAssignmentStatus = "cancelled";
+          target.tutorAssignments = {};
+          target.tutorId = undefined;
+          const cohort = n.cohorts.find((entry) => entry.id === target.cohortId);
+          if (cohort) cohort.enrolled = cohort.enrolled.filter((tuteeId) => tuteeId !== target.tuteeId);
+          pushNotif(n, target.tuteeId, `Your Playgroup booking${cohort ? ` for ${cohort.label}` : ""} was cancelled and its slot released.`, ["web"]);
+          pushAdmins(n, `${nameOf(n, target.tuteeId)} cancelled their Playgroup booking${cohort ? ` for ${cohort.label}` : ""}.`);
+      });
+      return { ok: true };
+  },
   terminateBooking(bookingId, reason) {
       mutate((n) => {
           const b = n.bookings.find((x) => x.id === bookingId);
@@ -1152,7 +1175,7 @@ export function createBusinessActions({ get, mutate }) {
   },
   approvePlaygroupBooking(bookingId) {
       const booking = get().bookings.find((b) => b.id === bookingId && b.program === "playgroup");
-      if (!booking || booking.status !== "pending") return { ok: false, error: "This Playgroup booking is no longer pending." };
+      if (!booking || !["pending", "awaiting_admin"].includes(booking.status)) return { ok: false, error: "This Playgroup booking is no longer waiting for approval." };
       if (!booking.dates.every((date) => booking.tutorAssignments?.[date])) return { ok: false, error: "Assign an available tutor for every Playgroup weekday before approving this booking." };
       const assignedTutorIds = [...new Set(Object.values(booking.tutorAssignments))];
       mutate((n) => {

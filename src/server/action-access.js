@@ -9,7 +9,7 @@ const ADMIN_ACTIONS = new Set([
 ]);
 
 const TUTEE_ACTIONS = new Set([
-  "requestAssessment", "cancelAssessment", "cancelTutorialBooking", "bookPlaygroup", "submitTutorialBooking", "placeOrder",
+  "requestAssessment", "cancelAssessment", "cancelTutorialBooking", "bookPlaygroup", "cancelPlaygroupBooking", "submitTutorialBooking", "placeOrder",
   "rateSession",
 ]);
 const TUTOR_ACTIONS = new Set(["submitAvailability", "submitLeave", "submitProgressReport", "checkInSession"]);
@@ -96,6 +96,10 @@ export function authorizeBusinessAction(state, user, action, args) {
   if (action === "cancelTutorialBooking") {
     const booking = state.bookings.find((entry) => entry.id === safeArgs[0]);
     if (!booking || booking.tuteeId !== user.id) return deny();
+  }
+  if (action === "cancelPlaygroupBooking") {
+    const booking = state.bookings.find((entry) => entry.id === safeArgs[0]);
+    if (user.role !== "tutee" || !booking || booking.program !== "playgroup" || booking.tuteeId !== user.id) return deny();
   }
   if (action === "decideBookingScheduleProposal") {
     const booking = state.bookings.find((entry) => entry.id === safeArgs[0]);

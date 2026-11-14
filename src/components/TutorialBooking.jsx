@@ -129,13 +129,14 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
     return time && !availability(day, index).includes(time);
   }).some(Boolean));
   const hasMissingTime = sessionSlots.some((slot) => !slot.time);
-  const ready = weeks !== null && !!start && days.length >= 1 && days.length <= 5 && weeklySlotCount <= 5
+  const ready = weeks !== null && !!start && days.length >= 1 && days.length <= 6 && weeklySlotCount >= 1 && weeklySlotCount <= 18 && selectedSubjects.length <= 5
     && dates.length === days.length * weeks && !hasMissingTime && !hasUnavailableSelectedTime && subjectLimitOk && missingSubjects.length === 0;
   const bookingBlockers = [];
   if (weeks === null) bookingBlockers.push("Choose a cycle length.");
   else if (!start) bookingBlockers.push("Select a day on the calendar to set the first week.");
   if (start && days.length === 0) bookingBlockers.push("Select at least one weekday on the calendar.");
-  if (days.length > 5 || weeklySlotCount > 5) bookingBlockers.push("Choose no more than five sessions per week.");
+  if (weeklySlotCount > 18) bookingBlockers.push("Choose no more than 18 sessions per week.");
+  if (selectedSubjects.length > 5) bookingBlockers.push("Choose no more than five subjects per request.");
   if (weeks !== null && start && dates.length !== days.length * weeks) bookingBlockers.push("The selected dates do not cover the full cycle.");
   if (!subjectLimitOk) bookingBlockers.push("Choose each subject no more than twice per day.");
   if (missingSubjects.length) bookingBlockers.push(`${missingSubjects.join(" and ")} still ${missingSubjects.length === 1 ? "needs" : "need"} a schedule. Add another session and assign ${missingSubjects.length === 1 ? "it" : "them"} before booking.`);
@@ -222,7 +223,7 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
       </div>
     </Card>
     {days.length > 0 && <div className="grid gap-4 md:grid-cols-2">{days.map((day) => <Card key={day} className="space-y-3 p-5">
-      <div className="flex items-center justify-between"><h3 className="font-extrabold">{["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][day]}</h3>{isAcademic && slotCount(day) === 1 && weeklySlotCount < 5 ? <Button size="sm" variant="secondary" onClick={() => setSlotCounts((old) => ({ ...old, [day]: 2 }))}>Add second session</Button> : isAcademic && slotCount(day) === 2 ? <Button size="sm" variant="secondary" onClick={() => { setSlotCounts((old) => ({ ...old, [day]: 1 })); setTimes((old) => { const next = { ...old }; delete next[slotKey(day, 1)]; return next; }); setSubjects((old) => { const next = { ...old }; delete next[slotKey(day, 1)]; return next; }); }}>Remove second session</Button> : null}</div>
+      <div className="flex items-center justify-between"><h3 className="font-extrabold">{["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][day]}</h3>{isAcademic && slotCount(day) < 3 && weeklySlotCount < 18 ? <Button size="sm" variant="secondary" onClick={() => setSlotCounts((old) => ({ ...old, [day]: slotCount(day) + 1 }))}>Add session</Button> : null}{isAcademic && slotCount(day) > 1 ? <Button size="sm" variant="secondary" onClick={() => { const removeIndex = slotCount(day) - 1; setSlotCounts((old) => ({ ...old, [day]: removeIndex })); setTimes((old) => { const next = { ...old }; delete next[slotKey(day, removeIndex)]; return next; }); setSubjects((old) => { const next = { ...old }; delete next[slotKey(day, removeIndex)]; return next; }); }}>Remove session</Button> : null}</div>
       {Array.from({ length: slotCount(day) }, (_, index) => {
         const key = slotKey(day, index);
         const availableTimes = availability(day, index);
@@ -243,7 +244,7 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
         </div>;
       })}
     </Card>)}</div>}
-    {isAcademic && <Alert kind="warn">Note: A subject can be scheduled for up to 2 sessions per day. If it is already used in two sessions that day, it cannot be selected again.</Alert>}
+    {isAcademic && <Alert kind="warn">Limits: 3 sessions per day, 18 per week, and 2 sessions for the same subject per day. Choose up to 5 subjects and at least 1 session.</Alert>}
     <Card className="space-y-3 p-5 sm:p-6">
       <h3 className="font-extrabold">Booking summary</h3>
       {isAcademic && selectedSubjects.length > 1 && (missingSubjects.length ? <Alert kind="warn">Would you like to proceed with booking? {missingSubjects.join(" and ")} still {missingSubjects.length === 1 ? "needs" : "need"} a schedule, since you selected {selectedSubjects.join(" and ")}. Please add {missingSubjects.length === 1 ? "a" : "the required"} session{missingSubjects.length === 1 ? "" : "s"} and assign {missingSubjects.length === 1 ? "it" : "each subject"} before continuing.</Alert> : <Alert kind="success">All selected subjects are included in your schedule: {selectedSubjects.join(", ")}.</Alert>)}

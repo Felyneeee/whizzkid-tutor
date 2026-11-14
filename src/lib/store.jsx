@@ -9,7 +9,7 @@ const Ctx = createContext(null);
 const BUSINESS_ACTIONS = [
   "notify", "markNotificationsRead", "markMessageNotificationsRead", "sendMessage",
   "saveTuteeProfile", "saveTutorProfile", "requestAssessment", "scheduleAssessment", "completeAssessment", "cancelAssessment", "cancelTutorialBooking",
-  "bookPlaygroup", "submitTutorialBooking", "placeOrder", "rateSession", "submitAvailability", "submitLeave",
+  "bookPlaygroup", "cancelPlaygroupBooking", "submitTutorialBooking", "placeOrder", "rateSession", "submitAvailability", "submitLeave",
   "scheduleInterview", "evaluateApplicant", "verifyExistingTutor", "setTutorPay", "approveAvailability",
   "adminEditTutorAvailability", "setTutorWeeklySchedule", "rejectAvailability", "decideLeave", "adminLeave", "proposeBookingSchedule",
   "decideBookingScheduleProposal", "confirmBooking", "confirmBookingSession", "confirmReadingAssignment", "rejectReadingAssignment", "rejectBooking", "terminateBooking", "completeSession",

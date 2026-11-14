@@ -6,6 +6,7 @@ import { useStore } from "@/lib/store";
 export default function TuteeRequests() {
     const s = useStore();
     const [proposalMsg, setProposalMsg] = useState({});
+    const [cancelMsg, setCancelMsg] = useState({});
     const id = s.me.id;
     const bookings = s.db.bookings.filter((b) => b.tuteeId === id && (["pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "rejected", "cancelled", "expired"].includes(b.status) || (b.program === "reading" && b.status === "pending") || (b.program === "playgroup" && ["pending", "approved", "confirmed", "declined"].includes(b.status)) || !!b.scheduleProposal)).reverse();
     const linkedAssessmentIds = new Set(s.db.bookings.filter((b) => b.tuteeId === id && b.program === "reading" && ["pending", "pending_assessment", "assessment_scheduled"].includes(b.status)).map((b) => b.assessmentId));
@@ -41,6 +42,10 @@ export default function TuteeRequests() {
               </div>
               <Badge status={b.status}>{(b.status === "pending_assessment" || (b.program === "reading" && b.status === "pending")) ? s.db.assessments.find((a) => a.id === b.assessmentId)?.status === "booked" ? "Awaiting assessment results" : "Awaiting initial assessment" : undefined}</Badge>
               {["pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin"].includes(b.status) || (b.program === "reading" && b.status === "pending") ? <Button size="sm" variant="secondary" onClick={() => s.cancelTutorialBooking(b.id)}>Cancel request</Button> : null}
+              {b.program === "playgroup" && ["pending", "approved", "confirmed", "awaiting_admin"].includes(b.status) && <Button size="sm" variant="secondary" onClick={async () => {
+                const result = await s.cancelPlaygroupBooking(b.id);
+                setCancelMsg((current) => ({ ...current, [b.id]: { kind: result.ok ? "success" : "error", text: result.ok ? "Playgroup booking cancelled. The cohort slot has been released." : result.error } }));
+              }}>Cancel Playgroup booking</Button>}
             </div>
             {b.program === "playgroup" && <div className="mt-2 text-xs text-slate-600">Booking: {b.bookingStatus || b.status} · Tutor: {b.tutorAssignmentStatus || (b.tutorId ? "Assigned" : "Unassigned")}{b.tutorId ? ` (${s.db.tutors.find((t) => t.userId === b.tutorId)?.fullName || "Tutor"})` : ""}</div>}
             {b.scheduleProposal && (<div className="mt-3 space-y-3 rounded-xl border border-sunny-200 bg-sunny-50 p-3">
@@ -57,6 +62,7 @@ export default function TuteeRequests() {
                 }}>Decline</Button>
                 </div>
               </div>)}
+            {cancelMsg[b.id] && <div className="mt-3"><Alert kind={cancelMsg[b.id].kind}>{cancelMsg[b.id].text}</Alert></div>}
             {proposalMsg[b.id] && <div className="mt-3"><Alert kind={proposalMsg[b.id].kind}>{proposalMsg[b.id].text}</Alert></div>}
           </Card>))}
         {orders.map((o) => (<Card key={o.id} className="flex items-center justify-between !p-4">

@@ -60,7 +60,7 @@ export async function POST(request) {
         const recurrence = booking.recurrence;
         const slots = booking.sessionSlots;
         if (!Array.isArray(slots) || !slots.length) return false;
-        if (booking.bookingType !== "recurring" || !recurrence || ![2, 3, 4].includes(recurrence.cycleWeeks) || !Array.isArray(recurrence.days) || recurrence.days.length < 1 || recurrence.days.length > 5) return false;
+        if (booking.bookingType !== "recurring" || !recurrence || ![2, 3, 4].includes(recurrence.cycleWeeks) || !Array.isArray(recurrence.days) || recurrence.days.length < 1 || recurrence.days.length > 6) return false;
         const templates = new Map();
         const perDate = new Map();
         for (const slot of slots) {
@@ -71,21 +71,27 @@ export async function POST(request) {
           perDate.set(slot.date, (perDate.get(slot.date) || 0) + 1);
         }
         const perDay = new Map();
+        const perDaySubject = new Map();
         for (const template of templates.values()) {
           perDay.set(template.day, (perDay.get(template.day) || 0) + 1);
+          const key = `${template.day}|${template.subject}`;
+          perDaySubject.set(key, (perDaySubject.get(key) || 0) + 1);
         }
         const weeks = recurrence.cycleWeeks;
-        return booking.dates.length > 0 && booking.dates.length <= 5 * weeks && templates.size <= 5
-          && [...perDate.values()].every((count) => count <= 2)
-          && [...perDay.values()].every((count) => count <= 2)
+        return booking.dates.length > 0 && booking.dates.length <= 18 * weeks && templates.size <= 18
+          && [...perDate.values()].every((count) => count <= 3)
+          && [...perDay.values()].every((count) => count <= 3)
+          && [...perDaySubject.values()].every((count) => count <= 2)
           && slots.length === templates.size * weeks
           && new Set(slots.map((slot) => slot.date)).size === booking.dates.length
-          && booking.dates.length === recurrence.days.length * weeks;
+          && booking.dates.length === recurrence.days.length * weeks
+          && Array.isArray(booking.subjects) && booking.subjects.length >= 1 && booking.subjects.length <= 5
+          && slots.every((slot) => booking.subjects.includes(slot.subject));
       };
       const valid = booking && typeof booking === "object"
         && ["reading", "academic"].includes(booking.program)
         && (booking.program === "reading" ? booking.subject === "Reading" : SUBJECTS.includes(booking.subject))
-        && (booking.program !== "academic" || (Array.isArray(booking.subjects) && booking.subjects.length > 0 && booking.subjects.every((subject) => SUBJECTS.includes(subject)) && new Set(booking.subjects).size === booking.subjects.length))
+        && (booking.program !== "academic" || (Array.isArray(booking.subjects) && booking.subjects.length > 0 && booking.subjects.length <= 5 && booking.subjects.every((subject) => SUBJECTS.includes(subject)) && new Set(booking.subjects).size === booking.subjects.length))
         && GRADE_LEVELS.includes(booking.gradeLevel)
         && ["online", "face-to-face"].includes(booking.modality)
         && typeof booking.learningNeeds === "string" && booking.learningNeeds.length <= 2000
@@ -133,7 +139,7 @@ export async function POST(request) {
           && new Set(recurrence.days).size === recurrence.days.length
           && validDate(recurrence.start) && validDate(recurrence.end)
           && JSON.stringify(expandBookingDates({ type: "recurring", start: recurrence.start, end: recurrence.end, days: recurrence.days })) === JSON.stringify(booking.dates)
-          && (booking.program !== "academic" || ([2, 3, 4].includes(recurrence.cycleWeeks) && recurrence.days.length >= 1 && recurrence.days.length <= 5 && booking.dates.length <= 5 * recurrence.cycleWeeks));
+          && (booking.program !== "academic" || ([2, 3, 4].includes(recurrence.cycleWeeks) && recurrence.days.length >= 1 && recurrence.days.length <= 6 && booking.dates.length <= 18 * recurrence.cycleWeeks));
         if (!recurrenceValid) {
           await connection.rollback();
           return NextResponse.json({ error: "Weekly schedule details are invalid." }, { status: 400 });

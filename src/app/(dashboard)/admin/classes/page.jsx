@@ -26,6 +26,7 @@ export default function Classes() {
     const [cohortOpen, setCohortOpen] = useState(false);
     const [cohortError, setCohortError] = useState("");
     const [pageError, setPageError] = useState("");
+    const [bookingActionErrors, setBookingActionErrors] = useState({});
     const [editingCohortId, setEditingCohortId] = useState(null);
     const [c, setC] = useState({ label: "", startDate: "", weekdays: COHORT_WEEKDAYS, time: "10:00", modality: "face-to-face", capacity: 6, sessionsCount: 12, assignmentMode: "manual", weekdayTutorIds: {} });
     const nm = (id) => s.db.tutees.find((t) => t.userId === id)?.fullName || id;
@@ -141,17 +142,28 @@ export default function Classes() {
               <div className="flex flex-wrap gap-2">
                 {cohort.enrolled.map((id) => <span key={id} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">{nm(id)}<button aria-label={`Remove ${nm(id)}`} className="text-coral-600" onClick={() => confirm(`Remove ${nm(id)} from this cohort?`) && s.removeFromCohort(cohort.id, id)}>×</button></span>)}
               </div>
-              {activeBookings.map((booking) => {
+              {cohort.enrolled.map((studentId) => {
+                const booking = [...s.db.bookings].reverse().find((entry) => entry.program === "playgroup" && entry.cohortId === cohort.id && entry.tuteeId === studentId);
+                if (!booking) return <div key={studentId} className="flex flex-wrap items-center gap-2 text-sm"><span className="font-bold">{nm(studentId)}</span><span className="text-xs text-slate-500">No booking request is linked to this roster entry.</span></div>;
                 const tutorNameForDay = (day) => {
                   const date = booking.dates?.find((sessionDate) => weekday(sessionDate) === day);
                   const tutorId = date ? booking.tutorAssignments?.[date] : cohort.weekdayTutorIds?.[day];
                   return s.db.tutors.find((tutor) => tutor.userId === tutorId)?.fullName || "—";
                 };
+                const awaitingApproval = ["pending", "awaiting_admin"].includes(booking.status);
+                const hasAllTutors = !!booking.dates?.length && booking.dates.every((date) => booking.tutorAssignments?.[date]);
                 return <div key={booking.id} className="flex flex-wrap items-center gap-2 text-sm">
                   <span className="font-bold">{nm(booking.tuteeId)}</span>
                   <Badge status={booking.status}/>
                   <span className="text-xs text-slate-500">Mon: {tutorNameForDay(1)} · Wed: {tutorNameForDay(3)} · Fri: {tutorNameForDay(5)}</span>
-                  {booking.status === "pending" && <Button size="sm" disabled={!booking.dates?.length || !booking.dates.every((date) => booking.tutorAssignments?.[date] || cohort.weekdayTutorIds?.[weekday(date)])} onClick={() => s.approvePlaygroupBooking(booking.id)}>Approve reservation</Button>}
+                  {awaitingApproval && <>
+                    <Button size="sm" variant="success" disabled={!hasAllTutors} onClick={async () => {
+                      const result = await s.approvePlaygroupBooking(booking.id);
+                      if (!result.ok) setBookingActionErrors((current) => ({ ...current, [booking.id]: result.error }));
+                    }}>Approve</Button>
+                    {!hasAllTutors && <span className="text-xs text-slate-500">Assign tutors for all 12 sessions to enable approval.</span>}
+                    {bookingActionErrors[booking.id] && <span className="text-xs text-red-600">{bookingActionErrors[booking.id]}</span>}
+                  </>}
                 </div>;
               })}
             </section>
