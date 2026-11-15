@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Calendar } from "@/components/Calendar";
 import { TutorialBooking } from "@/components/TutorialBooking";
 import { Alert, Badge, Button, Card, Chips, Field, PageHeader, Select, Textarea, cn, peso } from "@/components/ui";
@@ -158,6 +158,37 @@ function PlaygroupFlow() {
     const months = ageMonths(profile.birthday);
     const eligible = months !== null && months >= 34 && months < 60; // 2.8 – 4.x yrs
     const today = todayISO();
+    const myPlaygroupBookings = s.db.bookings
+      .filter((booking) => booking.tuteeId === id && String(booking.program || "").toLowerCase() === "playgroup" && ["pending", "awaiting_admin", "approved", "confirmed"].includes(String(booking.status || booking.bookingStatus || "").toLowerCase()))
+      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+    const myEnrolledBooking = myPlaygroupBookings.find((booking) => ["approved", "confirmed"].includes(String(booking.status || booking.bookingStatus || "").toLowerCase()));
+    const myPendingBooking = myPlaygroupBookings.find((booking) => ["pending", "awaiting_admin"].includes(String(booking.status || booking.bookingStatus || "").toLowerCase()));
+    useEffect(() => {
+      const signature = JSON.stringify(s.db.bookings
+        .filter((booking) => booking.tuteeId === id && String(booking.program || "").toLowerCase() === "playgroup")
+        .map((booking) => [booking.id, booking.cohortId || "", booking.status || booking.bookingStatus || ""])
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+      const refreshIfChanged = async () => {
+        if (document.visibilityState !== "visible") return;
+        try {
+          const response = await fetch("/api/state", { credentials: "same-origin", cache: "no-store" });
+          if (!response.ok) return;
+          const payload = await response.json();
+          const nextSignature = JSON.stringify((payload.db?.bookings || [])
+            .filter((booking) => booking.tuteeId === id && String(booking.program || "").toLowerCase() === "playgroup")
+            .map((booking) => [booking.id, booking.cohortId || "", booking.status || booking.bookingStatus || ""])
+            .sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+          if (nextSignature !== signature) window.location.reload();
+        } catch { /* Keep the current page if the refresh check cannot reach the server. */ }
+      };
+      const timer = window.setInterval(refreshIfChanged, 8000);
+      const handleVisibility = () => { if (document.visibilityState === "visible") void refreshIfChanged(); };
+      document.addEventListener("visibilitychange", handleVisibility);
+      return () => {
+        window.clearInterval(timer);
+        document.removeEventListener("visibilitychange", handleVisibility);
+      };
+    }, [id, s.db.bookings]);
     const cohorts = s.db.cohorts
         .map((c) => ({ c, dates: cohortSessionDates(c).slice().sort() }))
         .filter(({ dates }) => dates[0] >= today)
@@ -171,10 +202,15 @@ function PlaygroupFlow() {
         });
     const selectedCohort = cohorts.find(({ c }) => c.id === selectedCohortId) || cohorts.find((cohort) => cohort.left > 0) || cohorts[0];
     const alreadyReserved = selectedCohort?.active.some((booking) => booking.tuteeId === id);
+    const trackedBooking = myEnrolledBooking || myPendingBooking;
+    const trackedCohort = trackedBooking && (s.db.cohorts.find((cohort) => cohort.id === trackedBooking.cohortId)
+      || s.db.cohorts.find((cohort) => trackedBooking.dates?.length && trackedBooking.dates.every((date) => cohortSessionDates(cohort).includes(date))));
     const book = async () => {
         const r = await s.bookPlaygroup(id, selectedCohort.c.id);
         setMsg(r.ok ? { kind: "success", text: "Booking submitted. It is pending administrator approval; tutor assignment may still be pending." } : { kind: "error", text: r.error });
     };
+    if (myEnrolledBooking) return <div className="rounded-3xl bg-gradient-to-br from-blue-50 via-slate-50 to-amber-50 p-2 sm:p-4"><Card className="mx-auto max-w-2xl space-y-3 border-0 text-center shadow-sm"><Badge status="approved">Enrolled</Badge><h2 className="text-xl font-extrabold">Student is currently enrolled in the recent Playgroup cohort</h2><p className="text-slate-600">{trackedCohort ? `Cohort: ${trackedCohort.label}` : "The student is enrolled in the recent Playgroup cohort."}</p>{trackedBooking.dates?.length > 0 && <p className="text-sm text-slate-500">{fmtDate(trackedBooking.dates[0])} until {fmtDate(trackedBooking.dates[trackedBooking.dates.length - 1])} · 12 sessions</p>}<p className="text-sm text-slate-500">The cohort booking page is unavailable while the student is enrolled.</p></Card></div>;
+    if (myPendingBooking) return <div className="rounded-3xl bg-gradient-to-br from-blue-50 via-slate-50 to-amber-50 p-2 sm:p-4"><Card className="mx-auto max-w-2xl space-y-3 border-0 text-center shadow-sm"><Badge status="pending">Pending approval</Badge><h2 className="text-xl font-extrabold">Playgroup booking request received</h2><p className="text-slate-600">Your request for {trackedCohort?.label || "the Playgroup cohort"} has been submitted and is waiting for administrator approval.</p>{myPendingBooking.dates?.length > 0 && <p className="text-sm text-slate-500">{fmtDate(myPendingBooking.dates[0])} until {fmtDate(myPendingBooking.dates[myPendingBooking.dates.length - 1])} · 12 sessions</p>}<p className="text-sm text-slate-500">We’ll notify you when the request is approved or declined.</p></Card></div>;
     return (<div className="space-y-5 rounded-3xl bg-gradient-to-br from-blue-50 via-slate-50 to-amber-50 p-1 sm:p-2">
       <Card className="border-0 shadow-sm">
         <h2 className="text-lg font-extrabold">Playgroup cohort</h2>

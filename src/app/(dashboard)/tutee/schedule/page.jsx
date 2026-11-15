@@ -1,6 +1,6 @@
 "use client";
 import { Star } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Calendar } from "@/components/Calendar";
 import { Badge, Button, Card, Empty, Modal, PageHeader, Textarea, cn } from "@/components/ui";
 import { addDays, firstName, fmtDate, fmtDateTime, fmtTime, todayISO, weekday } from "@/lib/dates";
@@ -11,9 +11,35 @@ export default function TuteeSchedule() {
     const [rating, setRating] = useState(null);
     const today = todayISO();
     const [selectedDate, setSelectedDate] = useState(today);
+    const statusOf = (booking) => String(booking.status || booking.bookingStatus || "").toLowerCase();
+    const isPlaygroup = (booking) => String(booking.program || "").toLowerCase() === "playgroup";
+    useEffect(() => {
+      const signatureOf = (bookings) => JSON.stringify((bookings || [])
+        .filter((booking) => booking.tuteeId === id && isPlaygroup(booking))
+        .map((booking) => [booking.id, booking.cohortId || "", statusOf(booking)])
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+      const signature = signatureOf(s.db.bookings);
+      const refreshIfChanged = async () => {
+        if (document.visibilityState !== "visible") return;
+        try {
+          const response = await fetch("/api/state", { credentials: "same-origin", cache: "no-store" });
+          if (!response.ok) return;
+          const payload = await response.json();
+          if (signatureOf(payload.db?.bookings) !== signature) window.location.reload();
+        } catch { /* Keep the current page if the refresh check cannot reach the server. */ }
+      };
+      const timer = window.setInterval(refreshIfChanged, 8000);
+      const handleVisibility = () => { if (document.visibilityState === "visible") void refreshIfChanged(); };
+      document.addEventListener("visibilitychange", handleVisibility);
+      return () => {
+        window.clearInterval(timer);
+        document.removeEventListener("visibilitychange", handleVisibility);
+      };
+    }, [id, s.db.bookings]);
     const sessions = s.db.sessions.filter((x) => x.tuteeId === id).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
     const assessments = s.db.assessments.filter((a) => a.tuteeId === id && a.date && ["booked", "completed"].includes(a.status));
-    const playgroupBookings = s.db.bookings.filter((b) => b.tuteeId === id && b.program === "playgroup" && ["pending", "approved", "confirmed"].includes(b.status));
+    const playgroupBookings = s.db.bookings.filter((b) => b.tuteeId === id && isPlaygroup(b) && ["approved", "confirmed"].includes(statusOf(b)));
+    const upcomingPlaygroupBookings = playgroupBookings.filter((booking) => (booking.dates || []).some((date) => date >= today)).sort((a, b) => String(a.dates?.[0] || "").localeCompare(String(b.dates?.[0] || "")));
     const sessionsByDate = {};
     sessions.forEach((session) => { (sessionsByDate[session.date] ??= []).push(session); });
     const assessmentsByDate = {};
@@ -55,7 +81,7 @@ export default function TuteeSchedule() {
             <h2 className="text-xl font-extrabold">{fmtDate(selectedDate)}</h2>
             <p className="text-sm text-slate-500">{daySessions.length} session{daySessions.length === 1 ? "" : "s"} · {dayAssessments.length} initial assessment{dayAssessments.length === 1 ? "" : "s"} · {playgroupsByDate[selectedDate]?.length ?? 0} Playgroup class{(playgroupsByDate[selectedDate]?.length ?? 0) === 1 ? "" : "es"}</p>
           </div>
-          {daySessions.length === 0 && dayAssessments.length === 0 && <Empty>No sessions or initial assessments on this day.</Empty>}
+          {daySessions.length === 0 && dayAssessments.length === 0 && !(playgroupsByDate[selectedDate]?.length) && <Empty>No sessions or initial assessments on this day.</Empty>}
           {daySessions.map((x) => (<Card key={x.id} className="flex flex-wrap items-center gap-3">
               <div className="min-w-20 rounded-xl bg-brand-50 px-3 py-2 text-center font-extrabold text-brand-700">{fmtTime(x.time)}</div>
               <div className="min-w-[180px] flex-1">
@@ -91,6 +117,11 @@ export default function TuteeSchedule() {
           })}
         </section>
       </div>
+      {upcomingPlaygroupBookings.length > 0 && <section className="mt-6 space-y-3"><h2 className="text-xl font-extrabold">Enrolled Playgroup cohort</h2>{upcomingPlaygroupBookings.map((booking) => {
+        const cohort = s.db.cohorts.find((item) => item.id === booking.cohortId);
+        const dates = (booking.dates || []).slice().sort();
+        return <Card key={`playgroup-cohort-${booking.id}`} className="flex flex-wrap items-center justify-between gap-3 border-mint-200 bg-mint-50/40"><div><div className="font-extrabold">{cohort?.label || "Playgroup"}</div><div className="text-sm text-slate-600">{dates.length} sessions · {dates[0] && dates[dates.length - 1] ? `${fmtDate(dates[0])} until ${fmtDate(dates[dates.length - 1])}` : "Schedule pending"} · Monday/Wednesday/Friday · {fmtTime(cohort?.time || booking.time || "10:00")}</div></div><Badge status="approved">Approved</Badge></Card>;
+      })}</section>}
       <Modal open={!!rating} onClose={() => setRating(null)} title="Rate your tutor">
         {rating && (<div className="space-y-4">
             <div className="flex gap-1">

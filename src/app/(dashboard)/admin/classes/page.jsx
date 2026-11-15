@@ -1,13 +1,21 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, Badge, Button, Card, Field, Input, Modal, PageHeader, Select } from "@/components/ui";
-import { DAY_NAMES, addDays, fmtDate, fmtTime, todayISO, weekday } from "@/lib/dates";
+import { addDays, DAY_NAMES, fmtDate, fmtTime, todayISO, weekday } from "@/lib/dates";
 import { cohortSessionDates, onApprovedLeave, tutorBusy, tutorWorksPlaygroupDate } from "@/lib/logic";
 import { useStore } from "@/lib/store";
 
 const COHORT_WEEKDAYS = [1, 3, 5];
 const mondayOnOrAfter = (date) => addDays(date, (1 - weekday(date) + 7) % 7);
 const activeBookingStatuses = ["pending", "approved", "confirmed", "awaiting_admin"];
+const pendingPlaygroupStatuses = ["pending", "awaiting_admin"];
+const bookingStatusOf = (booking) => String(booking.status || booking.bookingStatus || "").toLowerCase();
+const dateOptionLabel = (date) => new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date(`${date}T12:00:00`)).replace(", ", " | ");
+const bookedDateLabel = (date) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${date}T12:00:00`));
+const playgroupBookingSignature = (bookings = []) => JSON.stringify(bookings
+  .filter((booking) => booking.program === "playgroup")
+  .map(({ id, cohortId, tuteeId, status, createdAt }) => [id, cohortId || "", tuteeId, status, createdAt || ""])
+  .sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
 const nextAvailableStartWeek = (cohorts, today) => {
     const occupiedDates = new Set(cohorts.flatMap((cohort) => cohortSessionDates(cohort)));
     const latestOccupiedDate = [...occupiedDates].sort().pop();
@@ -27,10 +35,55 @@ export default function Classes() {
     const [cohortError, setCohortError] = useState("");
     const [pageError, setPageError] = useState("");
     const [bookingActionErrors, setBookingActionErrors] = useState({});
+    const [bookingApprovalBusy, setBookingApprovalBusy] = useState({});
+    const [replacementErrors, setReplacementErrors] = useState({});
+    const [replacementBusy, setReplacementBusy] = useState({});
+    const [replacementDrafts, setReplacementDrafts] = useState({});
     const [editingCohortId, setEditingCohortId] = useState(null);
     const [c, setC] = useState({ label: "", startDate: "", weekdays: COHORT_WEEKDAYS, time: "10:00", modality: "face-to-face", capacity: 6, sessionsCount: 12, assignmentMode: "manual", weekdayTutorIds: {} });
+    useEffect(() => {
+      const currentSignature = playgroupBookingSignature(s.db.bookings);
+      const refreshIfChanged = async () => {
+        if (document.visibilityState !== "visible") return;
+        try {
+          const response = await fetch("/api/state", { credentials: "same-origin", cache: "no-store" });
+          if (!response.ok) return;
+          const payload = await response.json();
+          if (playgroupBookingSignature(payload.db?.bookings) !== currentSignature) window.location.reload();
+        } catch { /* Keep the current page if the refresh check cannot reach the server. */ }
+      };
+      const timer = window.setInterval(refreshIfChanged, 8000);
+      const handleVisibility = () => { if (document.visibilityState === "visible") void refreshIfChanged(); };
+      document.addEventListener("visibilitychange", handleVisibility);
+      return () => {
+        window.clearInterval(timer);
+        document.removeEventListener("visibilitychange", handleVisibility);
+      };
+    }, [s.db.bookings]);
     const nm = (id) => s.db.tutees.find((t) => t.userId === id)?.fullName || id;
     const tutors = s.db.tutors.filter((t) => t.status === "active");
+    const assignedPlaygroupTutorIds = new Set((s.db.cohorts || []).flatMap((cohort) => [
+      ...Object.values(cohort.weekdayTutorIds || {}),
+      ...Object.values(cohort.dateTutorOverrides || {}),
+    ]));
+    const availablePlaygroupTutorCount = tutors.filter((tutor) => assignedPlaygroupTutorIds.has(tutor.userId)).length;
+    const unassignedPlaygroupTutorCount = tutors.length - availablePlaygroupTutorCount;
+    const tutorHandled = useMemo(() => {
+      const rows = new Map(tutors.map((tutor) => [tutor.userId, { tutor, counts: { 1: 0, 3: 0, 5: 0 } }]));
+      (s.db.cohorts || []).forEach((cohort) => {
+        const dates = cohortSessionDates(cohort);
+        const cohortBookings = (s.db.bookings || []).filter((booking) => booking.program === "playgroup" && booking.cohortId === cohort.id);
+        dates.forEach((date) => {
+          const day = weekday(date);
+          const tutorId = cohort.dateTutorOverrides?.[date]
+            || cohort.weekdayTutorIds?.[day]
+            || cohortBookings.find((booking) => booking.tutorAssignments?.[date])?.tutorAssignments?.[date]
+            || cohortBookings.find((booking) => booking.tutorId)?.tutorId;
+          if (rows.has(tutorId) && [1, 3, 5].includes(day)) rows.get(tutorId).counts[day] += 1;
+        });
+      });
+      return [...rows.values()].map(({ tutor, counts }) => ({ tutor, counts, total: counts[1] + counts[3] + counts[5] }));
+    }, [s.db.cohorts, s.db.tutors, s.db.bookings]);
     const earliestStartWeek = nextAvailableStartWeek(s.db.cohorts, today);
     const draftDates = c.startDate && weekday(c.startDate) === 1
       ? cohortSessionDates({ ...c, weekdays: COHORT_WEEKDAYS, sessionsCount: 12 }).slice().sort()
@@ -77,12 +130,19 @@ export default function Classes() {
         return;
       }
       try {
+        const priorCohort = editingCohortId ? s.db.cohorts.find((cohort) => cohort.id === editingCohortId) : null;
         const result = editingCohortId
           ? await s.updateCohort(editingCohortId, { label: c.label.trim(), startDate: c.startDate })
           : await s.addCohort({ ...c, label: c.label.trim(), weekdays: COHORT_WEEKDAYS, time: "10:00", modality: "face-to-face", capacity: 6, sessionsCount: 12, assignmentMode: "manual", weekdayTutorIds: {} });
         if (result === false || result?.ok === false) {
           setCohortError(result.error || "The cohort could not be created.");
           return;
+        }
+        if (priorCohort && (priorCohort.label !== c.label.trim() || priorCohort.startDate !== c.startDate)) {
+          const cohortBookings = s.db.bookings.filter((booking) => booking.program === "playgroup" && booking.cohortId === editingCohortId && activeBookingStatuses.includes(booking.status));
+          const recipientIds = new Set([...cohortBookings.flatMap((booking) => [booking.tuteeId, ...Object.values(booking.tutorAssignments || {})]), ...Object.values(priorCohort.weekdayTutorIds || {}), ...Object.values(priorCohort.dateTutorOverrides || {})]);
+          if (priorCohort.startDate !== c.startDate) cohortBookings.forEach((booking) => recipientIds.delete(booking.tuteeId));
+          await Promise.all([...recipientIds].filter(Boolean).map((userId) => s.notify(userId, `The Playgroup cohort ${priorCohort.label} was edited. Check your schedule for the updated cohort details.`, ["web", "email", "sms"])));
         }
         setCohortOpen(false);
       } catch (error) {
@@ -97,26 +157,60 @@ export default function Classes() {
       const result = await s.deleteCohort(cohort.id);
       if (!result.ok) setPageError(result.error || "The cohort could not be deleted.");
     };
+    const replaceTutorOnDate = async (cohort, date, tutorId) => {
+      if (!tutorId) return;
+      const key = `${cohort.id}:${date}`;
+      setReplacementErrors((current) => ({ ...current, [key]: "" }));
+      setReplacementBusy((current) => ({ ...current, [key]: true }));
+      try {
+        const response = await fetch("/api/state/playgroup-tutor-replacement", {
+          method: "POST", headers: { "content-type": "application/json" }, credentials: "same-origin",
+          body: JSON.stringify({ cohortId: cohort.id, date, tutorId }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "Tutor replacement could not be saved.");
+        window.location.reload();
+      } catch (error) {
+        setReplacementErrors((current) => ({ ...current, [key]: error.message || "Tutor replacement could not be saved." }));
+      } finally {
+        setReplacementBusy((current) => ({ ...current, [key]: false }));
+      }
+    };
     return (<>
-      <PageHeader title="Playgroup cohorts" subtitle="One cohort has six slots for 12 sessions: Monday, Wednesday and Friday over four weeks." action={<Button onClick={openCohortForm}>Schedule cohort</Button>}/>
+      <PageHeader title="Playgroup Class" subtitle="Manage tutors, cohorts and booking requests." action={<Button onClick={openCohortForm}>Schedule Cohort</Button>}/>
       {pageError && <div className="mb-4"><Alert kind="error">{pageError}</Alert></div>}
-      <div className="space-y-4">
+      <div className="space-y-6">
+        <Card className="space-y-4">
+          <h2 className="text-xl font-extrabold">Playgroup Tutor Monitoring</h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="rounded-2xl bg-amber-100 px-6 py-5 text-amber-600"><div className="text-4xl font-extrabold">{availablePlaygroupTutorCount}</div><div className="text-lg font-extrabold">Available Tutors</div></div>
+            <div className="rounded-2xl bg-amber-100 px-6 py-5 text-amber-600"><div className="text-4xl font-extrabold">{unassignedPlaygroupTutorCount}</div><div className="text-lg font-extrabold">Not Assigned Yet</div></div>
+          </div>
+          <h2 className="pt-2 text-xl font-extrabold">Playgroup Tutor Monitoring</h2>
+          <div className="overflow-x-auto rounded-xl border border-slate-200"><table className="w-full min-w-[560px] border-collapse text-center"><thead className="bg-blue-600 text-white"><tr><th colSpan={5} className="border-b border-blue-300 px-4 py-3">Playgroup Sessions Handled</th></tr><tr>{["Tutor", "Monday", "Wednesday", "Friday", "Total"].map((label) => <th key={label} className="px-4 py-3">{label}</th>)}</tr></thead><tbody>{tutorHandled.map(({ tutor, counts, total }, index) => <tr key={tutor.userId} className={index % 2 ? "bg-blue-100" : "bg-white"}><td className="border border-slate-200 px-4 py-3">{tutor.fullName}</td><td className="border border-slate-200 px-4 py-3">{counts[1]}</td><td className="border border-slate-200 px-4 py-3">{counts[3]}</td><td className="border border-slate-200 px-4 py-3">{counts[5]}</td><td className="border border-slate-200 px-4 py-3">{total}</td></tr>)}</tbody></table></div>
+        </Card>
         {s.db.cohorts.length === 0 && <Card><p className="text-sm text-slate-500">No cohorts scheduled yet. Create a cohort to open six slots for the next four-week playgroup cycle.</p></Card>}
         {s.db.cohorts.map((cohort) => {
           const dates = cohortSessionDates(cohort).slice().sort();
-          const activeBookings = s.db.bookings.filter((booking) => booking.program === "playgroup" && booking.cohortId === cohort.id && activeBookingStatuses.includes(booking.status));
+          const cohortDateSet = new Set(dates);
+          const belongsToCohort = (booking) => booking.cohortId === cohort.id
+            || (cohort.enrolled || []).includes(booking.tuteeId)
+            || (!booking.cohortId && Array.isArray(booking.dates) && booking.dates.length > 0 && booking.dates.every((date) => cohortDateSet.has(date)));
+          const activeBookings = s.db.bookings.filter((booking) => String(booking.program || "").toLowerCase() === "playgroup" && belongsToCohort(booking) && activeBookingStatuses.includes(bookingStatusOf(booking)));
+          const bookingRequests = activeBookings;
+          const enrolledBookings = s.db.bookings.filter((booking) => String(booking.program || "").toLowerCase() === "playgroup" && belongsToCohort(booking) && ["approved", "confirmed", "completed"].includes(bookingStatusOf(booking)));
           const startDate = dates[0];
           const endDate = dates[dates.length - 1];
           const canChangeTutors = dates.some((date) => date >= today);
-          return <Card key={cohort.id} className="space-y-4">
+          return <Card key={cohort.id} className="space-y-4 border-2 border-slate-200 p-5 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div><h2 className="text-lg font-extrabold">{cohort.label}</h2><p className="text-sm text-slate-500">12 sessions · Monday, Wednesday and Friday · {fmtTime(cohort.time || "10:00")} · {fmtDate(startDate)}–{fmtDate(endDate)}</p></div>
               <div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => openEditForm(cohort)}>Edit</Button><Button size="sm" variant="danger" onClick={() => deleteCohort(cohort)}>Delete</Button></div>
             </div>
 
-            <section className="space-y-3 rounded-xl bg-slate-50 p-4">
+            <section className="space-y-3 rounded-2xl bg-neutral-100 p-4 sm:p-6">
               <div>
-                <h3 className="font-extrabold">Assign a working tutor for each day</h3>
+                <h3 className="text-lg font-extrabold">Assign Tutor</h3>
                 <p className="text-xs text-slate-500">Each tutor must be scheduled to work and available on every date for that weekday.</p>
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
@@ -134,38 +228,74 @@ export default function Classes() {
                   </Field>;
                 })}
               </div>
+              <div className="space-y-2 pt-1">
+                <h4 className="text-sm font-bold text-slate-600">Replace Tutor on Specific Dates</h4>
+                {(replacementDrafts[cohort.id] || [...Object.entries(cohort.dateTutorOverrides || {}).map(([date, tutorId]) => ({ date, tutorId })), { date: "", tutorId: "" }]).map((replacement, index) => {
+                  const key = `${cohort.id}:${replacement.date}`;
+                  const rows = replacementDrafts[cohort.id] || [...Object.entries(cohort.dateTutorOverrides || {}).map(([date, tutorId]) => ({ date, tutorId })), { date: "", tutorId: "" }];
+                  const dateOptions = dates.filter((date) => date >= today && (date === replacement.date || !rows.some((row) => row.date === date)));
+                  const baseTutorId = replacement.date ? (cohort.weekdayTutorIds?.[weekday(replacement.date)] || "") : "";
+                  const options = tutors.filter((tutor) => tutor.userId !== baseTutorId && (!replacement.date || (
+                    tutorWorksPlaygroupDate(s.db, tutor.userId, replacement.date)
+                    && !onApprovedLeave(s.db, tutor.userId, replacement.date)
+                    && !tutorBusy(s.db, tutor.userId, replacement.date, cohort.time || "10:00")
+                  )));
+                  return <div key={index} className="grid gap-2 sm:max-w-3xl sm:grid-cols-[1fr_1fr_auto]">
+                    <Select value={(replacement.date ? (cohort.dateTutorOverrides?.[replacement.date] || replacement.tutorId) : "") || ""} disabled={!replacement.date || replacementBusy[key]} onChange={(event) => replaceTutorOnDate(cohort, replacement.date, event.target.value)}><option value="">Select Tutor</option>{options.map((tutor) => <option value={tutor.userId} key={tutor.userId}>{tutor.fullName}</option>)}</Select>
+                    <Select value={replacement.date || ""} onChange={(event) => {
+                      const nextRows = [...rows];
+                      nextRows[index] = { date: event.target.value, tutorId: "" };
+                      setReplacementDrafts((current) => ({ ...current, [cohort.id]: nextRows }));
+                    }}><option value="">Select Date</option>{dateOptions.map((date) => <option key={date} value={date}>{dateOptionLabel(date)}</option>)}</Select>
+                    {index === 0 ? <button type="button" className="px-3 text-sm font-bold text-blue-600" onClick={() => setReplacementDrafts((current) => ({ ...current, [cohort.id]: [...(current[cohort.id] || [{ date: "", tutorId: "" }]), { date: "", tutorId: "" }] }))}>+ Add another</button> : <button type="button" className="px-3 text-sm text-red-600" onClick={() => setReplacementDrafts((current) => ({ ...current, [cohort.id]: (current[cohort.id] || []).filter((_, rowIndex) => rowIndex !== index) }))}>Remove</button>}
+                    {replacementErrors[key] && <p className="text-xs text-red-600 sm:col-span-3">{replacementErrors[key]}</p>}
+                  </div>;
+                })}
+              </div>
             </section>
 
-            <section className="space-y-2 border-t pt-3">
-              <h3 className="font-extrabold">Students</h3>
-              {cohort.enrolled.length === 0 && <p className="text-sm text-slate-400">No student slots reserved yet.</p>}
-              <div className="flex flex-wrap gap-2">
-                {cohort.enrolled.map((id) => <span key={id} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">{nm(id)}<button aria-label={`Remove ${nm(id)}`} className="text-coral-600" onClick={() => confirm(`Remove ${nm(id)} from this cohort?`) && s.removeFromCohort(cohort.id, id)}>×</button></span>)}
-              </div>
-              {cohort.enrolled.map((studentId) => {
-                const booking = [...s.db.bookings].reverse().find((entry) => entry.program === "playgroup" && entry.cohortId === cohort.id && entry.tuteeId === studentId);
-                if (!booking) return <div key={studentId} className="flex flex-wrap items-center gap-2 text-sm"><span className="font-bold">{nm(studentId)}</span><span className="text-xs text-slate-500">No booking request is linked to this roster entry.</span></div>;
-                const tutorNameForDay = (day) => {
-                  const date = booking.dates?.find((sessionDate) => weekday(sessionDate) === day);
-                  const tutorId = date ? booking.tutorAssignments?.[date] : cohort.weekdayTutorIds?.[day];
-                  return s.db.tutors.find((tutor) => tutor.userId === tutorId)?.fullName || "—";
-                };
-                const awaitingApproval = ["pending", "awaiting_admin"].includes(booking.status);
+            <section className="space-y-3 pt-1">
+              <h3 className="text-lg font-extrabold">{cohort.label} Booking Requests</h3>
+              {bookingRequests.length === 0 && <p className="text-sm text-slate-400">No pending booking requests.</p>}
+              {bookingRequests.map((booking) => {
+                const awaitingApproval = pendingPlaygroupStatuses.includes(bookingStatusOf(booking));
                 const hasAllTutors = !!booking.dates?.length && booking.dates.every((date) => booking.tutorAssignments?.[date]);
-                return <div key={booking.id} className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="font-bold">{nm(booking.tuteeId)}</span>
-                  <Badge status={booking.status}/>
-                  <span className="text-xs text-slate-500">Mon: {tutorNameForDay(1)} · Wed: {tutorNameForDay(3)} · Fri: {tutorNameForDay(5)}</span>
-                  {awaitingApproval && <>
-                    <Button size="sm" variant="success" disabled={!hasAllTutors} onClick={async () => {
-                      const result = await s.approvePlaygroupBooking(booking.id);
-                      if (!result.ok) setBookingActionErrors((current) => ({ ...current, [booking.id]: result.error }));
-                    }}>Approve</Button>
-                    {!hasAllTutors && <span className="text-xs text-slate-500">Assign tutors for all 12 sessions to enable approval.</span>}
-                    {bookingActionErrors[booking.id] && <span className="text-xs text-red-600">{bookingActionErrors[booking.id]}</span>}
-                  </>}
+                const dateBooked = booking.createdAt ? String(booking.createdAt).slice(0, 10) : booking.dates?.[0];
+                return <div key={booking.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 text-sm">
+                  <div className="flex flex-wrap items-center gap-x-5 gap-y-1"><span className="font-bold">{nm(booking.tuteeId)}</span><span className="text-xs font-semibold text-slate-500">Date Booked: {dateBooked ? bookedDateLabel(dateBooked) : "—"}</span></div>
+                  <div className="flex items-center gap-2">
+                    <Badge status={bookingStatusOf(booking)}>{awaitingApproval ? "Pending" : bookingStatusOf(booking) === "approved" ? "Approved" : undefined}</Badge>
+                    {awaitingApproval && <Button size="sm" variant="success" disabled={!hasAllTutors || bookingApprovalBusy[booking.id]} onClick={async () => {
+                      setBookingApprovalBusy((current) => ({ ...current, [booking.id]: true }));
+                      setBookingActionErrors((current) => ({ ...current, [booking.id]: "" }));
+                      try {
+                        const response = await fetch("/api/state/approve-playgroup-booking", {
+                          method: "POST", headers: { "content-type": "application/json" }, credentials: "same-origin",
+                          body: JSON.stringify({ bookingId: booking.id }),
+                        });
+                        const result = await response.json().catch(() => ({}));
+                        if (!response.ok && result.status && !pendingPlaygroupStatuses.includes(String(result.status).toLowerCase())) {
+                          window.location.reload();
+                          return;
+                        }
+                        if (!response.ok) throw new Error(result.error || "The Playgroup booking could not be approved.");
+                        window.location.reload();
+                      } catch (error) {
+                        setBookingActionErrors((current) => ({ ...current, [booking.id]: error.message || "The Playgroup booking could not be approved." }));
+                        setBookingApprovalBusy((current) => ({ ...current, [booking.id]: false }));
+                      }
+                    }}>{bookingApprovalBusy[booking.id] ? "Approving…" : "Approve"}</Button>}
+                    {awaitingApproval && <Button size="sm" variant="danger" onClick={async () => {
+                      const reason = "The Playgroup booking request was not approved. Please choose another cohort.";
+                      const result = await s.rejectBooking(booking.id, reason);
+                      if (result?.ok === false) setBookingActionErrors((current) => ({ ...current, [booking.id]: result.error }));
+                    }}>Reject</Button>}
+                  </div>
+                  {awaitingApproval && !hasAllTutors && <p className="col-span-2 text-xs font-semibold text-red-500">Assign tutors for all 12 sessions to enable approval.</p>}
+                  {bookingActionErrors[booking.id] && <p className="col-span-2 text-xs text-red-600">{bookingActionErrors[booking.id]}</p>}
                 </div>;
               })}
+              {enrolledBookings.length > 0 && <div className="border-t border-slate-200 pt-3"><h4 className="mb-2 text-sm font-extrabold">Enrolled Students</h4><div className="flex flex-wrap gap-2">{enrolledBookings.map((booking) => <span key={booking.id} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">{nm(booking.tuteeId)}</span>)}</div></div>}
             </section>
           </Card>;
         })}
