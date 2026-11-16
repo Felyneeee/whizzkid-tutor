@@ -25,7 +25,7 @@ export function expandBookingDates(opts) {
 }
 // ---------- Leave / availability / sessions ----------
 export function onApprovedLeave(db, tutorId, date) {
-    return db.leaves.some((l) => l.tutorId === tutorId && l.status === "approved" && date >= l.startDate && date <= l.endDate);
+    return db.leaves.some((l) => l.tutorId === tutorId && l.status === "approved" && (l.dates ? l.dates.includes(date) : date >= l.startDate && date <= l.endDate));
 }
 /** Only ADMIN-APPROVED availability counts. Pending/rejected are ignored. */
 export function approvedSlot(db, tutorId, date, time, modality) {

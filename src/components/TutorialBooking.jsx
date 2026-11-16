@@ -23,6 +23,7 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
   const [slotCounts, setSlotCounts] = useState({});
   const [err, setErr] = useState("");
   const [doneId, setDoneId] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const days = selectedDays;
   const start = firstWeekStart;
   const end = start && weeks ? addDays(start, weeks * 7 - 1) : "";
@@ -34,7 +35,7 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
   const rate = computeRate(params.program, params.gradeLevel, params.modality);
   const selectedSubjects = useMemo(() => isAcademic ? (params.subjects || [params.subject]) : ["Reading"], [isAcademic, params.subjects, params.subject]);
   useEffect(() => {
-    if (!cycleReady || !dates.length) {
+    if (!cycleReady || !dates.length || submitting || doneId) {
       setServerAvailability(null);
       return undefined;
     }
@@ -59,7 +60,7 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [cycleReady, dates, selectedSubjects, params.program, params.gradeLevel, params.modality, params.sessionType, refreshSlotAvailability]);
+  }, [cycleReady, dates, selectedSubjects, params.program, params.gradeLevel, params.modality, params.sessionType, refreshSlotAvailability, submitting, doneId]);
   const byDay = useCallback((day) => dates.filter((date) => weekday(date) === day), [dates]);
   const slotKey = useCallback((day, index) => `${day}-${index}`, []);
   const slotCount = useCallback((day) => slotCounts[day] || 1, [slotCounts]);
@@ -143,30 +144,39 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
   if (noAvailabilityDays.length) bookingBlockers.push(`No times are available for ${noAvailabilityDays.map((day) => ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][day]).join(", ")} across this cycle. Change the cycle or selected weekdays.`);
   else if (hasMissingTime) bookingBlockers.push("Choose an available time for every selected session.");
   else if (hasUnavailableSelectedTime) bookingBlockers.push("A saved time is no longer available for this cycle. Select another available time.");
-  if (doneId) return <Card className="text-center"><CheckCircle2 className="mx-auto h-12 w-12 text-mint-500"/><h2 className="mt-2 text-xl font-extrabold">Booking request submitted!</h2><div className="mt-4 flex justify-center gap-2"><Link href="/tutee/requests"><Button>View pending requests</Button></Link><Link href="/tutee"><Button variant="secondary">Back to overview</Button></Link></div></Card>;
+  if (doneId) return <Card className="text-center"><CheckCircle2 className="mx-auto h-12 w-12 text-mint-500"/><h2 className="mt-2 text-xl font-extrabold">Booking request submitted!</h2><div className="mt-4 flex justify-center gap-2"><Link href="/tutee/requests" className="inline-flex items-center justify-center rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700">My Bookings</Link><Link href="/tutee" prefetch={false} className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50">Back to overview</Link></div></Card>;
   const submit = async () => {
+    if (submitting) return;
+    setSubmitting(true);
     setErr("");
-    const sessionTimes = Object.fromEntries(dates.map((date) => [date, sessionSlots.find((slot) => slot.date === date)?.time]));
-    const sessionSubjects = Object.fromEntries(dates.map((date) => [date, sessionSlots.find((slot) => slot.date === date)?.subject]));
-    const r = await s.submitTutorialBooking({ tuteeId, program: params.program, subject: selectedSubjects[0], subjects: selectedSubjects, gradeLevel: params.gradeLevel, modality: params.modality, learningNeeds: params.learningNeeds, bookingType: "recurring", sessionType: params.sessionType || "one-on-one", dates, time: sessionTimes[dates[0]], sessionTimes, sessionSubjects, sessionSlots, recurrence: { days, start, end, cycleWeeks: weeks }, cycleType: weeks === 4 ? "1-month" : `${weeks}-week`, cycleStart: start, cycleEnd: end, cycleSessionAllowance: sessionSlots.length, assessmentId: params.assessmentId });
-    if (!r.ok) {
-      if (Array.isArray(r.unavailableDates) && r.unavailableDates.length) {
-        const unavailableDates = new Set(r.unavailableDates);
-        const unavailableSlots = sessionSlots.filter((slot) => slot.time && unavailableDates.has(slot.date));
-        if (unavailableSlots.length) {
-          setUnavailableDateTimes((old) => [...new Set([...old, ...unavailableSlots.flatMap((slot) => [`${slot.date}-${slot.time}-${slot.subject}`, `${slot.seriesKey}-${slot.time}-${slot.subject}`])])]);
-          const affectedSeries = new Set(unavailableSlots.map((slot) => slot.seriesKey));
-          setTimes((old) => {
-            const next = { ...old };
-            affectedSeries.forEach((key) => delete next[key]);
-            return next;
-          });
-          return;
+    try {
+      const sessionTimes = Object.fromEntries(dates.map((date) => [date, sessionSlots.find((slot) => slot.date === date)?.time]));
+      const sessionSubjects = Object.fromEntries(dates.map((date) => [date, sessionSlots.find((slot) => slot.date === date)?.subject]));
+      const r = await s.submitTutorialBooking({ tuteeId, program: params.program, subject: selectedSubjects[0], subjects: selectedSubjects, gradeLevel: params.gradeLevel, modality: params.modality, learningNeeds: params.learningNeeds, bookingType: "recurring", sessionType: params.sessionType || "one-on-one", dates, time: sessionTimes[dates[0]], sessionTimes, sessionSubjects, sessionSlots, recurrence: { days, start, end, cycleWeeks: weeks }, cycleType: weeks === 4 ? "1-month" : `${weeks}-week`, cycleStart: start, cycleEnd: end, cycleSessionAllowance: sessionSlots.length, assessmentId: params.assessmentId });
+      if (!r.ok) {
+        if (Array.isArray(r.unavailableDates) && r.unavailableDates.length) {
+          const unavailableDates = new Set(r.unavailableDates);
+          const unavailableSlots = sessionSlots.filter((slot) => slot.time && unavailableDates.has(slot.date));
+          if (unavailableSlots.length) {
+            setUnavailableDateTimes((old) => [...new Set([...old, ...unavailableSlots.flatMap((slot) => [`${slot.date}-${slot.time}-${slot.subject}`, `${slot.seriesKey}-${slot.time}-${slot.subject}`])])]);
+            const affectedSeries = new Set(unavailableSlots.map((slot) => slot.seriesKey));
+            setTimes((old) => {
+              const next = { ...old };
+              affectedSeries.forEach((key) => delete next[key]);
+              return next;
+            });
+            return;
+          }
         }
+        setErr(r.error);
+        return;
       }
-      return setErr(r.error);
+      setDoneId(r.bookingId);
+    } catch (error) {
+      setErr(error?.message || "Could not submit booking request.");
+    } finally {
+      setSubmitting(false);
     }
-    setDoneId(r.bookingId);
   };
   const calMarks = () => true;
   const toggleDay = (date) => {
@@ -252,7 +262,7 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
       {sessionSlots.length > 0 && <p className="font-bold">{sessionSlots.length} sessions × {peso(rate)} = {peso(rate * sessionSlots.length)}</p>}
       {!ready && <div className="space-y-1 text-sm text-red-600">{bookingBlockers.map((blocker) => <p key={blocker}>{blocker}</p>)}</div>}
       {err && <Alert kind="error">{err}</Alert>}
-      <Button onClick={submit} disabled={!ready}>Submit booking request</Button>
+      <Button onClick={submit} disabled={!ready || submitting}>{submitting ? "Submitting…" : "Submit booking request"}</Button>
     </Card>
   </div>;
 }

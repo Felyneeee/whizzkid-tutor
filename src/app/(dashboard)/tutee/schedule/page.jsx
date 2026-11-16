@@ -36,7 +36,10 @@ export default function TuteeSchedule() {
         document.removeEventListener("visibilitychange", handleVisibility);
       };
     }, [id, s.db.bookings]);
-    const sessions = s.db.sessions.filter((x) => x.tuteeId === id).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+    const sessions = s.db.sessions.filter((x) => {
+      const booking = s.db.bookings.find((entry) => entry.id === x.bookingId);
+      return x.tuteeId === id && !!booking && booking.paymentStatus === "paid" && ["confirmed", "completed"].includes(booking.status);
+    }).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
     const assessments = s.db.assessments.filter((a) => a.tuteeId === id && a.date && ["booked", "completed"].includes(a.status));
     const playgroupBookings = s.db.bookings.filter((b) => b.tuteeId === id && isPlaygroup(b) && ["approved", "confirmed"].includes(statusOf(b)));
     const upcomingPlaygroupBookings = playgroupBookings.filter((booking) => (booking.dates || []).some((date) => date >= today)).sort((a, b) => String(a.dates?.[0] || "").localeCompare(String(b.dates?.[0] || "")));

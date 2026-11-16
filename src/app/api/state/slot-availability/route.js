@@ -35,7 +35,11 @@ export async function POST(request) {
       for (const time of times) {
         for (const subject of subjects) {
           const key = `${date}|${time}|${subject}`;
-          available[key] = slotRequestable(state, date, time, {
+          const heldForReschedule = state.bookings.some((booking) => {
+            const proposal = booking.rescheduleProposal || booking.scheduleProposal?.__payment?.rescheduleProposal;
+            return proposal?.date === date && proposal?.time === time;
+          });
+          available[key] = !heldForReschedule && slotRequestable(state, date, time, {
             program, subject, gradeLevel, modality, sessionType,
           });
         }

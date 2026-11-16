@@ -23,6 +23,9 @@ export default function Matching() {
   const [scheduleDraft, setScheduleDraft] = useState([]);
   const [scheduleError, setScheduleError] = useState("");
   const [readingTutorChoice, setReadingTutorChoice] = useState({});
+  const [rescheduleTutorChoice, setRescheduleTutorChoice] = useState({});
+  const [rescheduleErrors, setRescheduleErrors] = useState({});
+  const [rescheduleBusy, setRescheduleBusy] = useState({});
   const allPending = s.db.bookings.filter((b) => ["awaiting_admin", "ready_for_matching"].includes(b.status)
     && (b.program !== "reading" || s.db.assessments.some((a) => a.id === b.assessmentId && a.tuteeId === b.tuteeId && a.status === "completed")));
   const pending = allPending.filter((booking, index) => booking.program !== "reading" || allPending.findIndex((other) => other.program === "reading" && other.tuteeId === booking.tuteeId && other.assessmentId === booking.assessmentId) === index);
@@ -68,9 +71,45 @@ export default function Matching() {
   const readingMatches = booking?.program === "reading" ? matchTutors(s.db, { program: "reading", subject: "Reading", gradeLevel: booking.gradeLevel, modality: booking.modality, learningNeeds: booking.learningNeeds, dates: readingSlots.map((slot) => slot.date), times: Object.fromEntries(readingSlots.map((slot) => [slot.date, slot.time])), time: booking.time, ignoreBookingId: booking.id }).filter((match) => match.full) : [];
   const suggestedTutorId = booking?.recommendations?.find((id) => readingMatches.some((match) => match.tutor.userId === id)) ?? readingMatches[0]?.tutor.userId;
   const chosenReadingTutor = readingTutorChoice[booking?.id] ?? suggestedTutorId;
+  const pendingReschedules = s.db.bookings.filter((entry) => entry.rescheduleProposal);
+  const rescheduleOptions = (entry, item) => {
+    const subject = entry.sessionSlots?.find((slot) => slot.date === item.original.date && slot.time === item.original.time)?.subject || entry.sessionSubjects?.[item.original.date] || entry.subject;
+    return matchTutors(s.db, { program: entry.program, subject, gradeLevel: entry.gradeLevel, modality: entry.modality, learningNeeds: entry.learningNeeds, sessionType: entry.sessionType || "one-on-one", dates: [item.date], times: { [item.date]: item.time }, time: item.time, ignoreBookingId: entry.id })
+      .filter((match) => match.full);
+  };
+  const reviewReschedule = async (entry, approve) => {
+    const items = entry.rescheduleProposal.sessions || [entry.rescheduleProposal];
+    const tutors = Object.fromEntries(items.map((item) => {
+      const options = rescheduleOptions(entry, item);
+      const preferred = rescheduleTutorChoice[`${entry.id}:${item.sessionId}`] || item.tutorId;
+      return [item.sessionId, options.some((match) => match.tutor.userId === preferred) ? preferred : options[0]?.tutor.userId || ""];
+    }));
+    if (approve && Object.values(tutors).some((tutorId) => !tutorId)) {
+      setRescheduleErrors((current) => ({ ...current, [entry.id]: "No tutor is available for one or more requested sessions." }));
+      return;
+    }
+    setRescheduleBusy((current) => ({ ...current, [entry.id]: true }));
+    const response = await fetch("/api/state/action", { method: "POST", headers: { "content-type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ action: "reviewBookingReschedule", args: [entry.id, approve, tutors] }) });
+    const payload = await response.json().catch(() => ({}));
+    setRescheduleBusy((current) => ({ ...current, [entry.id]: false }));
+    if (!response.ok) setRescheduleErrors((current) => ({ ...current, [entry.id]: payload.error || "Could not review this request." }));
+    else window.location.reload();
+  };
 
   return <>
     <PageHeader title="Tutor–tutee matching" subtitle="Review each booking, then assign tutors to its sessions."/>
+    {pendingReschedules.length > 0 && <Card className="border-sunny-200 bg-sunny-50/50"><h2 className="mb-3 font-extrabold">Reschedule matching ({pendingReschedules.length})</h2><p className="mb-3 text-sm text-slate-600">Review the requested slots and assign the same tutor or another tutor who is available.</p><div className="space-y-3">{pendingReschedules.map((entry) => {
+      const proposal = entry.rescheduleProposal;
+      const items = proposal.sessions || [proposal];
+      const student = s.db.tutees.find((row) => row.userId === entry.tuteeId)?.fullName || entry.tuteeId;
+      const availableForAll = items.every((item) => rescheduleOptions(entry, item).length > 0);
+      return <div key={entry.id} className="rounded-xl bg-white p-4 text-sm"><div className="font-extrabold">{student} · {entry.subject || entry.program}</div>{items.map((item) => {
+        const options = rescheduleOptions(entry, item);
+        const key = `${entry.id}:${item.sessionId}`;
+        const selected = rescheduleTutorChoice[key] || (options.some((match) => match.tutor.userId === item.tutorId) ? item.tutorId : options[0]?.tutor.userId || "");
+        return <div key={item.sessionId} className="mt-3 grid gap-2 sm:grid-cols-[1fr_15rem]"><div><div className="text-slate-700">{fmtDate(item.original.date)} · {fmtTime(item.original.time)} → <b>{fmtDate(item.date)} · {fmtTime(item.time)}</b></div><div className="text-xs text-slate-500">Requested reason: {proposal.reason || "—"}</div></div><Select value={selected} onChange={(event) => setRescheduleTutorChoice((current) => ({ ...current, [key]: event.target.value }))}><option value="">{options.length ? "Choose tutor" : "No tutor available"}</option>{options.map((match) => <option key={match.tutor.userId} value={match.tutor.userId}>{match.tutor.fullName}{match.tutor.userId === item.original.tutorId ? " · current tutor" : ""}</option>)}</Select></div>;
+      })}{rescheduleErrors[entry.id] && <Alert kind="error">{rescheduleErrors[entry.id]}</Alert>}<div className="mt-3 flex justify-end gap-2"><Button size="sm" variant="danger" disabled={rescheduleBusy[entry.id]} onClick={() => reviewReschedule(entry, false)}>Reject</Button><Button size="sm" variant="success" disabled={rescheduleBusy[entry.id] || !availableForAll} onClick={() => reviewReschedule(entry, true)}>{rescheduleBusy[entry.id] ? "Saving…" : "Approve matches"}</Button></div></div>;
+    })}</div></Card>}
     {!booking ? <>
       {pending.length === 0 ? <Empty>No booking requests waiting for review.</Empty> : <div className="space-y-3">{pending.map((b) => {
         const student = s.db.tutees.find((t) => t.userId === b.tuteeId);

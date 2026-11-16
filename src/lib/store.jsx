@@ -149,7 +149,6 @@ export function StoreProvider({ children }) {
   }, [acceptState, loadState]);
 
   const me = useMemo(() => db.users?.find((user) => user.id === meId) ?? null, [db, meId]);
-
   const store = useMemo(() => {
     const refreshState = async (user) => {
       const loaded = await loadState(user);

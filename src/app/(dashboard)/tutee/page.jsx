@@ -14,11 +14,14 @@ export default function TuteeHome() {
   const weekEnd = addDays(weekStart, 6);
   const dateIsThisWeek = (date) => date >= weekStart && date <= weekEnd;
   const upcoming = s.db.sessions
-    .filter((x) => x.tuteeId === id && x.status === "scheduled" && x.date >= today)
+    .filter((x) => {
+      const booking = s.db.bookings.find((entry) => entry.id === x.bookingId);
+      return x.tuteeId === id && x.status === "scheduled" && x.date >= today && booking?.paymentStatus === "paid" && ["confirmed", "completed"].includes(booking.status);
+    })
     .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   const todaySessions = upcoming.filter((x) => x.date === today);
   const showingToday = todaySessions.length > 0;
-  const pending = s.db.bookings.filter((b) => b.tuteeId === id && (["pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin"].includes(b.status) || (b.program === "reading" && b.status === "pending") || !!b.scheduleProposal));
+  const pending = s.db.bookings.filter((b) => b.tuteeId === id && (["pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "to_pay", "awaiting_payment_approval"].includes(b.status) || (b.status === "confirmed" && b.paymentStatus !== "paid" && b.program !== "playgroup") || (b.program === "reading" && b.status === "pending") || !!b.scheduleProposal || !!b.rescheduleProposal));
   const linkedAssessmentIds = new Set(s.db.bookings.filter((b) => b.tuteeId === id && b.program === "reading" && ["pending", "pending_assessment", "assessment_scheduled"].includes(b.status)).map((b) => b.assessmentId));
   const assessments = s.db.assessments.filter((a) => a.tuteeId === id && a.status === "booked" && !linkedAssessmentIds.has(a.id));
   const completedCount = s.db.sessions.filter((x) => x.tuteeId === id && x.status === "completed").length;

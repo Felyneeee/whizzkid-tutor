@@ -38,11 +38,13 @@ export function DashboardShell({ role, nav, children, gate }) {
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
         {nav.map((n) => {
             const active = n.href === base ? path === base : path.startsWith(n.href);
-            return (<Link key={n.href} href={n.href} prefetch className={cn("flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-colors duration-150", active ? "bg-brand-600 text-white shadow-sm" : "text-slate-600 hover:bg-brand-50 hover:text-brand-700")}>
+            const className = cn("flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-colors duration-150", active ? "bg-brand-600 text-white shadow-sm" : "text-slate-600 hover:bg-brand-50 hover:text-brand-700");
+            const content = <>
               <span className="h-4 w-4 shrink-0 [&>svg]:h-4 [&>svg]:w-4">{n.icon}</span>
               <span className="flex-1">{n.label}</span>
               {!!n.badge && <span className="rounded-full bg-coral-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{n.badge}</span>}
-            </Link>);
+            </>;
+            return <Link key={n.href} href={n.href} prefetch className={className}>{content}</Link>;
         })}
       </nav>
       <div className="border-t border-slate-100 p-4">

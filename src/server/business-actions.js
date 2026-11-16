@@ -395,10 +395,14 @@ export function createBusinessActions({ get, mutate }) {
       });
       return { ok: true, conflicts };
   },
-  submitLeave(tutorId, startDate, endDate, reason) {
+  submitLeave(tutorId, datesOrStart, endDateOrReason, reason) {
+      const dates = Array.isArray(datesOrStart) ? [...new Set(datesOrStart)].sort() : null;
+      const startDate = dates ? dates[0] : datesOrStart;
+      const endDate = dates ? dates[dates.length - 1] : endDateOrReason;
+      const leaveReason = dates ? endDateOrReason : reason;
       mutate((n) => {
-          n.leaves.push({ id: uid("lv"), tutorId, startDate, endDate, reason, status: "pending", submittedAt: nowISO() });
-          pushAdmins(n, `${nameOf(n, tutorId)} requested leave ${fmtDate(startDate)} – ${fmtDate(endDate)}`);
+          n.leaves.push({ id: uid("lv"), tutorId, startDate, endDate, ...(dates ? { dates } : {}), reason: leaveReason, status: "pending", submittedAt: nowISO() });
+          pushAdmins(n, `${nameOf(n, tutorId)} requested leave ${dates ? dates.map(fmtDate).join(", ") : `${fmtDate(startDate)} – ${fmtDate(endDate)}`}`);
           pushNotif(n, tutorId, "Leave request submitted. Status: Pending Approval.", ["web"]);
       });
   },
@@ -568,7 +572,7 @@ export function createBusinessActions({ get, mutate }) {
               pushNotif(n, l.tutorId, "Your leave request was not approved. Existing schedule remains unchanged.", ["web", "email"]);
               return;
           }
-          const affected = n.sessions.filter((s) => s.tutorId === l.tutorId && s.status === "scheduled" && s.date >= l.startDate && s.date <= l.endDate);
+          const affected = n.sessions.filter((s) => s.tutorId === l.tutorId && s.status === "scheduled" && (l.dates ? l.dates.includes(s.date) : s.date >= l.startDate && s.date <= l.endDate));
           affected.forEach((s) => (s.status = "needs_reassignment"));
           l.affectedSessionIds = affected.map((s) => s.id);
           pushNotif(n, l.tutorId, "Your leave request was approved.", ["web", "email"]);
