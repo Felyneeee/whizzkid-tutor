@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Badge, Button, Empty, Alert } from "@/components/ui";
 import { addDays, firstName, fmtTime, isBirthdayToday, todayISO, parseISO, toISO } from "@/lib/dates";
 import { useStore } from "@/lib/store";
-import { Check, Clock3, Hourglass } from "lucide-react";
+import { Cake, Check, Clock3, Hourglass, PartyPopper } from "lucide-react";
 
 export default function TuteeHome() {
   const s = useStore();
@@ -39,7 +39,7 @@ export default function TuteeHome() {
       <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">Welcome to your <span className="text-brand-600">Dashboard</span>, <span className="text-sunny-500">{displayName}!</span></h1>
     </div>
 
-    {profile && isBirthdayToday(profile.birthday) && <div className="rounded-2xl bg-sunny-100 p-4 text-center text-lg font-extrabold">🎂 Happy Birthday, {firstName(profile.fullName)}! 🎉 From all of us at Whizzkids.</div>}
+    {profile && isBirthdayToday(profile.birthday) && <div className="flex items-center justify-center gap-2 rounded-2xl bg-sunny-100 p-4 text-center text-lg font-extrabold"><Cake className="h-6 w-6 shrink-0" aria-hidden="true"/>Happy Birthday, {firstName(profile.fullName)}! <PartyPopper className="h-6 w-6 shrink-0" aria-hidden="true"/> From all of us at Whizzkids.</div>}
     {!profile?.complete && <Alert kind="warn">Please complete your child&apos;s profile before booking. <Link href="/tutee/profile" className="font-bold underline">Set up profile</Link></Alert>}
 
     <section aria-label="Session summary" className="grid gap-4 sm:grid-cols-3">

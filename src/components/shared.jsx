@@ -1,5 +1,5 @@
 "use client";
-import { Mail, MessageSquare, Smartphone, Send } from "lucide-react";
+import { Cake, Mail, MessageSquare, Smartphone, Send } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { firstName, fmtDateTime } from "@/lib/dates";
 import { useStore } from "@/lib/store";
@@ -31,7 +31,7 @@ export function NotificationsView({ userId }) {
       {list.length === 0 ? (<Empty>You&apos;re all caught up.</Empty>) : (<div className="space-y-2">
           {list.map((n) => (<Card key={n.id} className={cn("flex items-start gap-3 !p-4", !n.read && "border-brand-200 bg-brand-50/40")}>
               <div className="flex-1">
-                <p className="text-sm">{hideOtherPartyFullNames(n.text, userId, s.db)}</p>
+                <p className="flex items-start gap-2 text-sm">{/^\s*(?:\u{1F382}\s*)?Happy Birthday\b/iu.test(n.text) && <Cake className="mt-0.5 h-4 w-4 shrink-0 text-sunny-600" aria-hidden="true"/>}<span>{hideOtherPartyFullNames(n.text.replace(/^\s*\u{1F382}\s*/u, ""), userId, s.db)}</span></p>
                 <p className="mt-1 text-xs text-slate-400">{fmtDateTime(n.at)}</p>
               </div>
               <div className="flex gap-1 text-slate-400" title="Delivered via">

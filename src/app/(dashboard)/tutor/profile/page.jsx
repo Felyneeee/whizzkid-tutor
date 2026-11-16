@@ -1,7 +1,8 @@
 "use client";
 import Image from "next/image";
+import { UserRound } from "lucide-react";
 import { useState } from "react";
-import { Alert, Badge, Button, Card, Chips, Field, Input, PageHeader, Textarea, peso } from "@/components/ui";
+import { Alert, Badge, Button, Card, Chips, Field, Input, PageHeader, Textarea } from "@/components/ui";
 import { SUBJECTS } from "@/lib/constants";
 import { readFileAsDataURL, readPdfAsDataURL } from "@/lib/files";
 import { useStore } from "@/lib/store";
@@ -39,7 +40,7 @@ export default function TutorProfilePage() {
       <PageHeader title="My profile" subtitle="Personal and professional information." action={<Badge status={t.status}/>}/>
       <Card className="max-w-3xl space-y-4">
         <div className="flex items-center gap-4">
-          {photo ? <Image src={photo} alt="" width={80} height={80} unoptimized className="h-20 w-20 rounded-2xl object-cover"/> : <div className="grid h-20 w-20 place-items-center rounded-2xl bg-brand-100 text-3xl">🧑‍🏫</div>}
+          {photo ? <Image src={photo} alt="" width={80} height={80} unoptimized className="h-20 w-20 rounded-2xl object-cover"/> : <div className="grid h-20 w-20 place-items-center rounded-full bg-slate-200 text-slate-500"><UserRound className="h-10 w-10" strokeWidth={1.8} aria-hidden="true"/></div>}
           <Field label="Profile photo">
             <Input type="file" accept="image/*" onChange={(e) => up(e.target.files?.[0], "photo")}/>
           </Field>
@@ -60,7 +61,6 @@ export default function TutorProfilePage() {
         <Field label="Resume (PDF)" hint={resume.name}>
           <Input type="file" accept=".pdf,application/pdf" onChange={(e) => up(e.target.files?.[0], "resume")}/>
         </Field>
-        <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Pay rate (set by admin): {peso(t.hourlyRate)} / hour{t.fixedSalary ? ` + ${peso(t.fixedSalary)} fixed monthly` : ""}</div>
         {msg && <Alert kind={msg.k === "success" ? "success" : "error"}>{msg.t}</Alert>}
         <Button onClick={() => {
             s.saveTutorProfile(id, { fullName: f.fullName, age: f.age ? Number(f.age) : null, contact: f.contact, bio: f.bio, birthday: f.birthday || undefined, subjects, gradeBands: [...new Set(bands.map(gradeBandForChoice))], photo, resumeName: resume.name, resumeData: resume.data });

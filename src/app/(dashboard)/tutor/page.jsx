@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Badge, Card, Empty } from "@/components/ui";
 import { addDays, firstName, fmtTime, isBirthdayToday, parseISO, todayISO } from "@/lib/dates";
 import { useStore } from "@/lib/store";
-import { Check, Hourglass, UserRound } from "lucide-react";
+import { Cake, Check, Hourglass, UserRound } from "lucide-react";
 
 export default function TutorHome() {
   const s = useStore();
@@ -33,7 +33,7 @@ export default function TutorHome() {
       <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">Welcome to your <span className="text-brand-600">Dashboard</span>, <span className="text-sunny-500">{firstName(t?.fullName, "there")}!</span></h1>
     </div>
 
-    {t?.birthday && isBirthdayToday(t.birthday) && <div className="rounded-2xl bg-sunny-100 p-4 text-center font-extrabold">🎂 Happy Birthday from all of us at Whizzkids!</div>}
+    {t?.birthday && isBirthdayToday(t.birthday) && <div className="flex items-center justify-center gap-2 rounded-2xl bg-sunny-100 p-4 text-center font-extrabold"><Cake className="h-5 w-5" aria-hidden="true"/>Happy Birthday from all of us at Whizzkids!</div>}
 
     <section aria-label="Tutor summary" className="grid gap-4 sm:grid-cols-3">
       <div className="rounded-2xl bg-brand-100 p-5 text-brand-700 shadow-sm sm:p-6">

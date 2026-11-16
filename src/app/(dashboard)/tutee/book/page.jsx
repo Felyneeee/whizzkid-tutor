@@ -1,10 +1,11 @@
 "use client";
 import Link from "next/link";
+import { Laptop, School } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { Calendar } from "@/components/Calendar";
 import { TutorialBooking } from "@/components/TutorialBooking";
-import { Alert, Badge, Button, Card, Chips, Field, PageHeader, Select, Textarea, cn, peso } from "@/components/ui";
+import { Alert, Badge, Button, Card, Chips, Field, PageHeader, ProgramIcon, Select, Textarea, cn, peso } from "@/components/ui";
 import { PLAYGROUP_SESSION_RATE, PROGRAMS, READING_SKILLS, SUBJECTS } from "@/lib/constants";
 import { fmtDate, fmtTime, parseISO, todayISO } from "@/lib/dates";
 import { cohortSessionDates } from "@/lib/logic";
@@ -31,7 +32,7 @@ function ageMonths(bday) {
 function ModalityPicker({ value, onChange }) {
     return (<div className="grid grid-cols-2 gap-2">
       {["online", "face-to-face"].map((m) => (<button key={m} type="button" onClick={() => onChange(m)} className={cn("rounded-xl border-2 p-3 text-sm font-bold capitalize", value === m ? "border-brand-500 bg-brand-50" : "border-slate-200")}>
-          {m === "online" ? "💻 Online" : "🏫 Face-to-face"}
+          {m === "online" ? <><Laptop className="mr-1 inline h-4 w-4" aria-hidden="true"/>Online</> : <><School className="mr-1 inline h-4 w-4" aria-hidden="true"/>Face-to-face</>}
         </button>))}
     </div>);
 }
@@ -58,7 +59,7 @@ function BookInner() {
       {!program ? (<div className="grid gap-4 md:grid-cols-3">
           {Object.keys(PROGRAMS).map((k) => (<button key={k} onClick={() => setProgram(k)} className="text-left">
               <Card className="h-full transition hover:border-brand-300 hover:shadow-md">
-                <div className="text-4xl">{PROGRAMS[k].emoji}</div>
+                <ProgramIcon program={PROGRAMS[k]} className="h-10 w-10"/>
                 <h3 className="mt-2 text-lg font-extrabold">{PROGRAMS[k].name}</h3>
                 <p className="mt-1 text-xs font-bold uppercase text-brand-600">{PROGRAMS[k].ages}</p>
                 <p className="mt-2 text-sm text-slate-600">{PROGRAMS[k].blurb}</p>

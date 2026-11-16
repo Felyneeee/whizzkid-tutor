@@ -1,6 +1,6 @@
 "use client";
 import clsx from "clsx";
-import { X } from "lucide-react";
+import { Blocks, BookOpenText, Flag, GraduationCap, PencilLine, X } from "lucide-react";
 import React from "react";
 export const cn = clsx;
 export function Button({ variant = "primary", size = "md", className, ...p }) {
@@ -76,7 +76,7 @@ export function PhoneInput({ value = "", onChange, required = false }) {
     const national = value.startsWith("+63") ? digits.slice(2) : digits.replace(/^0+/, "");
     return <div className="flex overflow-hidden rounded-xl border border-slate-200 bg-white focus-within:border-brand-400 focus-within:ring-2 focus-within:ring-brand-100">
       <div className="flex shrink-0 items-center gap-2 border-r border-slate-200 px-3">
-        <span aria-hidden="true">🇵🇭</span><span className="text-sm text-slate-600">+63</span>
+        <Flag className="h-4 w-4 text-brand-600" aria-hidden="true"/><span className="text-sm text-slate-600">+63</span>
       </div>
       <input type="tel" inputMode="numeric" autoComplete="tel-national" required={required} value={national} onChange={(event) => onChange(`+63${event.target.value.replace(/\D/g, "")}`)} pattern="[0-9]{10}" title="Philippines phone numbers should have 10 digits after +63" placeholder="000-000-0000" className="min-w-0 flex-1 px-3 py-2 text-sm outline-none"/>
     </div>;
@@ -159,10 +159,15 @@ export function Chips({ options, value, onChange, multi }) {
 }
 export function Logo({ className }) {
     return (<span className={cn("inline-flex items-center gap-2 font-extrabold tracking-tight", className)}>
-      <span className="grid h-9 w-9 place-items-center rounded-xl bg-sunny-400 text-lg shadow-sm">🎓</span>
+      <span className="grid h-9 w-9 place-items-center rounded-xl bg-sunny-400 shadow-sm"><GraduationCap className="h-5 w-5 text-slate-900" aria-hidden="true"/></span>
       <span>
         Whizz<span className="text-brand-600">kids</span>
       </span>
     </span>);
+}
+const PROGRAM_ICONS = { BookOpenText, PencilLine, Blocks };
+export function ProgramIcon({ program, className = "h-8 w-8" }) {
+    const Icon = PROGRAM_ICONS[program?.icon] || BookOpenText;
+    return <Icon className={className} aria-hidden="true"/>;
 }
 export const peso = (n) => `₱${n.toLocaleString()}`;

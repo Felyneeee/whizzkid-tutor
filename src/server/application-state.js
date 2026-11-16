@@ -169,7 +169,7 @@ export function runBirthdayGreetings(state) {
   for (const person of due) {
     state.messages.push({
       id: uid("m"), threadId: person.id, fromId: adminId,
-      text: `🎂 Happy Birthday, ${person.name.split(" ")[0]}! All of us at Whizzkids wish you a day full of joy and learning.`,
+      text: `Happy Birthday, ${person.name.split(" ")[0]}! All of us at Whizzkids wish you a day full of joy and learning.`,
       at: nowISO(), auto: true,
     });
     const profile = person.kind === "tutee"

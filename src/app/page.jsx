@@ -3,7 +3,7 @@ import { Briefcase, ChevronDown, Clock, Mail, MapPin, Phone } from "lucide-react
 import Link from "next/link";
 import { CENTER, FAQS, PROGRAMS } from "@/lib/constants";
 import { useStore } from "@/lib/store";
-import { Button, Card, Logo } from "@/components/ui";
+import { Button, Card, Logo, ProgramIcon } from "@/components/ui";
 import { homeFor } from "@/components/Shell";
 export default function Home() {
     const s = useStore();
@@ -55,7 +55,7 @@ export default function Home() {
         </div>
         <div className="grid grid-cols-2 gap-4">
           {Object.keys(PROGRAMS).map((k, i) => (<div key={k} className={`rounded-3xl p-6 text-center shadow-sm ${PROGRAMS[k].color} ${i === 2 ? "col-span-2" : ""}`}>
-              <div className="text-5xl">{PROGRAMS[k].emoji}</div>
+              <div className="flex justify-center"><ProgramIcon program={PROGRAMS[k]} className="h-12 w-12"/></div>
               <div className="mt-2 font-extrabold">{PROGRAMS[k].name}</div>
               <div className="text-xs font-semibold opacity-80">{PROGRAMS[k].ages}</div>
             </div>))}
@@ -66,7 +66,7 @@ export default function Home() {
         <h2 className="text-3xl font-extrabold">Our programs</h2>
         <div className="mt-6 grid gap-4 md:grid-cols-3">
           {Object.keys(PROGRAMS).map((k) => (<Card key={k}>
-              <div className="text-3xl">{PROGRAMS[k].emoji}</div>
+              <ProgramIcon program={PROGRAMS[k]} className="h-8 w-8"/>
               <h3 className="mt-2 text-lg font-extrabold">{PROGRAMS[k].name}</h3>
               <p className="mt-1 text-xs font-bold uppercase text-brand-600">{PROGRAMS[k].ages}</p>
               <p className="mt-2 text-sm text-slate-600">{PROGRAMS[k].blurb}</p>
