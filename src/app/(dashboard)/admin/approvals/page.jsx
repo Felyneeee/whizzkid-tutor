@@ -14,10 +14,10 @@ const mondayOf = (date) => {
 const asISO = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const scheduleDateLabel = (date) => date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
-export default function Approvals() {
+export default function Approvals({ embedded = false, defaultTab = "schedules" } = {}) {
   const s = useStore();
   const db = s.db;
-  const [tab, setTab] = useState("schedules");
+  const [tab, setTab] = useState(defaultTab);
   const activeTutors = db.tutors.filter((tutor) => tutor.status === "active");
   const [scheduleTutor, setScheduleTutor] = useState(() => activeTutors[0]?.userId ?? "");
   const [scheduleDays, setScheduleDays] = useState({});
@@ -54,11 +54,11 @@ export default function Approvals() {
   });
 
   return <>
-    <PageHeader title="Availability & leaves" />
-    <Tabs tabs={[
+    {!embedded && <PageHeader title="Availability & leaves" />}
+    {!embedded && <Tabs tabs={[
       { id: "schedules", label: "Tutor schedules" },
       { id: "leaves", label: "Tutor leaves", count: leaves.filter((leave) => leave.status === "pending").length },
-    ]} value={tab} onChange={setTab} />
+    ]} value={tab} onChange={setTab} />}
 
     {tab === "schedules" && <Card className="space-y-8 !p-6 sm:!p-8">
       <section>

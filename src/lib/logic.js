@@ -105,7 +105,7 @@ export function tutorQualifies(t, p) {
     const needSubject = p.program === "reading" ? ["Reading"] : p.subject === "Mathematics" || p.subject === "Math" ? ["Mathematics", "Math"] : p.subject === "Araling Panlipunan (AP)" ? ["Araling Panlipunan (AP)", "Araling Panlipunan", "AP"] : [p.subject];
     if (!t.subjects.some((subject) => needSubject.includes(subject)))
         return false;
-    return tutorHasGradeBand(t, bandOf(p.gradeLevel));
+    return true;
 }
 function tutorHasGradeBand(t, band) {
     const bands = t.gradeBands || [];

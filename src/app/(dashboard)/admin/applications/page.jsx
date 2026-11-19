@@ -12,7 +12,7 @@ const FILTER_STATUSES = [
   { label: "Pending", value: "pending" },
   { label: "Rejected", value: "rejected" },
 ];
-export default function Applications() {
+export default function Applications({ embedded = false } = {}) {
     const s = useStore();
     const [tab, setTab] = useState("new");
     const [interview, setInterview] = useState(null);
@@ -54,7 +54,7 @@ export default function Applications() {
     const draftFilterCount = draftSubjects.length + draftGrades.length + draftStatuses.length;
     const toggleValue = (value, values, setter) => setter(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
     return (<>
-      <PageHeader title="Tutor applications & verifications" subtitle="Review resumes, schedule interviews, approve or reject accounts."/>
+      {!embedded && <PageHeader title="Tutor applications & verifications" subtitle="Review resumes, schedule interviews, approve or reject accounts."/>}
       <Tabs tabs={[
             { id: "new", label: "New applicants", count: newApps.length },
             { id: "existing", label: "Existing tutor verification", count: existing.length },

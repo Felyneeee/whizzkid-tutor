@@ -1,5 +1,5 @@
 "use client";
-import { Bell, CalendarCheck, CalendarClock, ClipboardCheck, FileLock2, GraduationCap, History, Home, MessageCircle, CreditCard, Shuffle, Users, Baby, } from "lucide-react";
+import { Bell, CalendarClock, FileLock2, GraduationCap, History, Home, MessageCircle, CreditCard, Shuffle, Users, Baby, } from "lucide-react";
 import { DashboardShell } from "@/components/Shell";
 import { useStore } from "@/lib/store";
 export default function AdminLayout({ children }) {
@@ -15,13 +15,12 @@ export default function AdminLayout({ children }) {
     const assessments = db.assessments?.filter((a) => a.status === "booked").length ?? 0;
     return (<DashboardShell role="admin" nav={[
             { href: "/admin", label: "Dashboard", icon: <Home /> },
-            { href: "/admin/applications", label: "Tutor Applications", icon: <ClipboardCheck />, badge: apps },
+            { href: "/admin/tutors", label: "Tutor", icon: <Users />, badge: apps + approvals },
             { href: "/admin/matching", label: "Matching", icon: <Shuffle />, badge: matching },
             { href: "/admin/scheduling", label: "Scheduling & Contracts", icon: <CalendarClock />, badge: conflicts },
-            { href: "/admin/approvals", label: "Availability & Leaves", icon: <CalendarCheck />, badge: approvals },
             { href: "/admin/assessments", label: "Reading Assessments", icon: <GraduationCap />, badge: assessments },
             { href: "/admin/classes", label: "Playgroup Classes", icon: <Baby /> },
-            { href: "/admin/users", label: "Tutee & Tutor Records", icon: <Users /> },
+            { href: "/admin/users", label: "Tutee Records", icon: <Baby /> },
             { href: "/admin/materials", label: "Learning Materials", icon: <FileLock2 /> },
             { href: "/admin/orders", label: "Payment Records", icon: <CreditCard />, badge: orders },
             { href: "/admin/chat", label: "Messages", icon: <MessageCircle />, badge: unreadMessages },
