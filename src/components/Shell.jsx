@@ -44,6 +44,7 @@ export function DashboardShell({ role, nav, children, gate }) {
               <span className="flex-1">{n.label}</span>
               {!!n.badge && <span className="rounded-full bg-coral-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{n.badge}</span>}
             </>;
+            if (n.href === "/tutee/requests") return <a key={n.href} href={n.href} className={className}>{content}</a>;
             return <Link key={n.href} href={n.href} prefetch className={className}>{content}</Link>;
         })}
       </nav>
