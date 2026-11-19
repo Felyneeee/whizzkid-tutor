@@ -278,7 +278,6 @@ export function stateVisibleToUser(state, user) {
     ...session,
     ...(rating == null ? {} : { hasRating: true }),
   }));
-  visible.progressReports = state.progressReports.filter((report) => tuteeIds.has(report.tuteeId) || tutorIds.has(report.tutorId));
   visible.assessments = user.role === "tutee" ? state.assessments.filter((item) => item.tuteeId === user.id) : [];
   visible.availability = state.availability.filter((item) => item.status === "approved" && (tutorIds.has(item.tutorId) || (user.role === "tutee" && activeTutorIds.has(item.tutorId))));
   if (user.role === "tutor") {

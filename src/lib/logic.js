@@ -127,8 +127,6 @@ export function tutorFreeOn(db, t, p, date) {
     return true;
 }
 export function matchTutors(db, p) {
-    const stopWords = new Set(["with", "that", "this", "from", "have", "needs", "help", "some", "more", "when", "where", "they", "their", "will", "would", "about", "difficulty"]);
-    const learningTerms = [...new Set(String(p.learningNeeds ?? "").toLowerCase().match(/[a-z0-9]{4,}/g) ?? [])].filter((word) => !stopWords.has(word));
     const out = [];
     for (const t of db.tutors) {
         if (!tutorQualifies(t, p))
@@ -138,12 +136,10 @@ export function matchTutors(db, p) {
             continue;
         const rating = tutorRating(db, t.userId);
         const full = ok.length === p.dates.length;
-        const gradeScore = tutorHasGradeBand(t, bandOf(p.gradeLevel)) ? 20 : 0;
-        const scheduleScore = (ok.length / p.dates.length) * 30;
-        const subjectScore = tutorQualifies(t, p) ? 30 : 0;
-        const bio = String(t.bio ?? "").toLowerCase();
-        const learningFitScore = learningTerms.length ? Math.round(learningTerms.filter((word) => bio.includes(word)).length / learningTerms.length * 20) : 10;
-        const score = gradeScore + scheduleScore + subjectScore + learningFitScore;
+        const gradeScore = tutorHasGradeBand(t, bandOf(p.gradeLevel)) ? 25 : 0;
+        const scheduleScore = (ok.length / p.dates.length) * 35;
+        const subjectScore = tutorQualifies(t, p) ? 40 : 0;
+        const score = gradeScore + scheduleScore + subjectScore;
         out.push({
             tutor: t,
             coverage: ok.length,
@@ -152,7 +148,6 @@ export function matchTutors(db, p) {
             gradeScore,
             scheduleScore,
             subjectScore,
-            learningFitScore,
             score,
             rating,
             missingDates: p.dates.filter((d) => !ok.includes(d)),

@@ -12,7 +12,7 @@ const TUTEE_ACTIONS = new Set([
   "requestAssessment", "cancelAssessment", "cancelTutorialBooking", "bookPlaygroup", "cancelPlaygroupBooking", "submitTutorialBooking", "placeOrder",
   "rateSession",
 ]);
-const TUTOR_ACTIONS = new Set(["submitAvailability", "submitLeave", "submitProgressReport", "checkInSession"]);
+const TUTOR_ACTIONS = new Set(["submitAvailability", "submitLeave", "checkInSession"]);
 const SHARED_ACTIONS = new Set([
   "markNotificationsRead", "markMessageNotificationsRead", "sendMessage", "logMaterialAccess",
   "saveTuteeProfile", "saveTutorProfile", "decideBookingScheduleProposal",
@@ -66,7 +66,6 @@ export function authorizeBusinessAction(state, user, action, args) {
     safeArgs[1] = safeArgs[1].map((item) => ({ sku: item?.sku, qty: item?.qty }));
   }
   if (action === "submitAvailability" || action === "submitLeave") safeArgs[0] = user.id;
-  if (action === "submitProgressReport") safeArgs[2] = user.id;
   if (action === "checkInSession") {
     const session = state.sessions.find((entry) => entry.id === safeArgs[0]);
     if (!session || session.tutorId !== user.id) return deny();
@@ -84,10 +83,6 @@ export function authorizeBusinessAction(state, user, action, args) {
       return deny("Choose a rating from 1 to 5 stars and keep feedback under 2,000 characters.");
     }
     if (session.rating != null) return deny("This tutor has already been rated for this booking.");
-  }
-  if (action === "submitProgressReport") {
-    const session = state.sessions.find((entry) => entry.id === safeArgs[0]);
-    if (!session || session.tutorId !== user.id) return deny();
   }
   if (action === "cancelAssessment") {
     const assessment = state.assessments.find((entry) => entry.id === safeArgs[0]);

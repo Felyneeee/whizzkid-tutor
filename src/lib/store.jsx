@@ -13,7 +13,7 @@ const BUSINESS_ACTIONS = [
   "scheduleInterview", "evaluateApplicant", "verifyExistingTutor", "setTutorPay", "approveAvailability",
   "adminEditTutorAvailability", "setTutorWeeklySchedule", "rejectAvailability", "decideLeave", "adminLeave", "proposeBookingSchedule",
   "decideBookingScheduleProposal", "confirmBooking", "confirmBookingSession", "confirmReadingAssignment", "rejectReadingAssignment", "rejectBooking", "terminateBooking", "completeSession",
-  "submitProgressReport", "checkInSession", "reassignSession", "proposeSessionReschedule", "cancelSession",
+  "checkInSession", "reassignSession", "proposeSessionReschedule", "cancelSession",
   "updateCohort", "addCohort", "deleteCohort", "removeFromCohort", "assignPlaygroupBooking", "assignPlaygroupWeekday", "approvePlaygroupBooking", "updatePurchase", "addMaterial", "updateMaterial",
   "deleteMaterial", "logMaterialAccess",
 ];
@@ -39,6 +39,7 @@ function cleanLegacyState(value) {
   if (!value || typeof value !== "object" || !Array.isArray(value.users)) return null;
   const copy = structuredClone(value);
   copy.users = copy.users.map(({ password, ...user }) => user);
+  delete copy.progressReports;
   return copy;
 }
 

@@ -951,45 +951,6 @@ export function createBusinessActions({ get, mutate }) {
               pushNotif(n, s.tuteeId, `Your final session on ${fmtDate(s.date)} is complete. You can now rate your tutor.`, ["web"]);
       });
   },
-  submitProgressReport(sessionId, report, tutorId) {
-      const d = get();
-      const session = d.sessions.find((x) => x.id === sessionId);
-      const tutor = d.users.find((x) => x.id === tutorId && x.role === "tutor");
-      if (!tutor || !session || session.tutorId !== tutorId)
-          return { ok: false, error: "You can only report progress for your assigned students." };
-      if (session.status !== "completed" || session.attended === false)
-          return { ok: false, error: "Progress can be reported only for a completed session that was not marked absent." };
-      if (!report.subject.trim() || !report.skill.trim() || !report.learningGoal.trim() || !report.evidence.trim() || !report.nextStep.trim())
-          return { ok: false, error: "Complete the subject, skill, goal, evidence, and next step." };
-      if (report.score !== null && (!Number.isFinite(report.score) || report.score < 0 || report.score > 100))
-          return { ok: false, error: "Mastery check score must be between 0 and 100." };
-      const existing = d.progressReports.find((x) => x.sessionId === sessionId);
-      const reportId = existing?.id ?? uid("progress");
-      mutate((n) => {
-          const target = {
-              id: reportId,
-              sessionId,
-              bookingId: session.bookingId,
-              tuteeId: session.tuteeId,
-              tutorId: session.tutorId,
-              sessionDate: session.date,
-              subject: report.subject.trim(),
-              skill: report.skill.trim(),
-              learningGoal: report.learningGoal.trim(),
-              status: report.status,
-              evidence: report.evidence.trim(),
-              score: report.score,
-              nextStep: report.nextStep.trim(),
-              submittedAt: nowISO(),
-          };
-          if (existing)
-              n.progressReports = n.progressReports.map((x) => x.id === reportId ? target : x);
-          else
-              n.progressReports.unshift(target);
-          pushNotif(n, session.tuteeId, `Your tutor updated your ${target.subject} learning progress.`, ["web"]);
-      });
-      return { ok: true, reportId };
-  },
   checkInSession(sessionId, tutorId) {
       const d = get();
       const session = d.sessions.find((x) => x.id === sessionId);

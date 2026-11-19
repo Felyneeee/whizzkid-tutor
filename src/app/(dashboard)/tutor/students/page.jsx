@@ -3,7 +3,6 @@ import { useState } from "react";
 import { Alert, Button, Card, Empty, PageHeader } from "@/components/ui";
 import { firstName, fmtDate, fmtDateTime, fmtTime, todayISO } from "@/lib/dates";
 import { useStore } from "@/lib/store";
-import { SessionProgressForm } from "./SessionProgressForm";
 export default function MyStudents() {
     const s = useStore();
     const id = s.me.id;
@@ -37,8 +36,6 @@ export default function MyStudents() {
                               }}>Check in student &amp; record time</Button>}
                               {session.tutorCheckedInAt && <div className="mt-1 text-xs font-semibold text-mint-600">Tutor checked in; student marked present at {fmtDateTime(session.tutorCheckedInAt)}</div>}
                               {checkInErrors[session.id] && <Alert kind="error">{checkInErrors[session.id]}</Alert>}
-                              {session.status === "completed" && session.attended === false && <div className="mt-1 text-xs font-semibold text-coral-600">Marked as no-show — progress report is unavailable for this session.</div>}
-                              {session.status === "completed" && session.attended !== false && (<SessionProgressForm sessionId={session.id} defaultSubject={b.sessionSlots?.find((slot) => slot.date === session.date && slot.time === session.time)?.subject || b.sessionSubjects?.[session.date] || b.subject} existing={s.db.progressReports.find((report) => report.sessionId === session.id)}/>)}
                             </div>))
                             : b.dates.map((scheduledDate) => <div key={scheduledDate}>{fmtDate(scheduledDate)} · {fmtTime(b.sessionTimes?.[scheduledDate] ?? b.time)}</div>)}
                     </div>

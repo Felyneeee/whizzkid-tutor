@@ -1,5 +1,5 @@
 "use client";
-import { Bell, CalendarDays, Clock, Home, MessageCircle, ShoppingBag, UserRound, History, Sparkles, TrendingUp } from "lucide-react";
+import { Bell, CalendarDays, Clock, Home, MessageCircle, ShoppingBag, UserRound, History, Sparkles } from "lucide-react";
 import { DashboardShell } from "@/components/Shell";
 import { useStore } from "@/lib/store";
 export default function TuteeLayout({ children }) {
@@ -14,7 +14,6 @@ export default function TuteeLayout({ children }) {
             { href: "/tutee/book", label: "Book a Program", icon: <Sparkles /> },
             { href: "/tutee/requests", label: "My Bookings", icon: <Clock />, badge: pending },
             { href: "/tutee/schedule", label: "My Schedule", icon: <CalendarDays /> },
-            { href: "/tutee/progress", label: "Learning Progress", icon: <TrendingUp /> },
             { href: "/tutee/purchases", label: "Purchases", icon: <ShoppingBag /> },
             { href: "/tutee/chat", label: "Chat with Admin", icon: <MessageCircle />, badge: unreadMessages },
             { href: "/tutee/history", label: "Activity History", icon: <History /> },

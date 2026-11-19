@@ -63,10 +63,12 @@ export default function TutorProfilePage() {
           <Chips multi options={GRADE_CHOICES} value={bands} onChange={setBands}/>
         </Field>
         <Field label="Bio"><Textarea value={f.bio} onChange={set("bio")}/></Field>
-        <Field label="Resume (PDF)" hint={resume.name}>
+        <Field label="Resume (PDF)" hint={resume.name || "No PDF saved"}>
           <Input type="file" accept=".pdf,application/pdf" onChange={(e) => up(e.target.files?.[0], "resume")}/>
         </Field>
         {msg && <Alert kind={msg.k === "success" ? "success" : "error"}>{msg.t}</Alert>}
+        <div className="space-y-4">
+        {resume.data && <a href={resume.data} target="_blank" rel="noreferrer" className="block w-fit max-w-full break-all text-sm font-semibold text-brand-700 hover:underline">{resume.name || "Resume"}</a>}
         <Button disabled={saving} onClick={async () => {
             setSaving(true);
             setMsg(null);
@@ -84,6 +86,7 @@ export default function TutorProfilePage() {
         }}>
           {saving ? "Saving…" : "Save profile"}
         </Button>
+        </div>
       </Card>
     </>);
 }

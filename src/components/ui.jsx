@@ -50,9 +50,6 @@ const BADGE = {
     terminated: "bg-coral-100 text-coral-600",
     cancelled: "bg-slate-100 text-slate-500",
     needs_reassignment: "bg-coral-100 text-coral-600",
-    mastered: "bg-mint-100 text-mint-600",
-    practicing: "bg-brand-100 text-brand-700",
-    not_started: "bg-slate-100 text-slate-500",
     online: "bg-brand-50 text-brand-700",
     "face-to-face": "bg-sunny-50 text-sunny-500",
 };

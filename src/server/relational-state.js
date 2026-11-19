@@ -198,23 +198,6 @@ const tables = [
     }),
   },
   {
-    stateKey: "progressReports", table: "progress_reports", primaryKey: "id",
-    orderBy: "submitted_at DESC",
-    toRow: (p) => ({
-      id: p.id, session_id: p.sessionId, booking_id: p.bookingId, tutee_id: p.tuteeId,
-      tutor_id: p.tutorId, session_date: p.sessionDate, subject: p.subject, skill: p.skill,
-      learning_goal: p.learningGoal, progress_status: p.status, evidence: p.evidence,
-      score: p.score ?? null, next_step: p.nextStep, submitted_at: sqlDateTime(p.submittedAt),
-    }),
-    fromRow: (r) => ({
-      id: r.id, sessionId: r.session_id, bookingId: r.booking_id, tuteeId: r.tutee_id,
-      tutorId: r.tutor_id, sessionDate: dateOnly(r.session_date), subject: r.subject,
-      skill: r.skill, learningGoal: r.learning_goal, status: r.progress_status,
-      evidence: r.evidence, score: r.score == null ? null : Number(r.score),
-      nextStep: r.next_step, submittedAt: isoDateTime(r.submitted_at),
-    }),
-  },
-  {
     stateKey: "messages", table: "messages", primaryKey: "id", orderBy: "sent_at",
     toRow: (m) => ({
       id: m.id, thread_id: m.threadId, from_id: m.fromId, message_text: m.text,

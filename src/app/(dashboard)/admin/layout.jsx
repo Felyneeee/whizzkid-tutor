@@ -1,5 +1,5 @@
 "use client";
-import { Bell, CalendarCheck, CalendarClock, ClipboardCheck, FileLock2, GraduationCap, History, Home, MessageCircle, CreditCard, Shuffle, Users, Baby, TrendingUp, } from "lucide-react";
+import { Bell, CalendarCheck, CalendarClock, ClipboardCheck, FileLock2, GraduationCap, History, Home, MessageCircle, CreditCard, Shuffle, Users, Baby, } from "lucide-react";
 import { DashboardShell } from "@/components/Shell";
 import { useStore } from "@/lib/store";
 export default function AdminLayout({ children }) {
@@ -20,7 +20,6 @@ export default function AdminLayout({ children }) {
             { href: "/admin/scheduling", label: "Scheduling & Contracts", icon: <CalendarClock />, badge: conflicts },
             { href: "/admin/approvals", label: "Availability & Leaves", icon: <CalendarCheck />, badge: approvals },
             { href: "/admin/assessments", label: "Reading Assessments", icon: <GraduationCap />, badge: assessments },
-            { href: "/admin/progress", label: "Student Progress", icon: <TrendingUp /> },
             { href: "/admin/classes", label: "Playgroup Classes", icon: <Baby /> },
             { href: "/admin/users", label: "Tutee & Tutor Records", icon: <Users /> },
             { href: "/admin/materials", label: "Learning Materials", icon: <FileLock2 /> },

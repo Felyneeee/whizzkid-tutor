@@ -123,16 +123,6 @@ CREATE TABLE IF NOT EXISTS sessions (
   CHECK (rating IS NULL OR rating BETWEEN 1 AND 5)
 ) ENGINE=InnoDB;
 
-CREATE TABLE IF NOT EXISTS progress_reports (
-  id VARCHAR(64) PRIMARY KEY, session_id VARCHAR(64) NOT NULL, booking_id VARCHAR(64) NOT NULL,
-  tutee_id VARCHAR(64) NOT NULL, tutor_id VARCHAR(64) NOT NULL, session_date DATE NOT NULL,
-  subject VARCHAR(120) NOT NULL, skill VARCHAR(200) NOT NULL, learning_goal TEXT NOT NULL,
-  progress_status ENUM('not_started','practicing','mastered') NOT NULL, evidence TEXT NOT NULL,
-  score DECIMAL(5,2) NULL, next_step TEXT NOT NULL, submitted_at DATETIME NOT NULL,
-  FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
-  FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE
-) ENGINE=InnoDB;
-
 CREATE TABLE IF NOT EXISTS messages (
   id VARCHAR(64) PRIMARY KEY, thread_id VARCHAR(64) NOT NULL, from_id VARCHAR(64) NOT NULL,
   message_text TEXT NOT NULL, sent_at DATETIME NOT NULL, auto BOOLEAN NOT NULL DEFAULT FALSE,

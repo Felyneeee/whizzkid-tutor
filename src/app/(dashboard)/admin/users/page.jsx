@@ -23,9 +23,9 @@ export default function Records() {
               <Td className="font-bold">{t.fullName || "(incomplete)"}</Td><Td>{t.gradeLevel}</Td><Td>{t.age ?? "—"}</Td><Td>{userOf(t.userId)?.email}<div className="text-xs text-slate-400">@{userOf(t.userId)?.username}</div></Td><Td>{t.contact}</Td>
               <Td><Badge status={t.complete ? "approved" : "pending"}>{t.complete ? "complete" : "incomplete"}</Badge></Td><Td className="text-brand-600">View</Td>
             </tr>))}
-        </Table>)) : (tutors.length === 0 ? <Empty>No tutors found.</Empty> : (<Table head={["Name", "Status", "Type", "Subjects", "Rate/hr", "Fixed", ""]}>
+        </Table>)) : (tutors.length === 0 ? <Empty>No tutors found.</Empty> : (<Table head={["Name", "Status", "Type", "Subjects", ""]}>
           {tutors.map((t) => (<tr key={t.userId} className="cursor-pointer hover:bg-slate-50" onClick={() => setSel({ kind: "tutor", id: t.userId })}>
-              <Td className="font-bold">{t.fullName}<div className="text-xs font-normal text-slate-400">{userOf(t.userId)?.email}</div></Td><Td><Badge status={t.status}/></Td><Td className="capitalize">{t.applicantType}</Td><Td>{t.subjects.join(", ")}</Td><Td>₱{t.hourlyRate}</Td><Td>₱{t.fixedSalary}</Td><Td className="text-brand-600">View</Td>
+              <Td className="font-bold">{t.fullName}<div className="text-xs font-normal text-slate-400">{userOf(t.userId)?.email}</div></Td><Td><Badge status={t.status}/></Td><Td className="capitalize">{t.applicantType}</Td><Td>{t.subjects.join(", ")}</Td><Td className="text-brand-600">View</Td>
             </tr>))}
         </Table>))}
       <Modal open={!!sel} onClose={() => setSel(null)} title={tee?.fullName || tor?.fullName || "Record"} wide>
@@ -37,7 +37,6 @@ export default function Records() {
         {tor && (<div className="space-y-3 text-sm">
             <div className="grid grid-cols-2 gap-2"><div><b>Status:</b> <Badge status={tor.status}/></div><div><b>Age:</b> {tor.age ?? "—"}</div><div><b>Contact:</b> {tor.contact}</div><div><b>Resume:</b> {tor.resumeName || "—"}</div><div className="col-span-2"><b>Subjects:</b> {tor.subjects.join(", ")}</div><div className="col-span-2"><b>Grade bands:</b> {tor.gradeBands.join(", ")}</div></div>
             {tor.bio && <p className="rounded-xl bg-slate-50 p-3">{tor.bio}</p>}
-            <div><b>Employment:</b> ₱{tor.hourlyRate}/hr + ₱{tor.fixedSalary} fixed</div>
             <div><b>Assigned students:</b> {[...new Set(s.db.sessions.filter((session) => session.tutorId === tor.userId && session.status !== "cancelled").map((session) => nm(session.tuteeId)))].join(", ") || "none"}</div>
           </div>)}
       </Modal>

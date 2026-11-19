@@ -16,7 +16,6 @@ export function buildSeed() {
         leaves: [],
         bookings: [],
         sessions: [],
-        progressReports: [],
         assessments: [],
         cohorts: [],
         messages: [],
