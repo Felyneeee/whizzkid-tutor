@@ -7,8 +7,12 @@ import { SUBJECTS } from "@/lib/constants";
 import { readFileAsDataURL, readPdfAsDataURL } from "@/lib/files";
 import { useStore } from "@/lib/store";
 const GRADE_CHOICES = ["Nursery", "Preschool", "Kinder", "Elementary", "High School"];
-const gradeBandForChoice = (grade) => ["Nursery", "Preschool", "Kinder"].includes(grade) ? "Preschool" : grade === "High School" ? "Junior High" : grade;
-const choicesForGradeBands = (bands) => bands.map((band) => band === "Preschool" ? "Preschool" : band === "Junior High" || band === "Senior High" ? "High School" : band).filter((band) => GRADE_CHOICES.includes(band));
+const choicesForGradeBands = (bands) => bands.flatMap((band) => {
+    if (band === "Preschool") return ["Preschool"];
+    if (band === "Junior High") return ["High School"];
+    if (band === "Senior High") return [];
+    return GRADE_CHOICES.includes(band) ? [band] : [];
+});
 export default function TutorProfilePage() {
     const s = useStore();
     const id = s.me.id;
@@ -19,6 +23,7 @@ export default function TutorProfilePage() {
     const [photo, setPhoto] = useState(t.photo);
     const [resume, setResume] = useState({ name: t.resumeName, data: t.resumeData });
     const [msg, setMsg] = useState(null);
+    const [saving, setSaving] = useState(false);
     const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
     const up = async (file, kind) => {
         if (!file)
@@ -54,7 +59,7 @@ export default function TutorProfilePage() {
         <Field label="Subject expertise">
           <Chips multi options={[...SUBJECTS, "Reading"]} value={subjects} onChange={setSubjects}/>
         </Field>
-        <Field label="Grade bands" hint="Elementary: Grades 1–6 · High School: Grades 7–10">
+        <Field label="Grade bands" hint="Nursery, Preschool, Kinder, Elementary (Grades 1–6), and High School (Grades 7–10)">
           <Chips multi options={GRADE_CHOICES} value={bands} onChange={setBands}/>
         </Field>
         <Field label="Bio"><Textarea value={f.bio} onChange={set("bio")}/></Field>
@@ -62,11 +67,22 @@ export default function TutorProfilePage() {
           <Input type="file" accept=".pdf,application/pdf" onChange={(e) => up(e.target.files?.[0], "resume")}/>
         </Field>
         {msg && <Alert kind={msg.k === "success" ? "success" : "error"}>{msg.t}</Alert>}
-        <Button onClick={() => {
-            s.saveTutorProfile(id, { fullName: f.fullName, age: f.age ? Number(f.age) : null, contact: f.contact, bio: f.bio, birthday: f.birthday || undefined, subjects, gradeBands: [...new Set(bands.map(gradeBandForChoice))], photo, resumeName: resume.name, resumeData: resume.data });
-            setMsg({ k: "success", t: "Profile saved." });
+        <Button disabled={saving} onClick={async () => {
+            setSaving(true);
+            setMsg(null);
+            try {
+                const result = await s.saveTutorProfile(id, { fullName: f.fullName, age: f.age ? Number(f.age) : null, contact: f.contact, bio: f.bio, birthday: f.birthday || undefined, subjects, gradeBands: [...new Set(bands)], photo, resumeName: resume.name, resumeData: resume.data });
+                if (!result?.ok) throw new Error(result?.error || "Profile could not be saved. Please try again.");
+                setMsg({ k: "success", t: "Profile saved." });
+            }
+            catch (e) {
+                setMsg({ k: "error", t: e instanceof Error ? e.message : "Profile could not be saved. Please try again." });
+            }
+            finally {
+                setSaving(false);
+            }
         }}>
-          Save profile
+          {saving ? "Saving…" : "Save profile"}
         </Button>
       </Card>
     </>);

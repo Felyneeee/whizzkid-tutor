@@ -105,7 +105,14 @@ export function tutorQualifies(t, p) {
     const needSubject = p.program === "reading" ? ["Reading"] : p.subject === "Mathematics" || p.subject === "Math" ? ["Mathematics", "Math"] : p.subject === "Araling Panlipunan (AP)" ? ["Araling Panlipunan (AP)", "Araling Panlipunan", "AP"] : [p.subject];
     if (!t.subjects.some((subject) => needSubject.includes(subject)))
         return false;
-    return t.gradeBands.includes(bandOf(p.gradeLevel));
+    return tutorHasGradeBand(t, bandOf(p.gradeLevel));
+}
+function tutorHasGradeBand(t, band) {
+    const bands = t.gradeBands || [];
+    if (band === "Preschool") return bands.some((value) => ["Preschool", "Nursery", "Kinder"].includes(value));
+    if (band === "Junior High") return bands.some((value) => ["Junior High", "High School"].includes(value));
+    if (band === "Elementary") return bands.includes("Elementary");
+    return false;
 }
 export function tutorFreeOn(db, t, p, date) {
     const time = p.times?.[date] ?? p.time;
@@ -131,7 +138,7 @@ export function matchTutors(db, p) {
             continue;
         const rating = tutorRating(db, t.userId);
         const full = ok.length === p.dates.length;
-        const gradeScore = t.gradeBands.includes(bandOf(p.gradeLevel)) ? 20 : 0;
+        const gradeScore = tutorHasGradeBand(t, bandOf(p.gradeLevel)) ? 20 : 0;
         const scheduleScore = (ok.length / p.dates.length) * 30;
         const subjectScore = tutorQualifies(t, p) ? 30 : 0;
         const bio = String(t.bio ?? "").toLowerCase();
