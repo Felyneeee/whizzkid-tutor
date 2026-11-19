@@ -5,7 +5,7 @@ import { READING_SKILLS } from "@/lib/constants";
 import { fmtDate, fmtTime } from "@/lib/dates";
 import { useStore } from "@/lib/store";
 
-export default function Assessments() {
+export default function Assessments({ embedded = false } = {}) {
   const s = useStore();
   const [rec, setRec] = useState(null);
   const [f, setF] = useState({ readingLevel: "", results: "", learningNeeds: "" });
@@ -33,7 +33,7 @@ export default function Assessments() {
   };
 
   return <>
-    <PageHeader title="Reading assessments" subtitle="Schedule initial assessments for program requests, then record results and learning needs." />
+    {!embedded && <PageHeader title="Reading assessments" subtitle="Schedule initial assessments for program requests, then record results and learning needs." />}
     {list.length === 0 && <Empty>No assessment requests yet.</Empty>}
     <div className="space-y-3">
       {list.map((a) => {

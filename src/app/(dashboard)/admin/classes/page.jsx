@@ -28,7 +28,7 @@ const nextAvailableStartWeek = (cohorts, today) => {
     return candidate;
 };
 
-export default function Classes() {
+export default function Classes({ embedded = false } = {}) {
     const s = useStore();
     const today = todayISO();
     const [cohortOpen, setCohortOpen] = useState(false);
@@ -177,7 +177,8 @@ export default function Classes() {
       }
     };
     return (<>
-      <PageHeader title="Playgroup Class" subtitle="Manage tutors, cohorts and booking requests." action={<Button onClick={openCohortForm}>Schedule Cohort</Button>}/>
+      {!embedded && <PageHeader title="Playgroup Class" subtitle="Manage tutors, cohorts and booking requests." action={<Button onClick={openCohortForm}>Schedule Cohort</Button>}/>}
+      {embedded && <div className="mb-4 flex justify-end"><Button onClick={openCohortForm}>Schedule Cohort</Button></div>}
       {pageError && <div className="mb-4"><Alert kind="error">{pageError}</Alert></div>}
       <div className="space-y-6">
         <Card className="space-y-4">

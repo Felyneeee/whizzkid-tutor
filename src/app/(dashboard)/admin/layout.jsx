@@ -1,5 +1,5 @@
 "use client";
-import { Bell, CalendarClock, FileLock2, GraduationCap, History, Home, MessageCircle, CreditCard, Shuffle, Users, Baby, } from "lucide-react";
+import { Bell, CalendarClock, ClipboardList, FileLock2, History, Home, MessageCircle, CreditCard, Users, Baby } from "lucide-react";
 import { DashboardShell } from "@/components/Shell";
 import { useStore } from "@/lib/store";
 export default function AdminLayout({ children }) {
@@ -12,14 +12,12 @@ export default function AdminLayout({ children }) {
     const orders = (db.purchases?.filter((p) => ["pending", "awaiting_verification"].includes(p.status)).length ?? 0) + (db.bookings?.filter((b) => b.status === "awaiting_payment_approval").length ?? 0);
     const unread = db.notifications?.filter((n) => n.userId === s.me?.id && !n.read).length ?? 0;
     const unreadMessages = db.notifications?.filter((n) => n.userId === s.me?.id && !n.read && n.text.startsWith("New message")).length ?? 0;
-    const assessments = db.assessments?.filter((a) => a.status === "booked").length ?? 0;
+    const assessments = db.assessments?.filter((a) => ["booked", "pending_admin_scheduling"].includes(a.status)).length ?? 0;
     return (<DashboardShell role="admin" nav={[
             { href: "/admin", label: "Dashboard", icon: <Home /> },
             { href: "/admin/tutors", label: "Tutor", icon: <Users />, badge: apps + approvals },
-            { href: "/admin/matching", label: "Matching", icon: <Shuffle />, badge: matching },
+            { href: "/admin/booking-requests", label: "Booking Requests", icon: <ClipboardList />, badge: matching + assessments },
             { href: "/admin/scheduling", label: "Scheduling & Contracts", icon: <CalendarClock />, badge: conflicts },
-            { href: "/admin/assessments", label: "Reading Assessments", icon: <GraduationCap />, badge: assessments },
-            { href: "/admin/classes", label: "Playgroup Classes", icon: <Baby /> },
             { href: "/admin/users", label: "Tutee Records", icon: <Baby /> },
             { href: "/admin/materials", label: "Learning Materials", icon: <FileLock2 /> },
             { href: "/admin/orders", label: "Payment Records", icon: <CreditCard />, badge: orders },
