@@ -184,13 +184,14 @@ export async function POST(request) {
         return NextResponse.json({ error: "One of those slots is being held for a pending reschedule request." }, { status: 409 });
       }
       const duplicate = state.bookings.some((entry) => {
-        if (entry.tuteeId !== user.id || entry.program !== booking.program || !["pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "confirmed"].includes(entry.status)) return false;
+        if (entry.tuteeId !== user.id || !["pending", "approved", "pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "to_pay", "awaiting_payment_approval", "confirmed"].includes(entry.status)) return false;
         const existingSlots = entry.sessionSlots || entry.dates.map((date) => ({ date, time: entry.sessionTimes?.[date] ?? entry.time }));
         return existingSlots.some((existing) => requestedSlots.some((requested) => existing.date === requested.date && existing.time === requested.time));
       });
-      if (duplicate) {
+      const overlappingSession = state.sessions.some((session) => session.tuteeId === user.id && ["scheduled", "needs_reassignment"].includes(session.status) && requestedSlots.some((requested) => requested.date === session.date && requested.time === session.time));
+      if (duplicate || overlappingSession) {
         await connection.rollback();
-        return NextResponse.json({ error: "You already have a request or booking for this program, date, and time." }, { status: 409 });
+        return NextResponse.json({ error: "You already have a booking or request at that date and time." }, { status: 409 });
       }
       if (booking.recurrence) {
         const recurrence = booking.recurrence;
@@ -516,8 +517,9 @@ export async function POST(request) {
       if (purchase) purchase.releasedAt = nowISO();
     }
     const matchingActions = ["confirmBooking", "confirmBookingSession", "confirmReadingAssignment"];
-    if (matchingActions.includes(body.action)) {
-      const requestedIds = body.action === "confirmReadingAssignment" ? permission.args[0] : [permission.args[0]];
+    const autoPairedIds = body.action === "submitTutorialBooking" && result?.autoPaired ? [result.bookingId] : [];
+    if (matchingActions.includes(body.action) || autoPairedIds.length) {
+      const requestedIds = autoPairedIds.length ? autoPairedIds : body.action === "confirmReadingAssignment" ? permission.args[0] : [permission.args[0]];
       for (const booking of nextState.bookings.filter((entry) => requestedIds.includes(entry.id))) {
         const sessions = nextState.sessions.filter((entry) => entry.bookingId === booking.id && entry.status !== "cancelled");
         const fullyAssigned = bookingSlotsFullyAssigned(booking, sessions);

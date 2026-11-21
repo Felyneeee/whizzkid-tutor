@@ -50,7 +50,7 @@ export default function Matching({ embedded = false, programFilter = null } = {}
     const groups = new Map();
     const requestedSlots = booking.sessionSlots ?? booking.dates.map((date) => ({ seriesKey: `day-${new Date(`${date}T00:00:00Z`).getUTCDay()}`, day: new Date(`${date}T00:00:00Z`).getUTCDay(), date, subject: booking.sessionSubjects?.[date] ?? booking.subject, time: booking.sessionTimes?.[date] ?? booking.time }));
     for (const slot of requestedSlots) {
-      const key = slot.seriesKey;
+      const key = booking.sessionType === "group" ? `${slot.date}|${slot.time}` : slot.seriesKey;
       if (!groups.has(key)) groups.set(key, { key, day: slot.day, subject: slot.subject, time: slot.time, slots: [] });
       groups.get(key).slots.push(slot);
     }

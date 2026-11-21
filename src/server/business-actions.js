@@ -229,8 +229,12 @@ export function createBusinessActions({ get, mutate }) {
       if (v.program === "reading") v.sessionType = "one-on-one";
       if (v.dates.some((date) => date < todayISO()))
           return { ok: false, error: "Past dates cannot be booked. Please choose a future date." };
-      if (d.bookings.some((b) => b.tuteeId === v.tuteeId && b.program === v.program && ["pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "confirmed"].includes(b.status) && (b.sessionSlots || b.dates.map((date) => ({ date, time: b.sessionTimes?.[date] ?? b.time }))).some((existing) => (v.sessionSlots || v.dates.map((date) => ({ date, time: v.sessionTimes?.[date] ?? v.time }))).some((requested) => existing.date === requested.date && existing.time === requested.time))))
-          return { ok: false, error: "You already have a request or booking for this program, date, and time." };
+      const requestedSlots = v.sessionSlots || v.dates.map((date) => ({ date, time: v.sessionTimes?.[date] ?? v.time }));
+      const activeStatuses = ["pending", "approved", "pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "to_pay", "awaiting_payment_approval", "confirmed"];
+      const overlapsBooking = d.bookings.some((booking) => booking.tuteeId === v.tuteeId && activeStatuses.includes(booking.status) && (booking.sessionSlots || booking.dates.map((date) => ({ date, time: booking.sessionTimes?.[date] ?? booking.time }))).some((existing) => requestedSlots.some((requested) => existing.date === requested.date && existing.time === requested.time)));
+      const overlapsSession = d.sessions.some((session) => session.tuteeId === v.tuteeId && ["scheduled", "needs_reassignment"].includes(session.status) && requestedSlots.some((requested) => requested.date === session.date && requested.time === session.time));
+      if (overlapsBooking || overlapsSession)
+          return { ok: false, error: "You already have a booking or request at that date and time." };
       if (v.program === "academic") {
           const cycleWeeks = v.recurrence?.cycleWeeks;
           const slots = v.sessionSlots;
@@ -251,6 +255,20 @@ export function createBusinessActions({ get, mutate }) {
       if (v.program === "reading" && (!Array.isArray(v.sessionSlots) || v.sessionSlots.length !== v.dates.length || v.sessionSlots.some((slot) => !v.dates.includes(slot.date) || slot.subject !== "Reading" || !HOURS.includes(slot.time) || slot.time !== v.sessionTimes?.[slot.date])))
           return { ok: false, error: "Choose an available time for each Reading Program session." };
       const capacityOptions = { program: v.program, subject: v.subject, gradeLevel: v.gradeLevel, modality: v.modality, sessionType: v.sessionType };
+      const groupPairs = v.program === "academic" && v.sessionType === "group" ? requestedSlots.map((slot) => {
+          const subject = slot.subject ?? v.sessionSubjects?.[slot.date] ?? v.subject;
+          const session = d.sessions
+              .filter((entry) => entry.date === slot.date && entry.time === slot.time && entry.tutorId && entry.status === "scheduled")
+              .filter((entry) => {
+                  const existingBooking = d.bookings.find((booking) => booking.id === entry.bookingId);
+                  if (!existingBooking || existingBooking.program !== "academic" || existingBooking.sessionType !== "group" || existingBooking.gradeLevel !== v.gradeLevel || existingBooking.modality !== v.modality || !["to_pay", "awaiting_payment_approval", "confirmed"].includes(existingBooking.status)) return false;
+                  const existingSubject = existingBooking.sessionSlots?.find((item) => item.date === slot.date && item.time === slot.time)?.subject || existingBooking.sessionSubjects?.[slot.date] || existingBooking.subject;
+                  return existingSubject === subject;
+              })
+              .sort((a, b) => String(d.bookings.find((booking) => booking.id === a.bookingId)?.createdAt || "").localeCompare(String(d.bookings.find((booking) => booking.id === b.bookingId)?.createdAt || "")))
+              .find((entry) => d.sessions.filter((other) => other.tutorId === entry.tutorId && other.date === slot.date && other.time === slot.time && ["scheduled", "needs_reassignment"].includes(other.status) && d.bookings.find((booking) => booking.id === other.bookingId)?.sessionType === "group").length < 2);
+          return { slot, subject, session };
+      }) : [];
       const occupied = Array.isArray(v.sessionSlots)
           ? v.sessionSlots.filter((slot) => !slotRequestable(d, slot.date, slot.time, { ...capacityOptions, subject: slot.subject })).map((slot) => slot.date)
           : v.dates.filter((date) => slotOccupied(d, date, v.time, undefined, undefined, capacityOptions));
@@ -322,8 +340,20 @@ export function createBusinessActions({ get, mutate }) {
               ...(v.program !== "reading" ? { expiresAt: new Date(Date.now() + Math.max(1, Number(process.env.BOOKING_PENDING_TTL_HOURS) || 72) * 3600000).toISOString() } : {}),
               assessmentId,
           };
+          const paired = groupPairs.filter((entry) => entry.session);
+          if (groupPairs.length && paired.length === groupPairs.length) {
+              b.status = "confirmed";
+              const tutorIds = [...new Set(paired.map((entry) => entry.session.tutorId))];
+              if (tutorIds.length === 1) b.tutorId = tutorIds[0];
+          }
           n.bookings.push(b);
-          pushNotif(n, v.tuteeId, v.program === "reading" && !assessmentComplete
+          paired.forEach(({ slot, session }) => n.sessions.push({ id: uid("s"), assignmentId: session.assignmentId, bookingId, tutorId: session.tutorId, tuteeId: v.tuteeId, date: slot.date, time: slot.time, modality: v.modality, status: "scheduled" }));
+          if (paired.length) {
+              const pairText = paired.map(({ slot, session }) => `${fmtDate(slot.date)} at ${fmtTime(slot.time)} with ${firstNameOf(n, session.tutorId)}`).join("; ");
+              pushNotif(n, v.tuteeId, `Your group booking was paired with the existing tutor assignment: ${pairText}.`, ["web", "email", "sms"]);
+              [...new Set(paired.map((entry) => entry.session.tutorId))].forEach((tutorId) => pushNotif(n, tutorId, `A group student matching your existing assignment was added: ${firstNameOf(n, v.tuteeId)} — ${b.subject} (${b.modality}).`, ["web", "email"]));
+          }
+          if (!groupPairs.length || paired.length < groupPairs.length) pushNotif(n, v.tuteeId, v.program === "reading" && !assessmentComplete
               ? "Your Reading Program schedule request was received. It will be confirmed after your initial assessment is complete. The admin will schedule the assessment between 9:00 and 10:00 AM and send you the date and time."
               : v.program === "reading"
                   ? "Your Reading Program booking and schedule were received. Your completed assessment is on file, and the admin will confirm a tutor for your selected schedule."
@@ -331,10 +361,10 @@ export function createBusinessActions({ get, mutate }) {
                   ? "Booking request submitted. Your open slot is reserved while our admin reviews the tutor recommendations."
                   : "Booking request submitted. Your open slot is reserved while we wait for a matching tutor to become available.", ["web", "email"]);
           const sessionCount = v.sessionSlots?.length ?? v.dates.length;
-          if (v.program !== "reading" || !readingAssessmentComplete && assessmentComplete) pushAdmins(n, `New booking request from ${nameOf(n, v.tuteeId)} — ${b.subject}, ${sessionCount} session(s). ${matches.length ? "Review recommendations." : "No tutor matches yet; review when an eligible tutor's availability is approved."}`);
+          if ((v.program !== "reading" || !readingAssessmentComplete && assessmentComplete) && (!groupPairs.length || paired.length < groupPairs.length)) pushAdmins(n, `New booking request from ${nameOf(n, v.tuteeId)} — ${b.subject}, ${sessionCount} session(s). ${matches.length ? "Review recommendations." : "No tutor matches yet; review when an eligible tutor's availability is approved."}`);
           logAct(n, v.tuteeId, "booking", `Requested ${b.subject} schedule (${sessionCount} session/s)`);
       });
-      return { ok: true, bookingId };
+      return { ok: true, bookingId, autoPaired: groupPairs.length > 0 && groupPairs.every((entry) => !!entry.session) };
   },
   placeOrder(tuteeId, items) {
       if (!Array.isArray(items) || !items.length || items.some((item) => !Number.isInteger(item.qty) || item.qty < 1 || item.qty > 99 || !SHOP_ITEMS.some((product) => product.sku === item.sku)))

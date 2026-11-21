@@ -58,12 +58,25 @@ export function tutorBusy(db, tutorId, date, time, ignoreBookingId, sessionType 
 export function tutorAssessmentBusy(db, tutorId, date, time) {
     return tutorBusy(db, tutorId, date, time);
 }
+/** Group slots keep the grade and modality of the first active student. */
+function groupSlotMatchesFirstStudent(db, date, time, options) {
+    if (options.program !== "academic" || options.sessionType !== "group") return true;
+    const activeStatuses = new Set(["pending", "approved", "pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "to_pay", "awaiting_payment_approval", "confirmed"]);
+    const existing = db.bookings
+        .filter((booking) => booking.program === "academic" && booking.sessionType === "group" && activeStatuses.has(booking.status))
+        .filter((booking) => (booking.sessionSlots || booking.dates.map((sessionDate) => ({ date: sessionDate, time: booking.sessionTimes?.[sessionDate] ?? booking.time })))
+            .some((slot) => slot.date === date && slot.time === time))
+        .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+    const first = existing[0];
+    return !first || (first.gradeLevel === options.gradeLevel && first.modality === options.modality);
+}
 /** Center slot capacity is derived from eligible tutors; pending requests reserve seats. */
 export function remainingCapacity(db, date, time, options = {}, ignoreBookingId, ignoreSessionId) {
     const program = options.program ?? "academic";
     const sessionType = options.sessionType ?? "one-on-one";
     const modality = options.modality ?? "online";
     const base = { program, subject: options.subject ?? (program === "reading" ? "Reading" : "English"), gradeLevel: options.gradeLevel ?? "Grade 1", modality, sessionType };
+    if (!groupSlotMatchesFirstStudent(db, date, time, base)) return 0;
     const eligible = db.tutors.filter((t) => tutorQualifies(t, base) && approvedSlot(db, t.userId, date, time, modality) && !onApprovedLeave(db, t.userId, date));
     const eligibleIds = new Set(eligible.map((tutor) => tutor.userId));
     const capacity = eligible.length * (program === "academic" && sessionType === "group" ? 2 : 1);
@@ -81,8 +94,9 @@ export function slotOccupied(db, date, time, ignoreBookingId, ignoreSessionId, o
 /** A request can be held pending when no eligible tutor has opened that slot yet. */
 export function slotRequestable(db, date, time, options = {}, ignoreBookingId) {
     const base = { program: options.program ?? "academic", subject: options.subject ?? "English", gradeLevel: options.gradeLevel ?? "Grade 1", modality: options.modality ?? "online", sessionType: options.sessionType ?? "one-on-one" };
+    if (!groupSlotMatchesFirstStudent(db, date, time, base)) return false;
     const hasEligibleTutor = db.tutors.some((tutor) => tutorQualifies(tutor, base) && approvedSlot(db, tutor.userId, date, time, base.modality) && !onApprovedLeave(db, tutor.userId, date));
-    const reserved = db.bookings.some((booking) => booking.id !== ignoreBookingId && booking.program === base.program && (booking.sessionType ?? "one-on-one") === base.sessionType && ["pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin"].includes(booking.status) && (booking.sessionSlots || booking.dates.map((sessionDate) => ({ date: sessionDate, time: booking.sessionTimes?.[sessionDate] ?? booking.time }))).some((slot) => slot.date === date && slot.time === time));
+    const reserved = base.sessionType !== "group" && db.bookings.some((booking) => booking.id !== ignoreBookingId && booking.program === base.program && (booking.sessionType ?? "one-on-one") === base.sessionType && ["pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin"].includes(booking.status) && (booking.sessionSlots || booking.dates.map((sessionDate) => ({ date: sessionDate, time: booking.sessionTimes?.[sessionDate] ?? booking.time }))).some((slot) => slot.date === date && slot.time === time));
     if (reserved) return false;
     return hasEligibleTutor ? !slotOccupied(db, date, time, ignoreBookingId, undefined, base) : true;
 }
