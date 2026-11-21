@@ -26,8 +26,13 @@ export default function Matching({ embedded = false, programFilter = null } = {}
   const [rescheduleTutorChoice, setRescheduleTutorChoice] = useState({});
   const [rescheduleErrors, setRescheduleErrors] = useState({});
   const [rescheduleBusy, setRescheduleBusy] = useState({});
+  const [sortOrder, setSortOrder] = useState("newest");
+  const sortByCreatedAt = (a, b) => {
+    const comparison = String(a.createdAt || "").localeCompare(String(b.createdAt || ""));
+    return sortOrder === "newest" ? -comparison : comparison;
+  };
   const allPending = s.db.bookings.filter((b) => (!programFilter || b.program === programFilter) && ["awaiting_admin", "ready_for_matching"].includes(b.status)
-    && (b.program !== "reading" || s.db.assessments.some((a) => a.id === b.assessmentId && a.tuteeId === b.tuteeId && a.status === "completed")));
+    && (b.program !== "reading" || s.db.assessments.some((a) => a.id === b.assessmentId && a.tuteeId === b.tuteeId && a.status === "completed"))).sort(sortByCreatedAt);
   const pending = allPending.filter((booking, index) => booking.program !== "reading" || allPending.findIndex((other) => other.program === "reading" && other.tuteeId === booking.tuteeId && other.assessmentId === booking.assessmentId) === index);
   const booking = pending.find((b) => b.id === selectedId);
   const bookingGroup = booking?.program === "reading" ? allPending.filter((entry) => entry.program === "reading" && entry.tuteeId === booking.tuteeId && entry.assessmentId === booking.assessmentId) : booking ? [booking] : [];
@@ -71,7 +76,7 @@ export default function Matching({ embedded = false, programFilter = null } = {}
   const readingMatches = booking?.program === "reading" ? matchTutors(s.db, { program: "reading", subject: "Reading", gradeLevel: booking.gradeLevel, modality: booking.modality, learningNeeds: booking.learningNeeds, dates: readingSlots.map((slot) => slot.date), times: Object.fromEntries(readingSlots.map((slot) => [slot.date, slot.time])), time: booking.time, ignoreBookingId: booking.id }).filter((match) => match.full) : [];
   const suggestedTutorId = booking?.recommendations?.find((id) => readingMatches.some((match) => match.tutor.userId === id)) ?? readingMatches[0]?.tutor.userId;
   const chosenReadingTutor = readingTutorChoice[booking?.id] ?? suggestedTutorId;
-  const pendingReschedules = s.db.bookings.filter((entry) => (!programFilter || entry.program === programFilter) && entry.rescheduleProposal);
+  const pendingReschedules = s.db.bookings.filter((entry) => (!programFilter || entry.program === programFilter) && entry.rescheduleProposal).sort(sortByCreatedAt);
   const rescheduleOptions = (entry, item) => {
     const subject = entry.sessionSlots?.find((slot) => slot.date === item.original.date && slot.time === item.original.time)?.subject || entry.sessionSubjects?.[item.original.date] || entry.subject;
     return matchTutors(s.db, { program: entry.program, subject, gradeLevel: entry.gradeLevel, modality: entry.modality, learningNeeds: entry.learningNeeds, sessionType: entry.sessionType || "one-on-one", dates: [item.date], times: { [item.date]: item.time }, time: item.time, ignoreBookingId: entry.id })
@@ -98,6 +103,7 @@ export default function Matching({ embedded = false, programFilter = null } = {}
 
   return <>
     {!embedded && <PageHeader title="Tutor–tutee matching" subtitle="Review each booking, then assign tutors to its sessions."/>}
+    {!booking && (pending.length > 0 || pendingReschedules.length > 0) && <div className="mb-3 flex justify-end"><label className="flex items-center gap-2 text-sm font-semibold text-slate-600"><span>Sort by</span><Select className="w-auto min-w-36" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option></Select></label></div>}
     {pendingReschedules.length > 0 && <Card className="border-sunny-200 bg-sunny-50/50"><h2 className="mb-3 font-extrabold">Reschedule matching ({pendingReschedules.length})</h2><p className="mb-3 text-sm text-slate-600">Review the requested slots and assign the same tutor or another tutor who is available.</p><div className="space-y-3">{pendingReschedules.map((entry) => {
       const proposal = entry.rescheduleProposal;
       const items = proposal.sessions || [proposal];

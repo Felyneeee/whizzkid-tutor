@@ -136,9 +136,10 @@ export function Stat({ label, value, tone = "brand", sub }) {
       {sub && <div className="text-xs opacity-70">{sub}</div>}
     </div>);
 }
-export function Tabs({ tabs, value, onChange }) {
-    return (<div className="mb-4 flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
-      {tabs.map((t) => (<button key={t.id} onClick={() => onChange(t.id)} className={cn("rounded-lg px-3 py-1.5 text-sm font-semibold transition", value === t.id ? "bg-white text-brand-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
+export function Tabs({ tabs, value, onChange, variant = "default" }) {
+    const segmented = variant === "segmented";
+    return (<div className={cn("mb-4 flex flex-wrap gap-1 p-1", segmented ? "rounded-full border-2 border-brand-500 bg-transparent" : "rounded-xl bg-slate-100")}>
+      {tabs.map((t) => (<button key={t.id} onClick={() => onChange(t.id)} className={cn("min-w-0 flex-1 px-3 py-1.5 text-sm font-semibold transition", segmented ? "rounded-full" : "rounded-lg", value === t.id ? segmented ? "bg-brand-400 text-white shadow-sm" : "bg-white text-brand-700 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
           {t.label}
           {typeof t.count === "number" && t.count > 0 && <span className="ml-1.5 rounded-full bg-coral-500 px-1.5 py-0.5 text-[10px] text-white">{t.count}</span>}
         </button>))}

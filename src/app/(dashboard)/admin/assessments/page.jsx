@@ -11,11 +11,17 @@ export default function Assessments({ embedded = false } = {}) {
   const [f, setF] = useState({ readingLevel: "", results: "", learningNeeds: "" });
   const [schedule, setSchedule] = useState({});
   const [errors, setErrors] = useState({});
+  const [sortOrder, setSortOrder] = useState("newest");
   const activeAssessments = s.db.assessments.filter((a) => ["pending_admin_scheduling", "booked"].includes(a.status));
   const activeTutees = new Set(activeAssessments.map((a) => a.tuteeId));
   const latestCompleted = new Map();
   s.db.assessments.filter((a) => a.status === "completed" && !activeTutees.has(a.tuteeId)).forEach((a) => latestCompleted.set(a.tuteeId, a));
-  const list = [...activeAssessments, ...latestCompleted.values()].sort((a, b) => (a.status === "pending_admin_scheduling" ? -1 : 1) - (b.status === "pending_admin_scheduling" ? -1 : 1) || `${a.date ?? ""}${a.time ?? ""}`.localeCompare(`${b.date ?? ""}${b.time ?? ""}`));
+  const list = [...activeAssessments, ...latestCompleted.values()].sort((a, b) => {
+    const first = String(a.createdAt || a.date || "");
+    const second = String(b.createdAt || b.date || "");
+    const comparison = first.localeCompare(second);
+    return sortOrder === "newest" ? -comparison : comparison;
+  });
   const nm = (id) => s.db.tutees.find((t) => t.userId === id);
   const scheduleAssessment = async (assessment) => {
     setErrors((v) => ({ ...v, [assessment.id]: "" }));
@@ -34,6 +40,7 @@ export default function Assessments({ embedded = false } = {}) {
 
   return <>
     {!embedded && <PageHeader title="Reading assessments" subtitle="Schedule initial assessments for program requests, then record results and learning needs." />}
+    {list.length > 0 && <div className="mb-3 flex justify-end"><label className="flex items-center gap-2 text-sm font-semibold text-slate-600"><span>Sort by</span><Select className="w-auto min-w-36" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option></Select></label></div>}
     {list.length === 0 && <Empty>No assessment requests yet.</Empty>}
     <div className="space-y-3">
       {list.map((a) => {

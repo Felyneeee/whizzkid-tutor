@@ -4,12 +4,14 @@ import { PageHeader, Tabs } from "@/components/ui";
 import Matching from "@/app/(dashboard)/admin/matching/page";
 import Assessments from "@/app/(dashboard)/admin/assessments/page";
 import Classes from "@/app/(dashboard)/admin/classes/page";
+import PlaygroupBookingRequests from "@/app/(dashboard)/admin/booking-requests/PlaygroupBookingRequests";
 import { useStore } from "@/lib/store";
 
 export default function BookingRequests() {
   const s = useStore();
   const [program, setProgram] = useState("academic");
   const [readingStage, setReadingStage] = useState("assessment");
+  const [playgroupStage, setPlaygroupStage] = useState("schedule");
   const pendingBookings = s.db.bookings.filter((booking) => ["awaiting_admin", "ready_for_matching"].includes(booking.status));
   const academicCount = pendingBookings.filter((booking) => booking.program === "academic").length;
   const readingCount = pendingBookings.filter((booking) => booking.program === "reading").length + s.db.assessments.filter((assessment) => ["pending_admin_scheduling", "booked"].includes(assessment.status)).length;
@@ -25,9 +27,12 @@ export default function BookingRequests() {
 
     {program === "academic" && <Matching embedded programFilter="academic" />}
     {program === "reading" && <>
-      <Tabs tabs={[{ id: "assessment", label: "Initial Assessment" }, { id: "assignment", label: "Assign Tutor", count: readingCount }]} value={readingStage} onChange={setReadingStage} />
+      <Tabs variant="segmented" tabs={[{ id: "assessment", label: "Initial Assessment" }, { id: "assignment", label: "Assign Tutor", count: readingCount }]} value={readingStage} onChange={setReadingStage} />
       {readingStage === "assessment" ? <Assessments embedded /> : <Matching embedded programFilter="reading" />}
     </>}
-    {program === "playgroup" && <Classes embedded />}
+    {program === "playgroup" && <>
+      <Tabs variant="segmented" tabs={[{ id: "schedule", label: "Playgroup Schedule" }, { id: "requests", label: "Booking Requests", count: playgroupCount }]} value={playgroupStage} onChange={setPlaygroupStage} />
+      {playgroupStage === "schedule" ? <Classes embedded /> : <PlaygroupBookingRequests />}
+    </>}
   </>;
 }

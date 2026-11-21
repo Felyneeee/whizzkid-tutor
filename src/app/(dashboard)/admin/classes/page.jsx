@@ -197,8 +197,6 @@ export default function Classes({ embedded = false } = {}) {
           const belongsToCohort = (booking) => booking.cohortId === cohort.id
             || (cohort.enrolled || []).includes(booking.tuteeId)
             || (!booking.cohortId && Array.isArray(booking.dates) && booking.dates.length > 0 && booking.dates.every((date) => cohortDateSet.has(date)));
-          const activeBookings = s.db.bookings.filter((booking) => String(booking.program || "").toLowerCase() === "playgroup" && belongsToCohort(booking) && activeBookingStatuses.includes(bookingStatusOf(booking)));
-          const bookingRequests = activeBookings;
           const enrolledBookings = s.db.bookings.filter((booking) => String(booking.program || "").toLowerCase() === "playgroup" && belongsToCohort(booking) && ["approved", "confirmed", "completed"].includes(bookingStatusOf(booking)));
           const startDate = dates[0];
           const endDate = dates[dates.length - 1];
@@ -253,50 +251,6 @@ export default function Classes({ embedded = false } = {}) {
                   </div>;
                 })}
               </div>
-            </section>
-
-            <section className="space-y-3 pt-1">
-              <h3 className="text-lg font-extrabold">{cohort.label} Booking Requests</h3>
-              {bookingRequests.length === 0 && <p className="text-sm text-slate-400">No pending booking requests.</p>}
-              {bookingRequests.map((booking) => {
-                const awaitingApproval = pendingPlaygroupStatuses.includes(bookingStatusOf(booking));
-                const hasAllTutors = !!booking.dates?.length && booking.dates.every((date) => booking.tutorAssignments?.[date]);
-                const dateBooked = booking.createdAt ? String(booking.createdAt).slice(0, 10) : booking.dates?.[0];
-                return <div key={booking.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 text-sm">
-                  <div className="flex flex-wrap items-center gap-x-5 gap-y-1"><span className="font-bold">{nm(booking.tuteeId)}</span><span className="text-xs font-semibold text-slate-500">Date Booked: {dateBooked ? bookedDateLabel(dateBooked) : "—"}</span></div>
-                  <div className="flex items-center gap-2">
-                    <Badge status={bookingStatusOf(booking)}>{awaitingApproval ? "Pending" : bookingStatusOf(booking) === "approved" ? "Approved" : undefined}</Badge>
-                    {awaitingApproval && <Button size="sm" variant="success" disabled={!hasAllTutors || bookingApprovalBusy[booking.id]} onClick={async () => {
-                      setBookingApprovalBusy((current) => ({ ...current, [booking.id]: true }));
-                      setBookingActionErrors((current) => ({ ...current, [booking.id]: "" }));
-                      try {
-                        const response = await fetch("/api/state/approve-playgroup-booking", {
-                          method: "POST", headers: { "content-type": "application/json" }, credentials: "same-origin",
-                          body: JSON.stringify({ bookingId: booking.id }),
-                        });
-                        const result = await response.json().catch(() => ({}));
-                        if (!response.ok && result.status && !pendingPlaygroupStatuses.includes(String(result.status).toLowerCase())) {
-                          window.location.reload();
-                          return;
-                        }
-                        if (!response.ok) throw new Error(result.error || "The Playgroup booking could not be approved.");
-                        window.location.reload();
-                      } catch (error) {
-                        setBookingActionErrors((current) => ({ ...current, [booking.id]: error.message || "The Playgroup booking could not be approved." }));
-                        setBookingApprovalBusy((current) => ({ ...current, [booking.id]: false }));
-                      }
-                    }}>{bookingApprovalBusy[booking.id] ? "Approving…" : "Approve"}</Button>}
-                    {awaitingApproval && <Button size="sm" variant="danger" onClick={async () => {
-                      const reason = "The Playgroup booking request was not approved. Please choose another cohort.";
-                      const result = await s.rejectBooking(booking.id, reason);
-                      if (result?.ok === false) setBookingActionErrors((current) => ({ ...current, [booking.id]: result.error }));
-                    }}>Reject</Button>}
-                  </div>
-                  {awaitingApproval && !hasAllTutors && <p className="col-span-2 text-xs font-semibold text-red-500">Assign tutors for all 12 sessions to enable approval.</p>}
-                  {bookingActionErrors[booking.id] && <p className="col-span-2 text-xs text-red-600">{bookingActionErrors[booking.id]}</p>}
-                </div>;
-              })}
-              {enrolledBookings.length > 0 && <div className="border-t border-slate-200 pt-3"><h4 className="mb-2 text-sm font-extrabold">Enrolled Students</h4><div className="flex flex-wrap gap-2">{enrolledBookings.map((booking) => <span key={booking.id} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">{nm(booking.tuteeId)}</span>)}</div></div>}
             </section>
           </Card>;
         })}
