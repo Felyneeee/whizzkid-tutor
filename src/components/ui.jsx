@@ -38,6 +38,7 @@ const BADGE = {
     assessment_scheduled: "bg-brand-100 text-brand-700",
     ready_for_matching: "bg-sunny-100 text-sunny-500",
     booked: "bg-brand-100 text-brand-700",
+    available: "bg-brand-100 text-brand-700",
     interview: "bg-brand-100 text-brand-700",
     scheduled: "bg-brand-100 text-brand-700",
     approved: "bg-mint-100 text-mint-600",

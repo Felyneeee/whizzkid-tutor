@@ -326,7 +326,12 @@ export async function POST(request) {
       const expiresAt = Date.parse(booking.paymentDeadlineAt);
       if (expiresAt <= now) {
         booking.status = "expired";
+        booking.bookingStatus = "expired";
         booking.paymentStatus = "expired";
+        if (booking.program === "playgroup" && booking.cohortId) {
+          const cohort = nextState.cohorts.find((entry) => entry.id === booking.cohortId);
+          if (cohort) cohort.enrolled = (cohort.enrolled || []).filter((tuteeId) => tuteeId !== booking.tuteeId);
+        }
         for (const session of nextState.sessions.filter((entry) => entry.bookingId === booking.id && ["awaiting_payment", "scheduled"].includes(entry.status))) session.status = "cancelled";
         const text = `Payment deadline expired for ${booking.subject} booking from ${booking.tuteeId}; its reserved capacity was released.`;
         nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, text: "Your booking reservation expired because payment proof was not submitted before the 48-hour deadline.", at: nowISO(), read: false, channels: ["web", "email"] });
@@ -357,6 +362,22 @@ export async function POST(request) {
     });
     const handler = body.action === "processPaymentDeadlines"
       ? async () => ({ ok: true })
+      : body.action === "cancelPlaygroupBooking" && permission.args[0]
+      ? async (bookingId) => {
+        const booking = nextState.bookings.find((entry) => entry.id === bookingId && entry.tuteeId === user.id && entry.program === "playgroup");
+        if (!booking || booking.status !== "to_pay") return actions.cancelPlaygroupBooking(bookingId);
+        booking.status = "cancelled";
+        booking.bookingStatus = "cancelled";
+        booking.paymentStatus = "cancelled";
+        booking.tutorAssignmentStatus = "cancelled";
+        booking.tutorAssignments = {};
+        booking.tutorId = undefined;
+        const cohort = nextState.cohorts.find((entry) => entry.id === booking.cohortId);
+        if (cohort) cohort.enrolled = (cohort.enrolled || []).filter((tuteeId) => tuteeId !== booking.tuteeId);
+        nextState.notifications.unshift({ id: uid("n"), userId: user.id, text: `Your Playgroup booking${cohort ? ` for ${cohort.label}` : ""} was cancelled and its slot released.`, at: nowISO(), read: false, channels: ["web", "email"] });
+        for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `${user.id} cancelled their Playgroup booking${cohort ? ` for ${cohort.label}` : ""} before payment.`, at: nowISO(), read: false, channels: ["web"] });
+        return { ok: true };
+      }
       : body.action === "cancelTutorialBooking" && permission.args[0]
       ? async (bookingId) => {
         const booking = nextState.bookings.find((entry) => entry.id === bookingId && entry.tuteeId === user.id);

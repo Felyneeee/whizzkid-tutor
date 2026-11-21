@@ -1,5 +1,5 @@
 "use client";
-import { Bell, CalendarClock, ClipboardList, FileLock2, History, Home, MessageCircle, CreditCard, Users, Baby } from "lucide-react";
+import { Bell, CalendarDays, ClipboardList, FileLock2, History, Home, MessageCircle, CreditCard, Users, Baby } from "lucide-react";
 import { DashboardShell } from "@/components/Shell";
 import { useStore } from "@/lib/store";
 export default function AdminLayout({ children }) {
@@ -17,7 +17,7 @@ export default function AdminLayout({ children }) {
             { href: "/admin", label: "Dashboard", icon: <Home /> },
             { href: "/admin/tutors", label: "Tutor", icon: <Users />, badge: apps + approvals },
             { href: "/admin/booking-requests", label: "Booking Requests", icon: <ClipboardList />, badge: matching + assessments },
-            { href: "/admin/scheduling", label: "Scheduling & Contracts", icon: <CalendarClock />, badge: conflicts },
+            { href: "/admin/scheduling", label: "Schedule", icon: <CalendarDays />, badge: conflicts },
             { href: "/admin/users", label: "Tutee Records", icon: <Baby /> },
             { href: "/admin/materials", label: "Learning Materials", icon: <FileLock2 /> },
             { href: "/admin/orders", label: "Payment Records", icon: <CreditCard />, badge: orders },

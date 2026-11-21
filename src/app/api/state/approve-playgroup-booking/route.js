@@ -29,9 +29,9 @@ export async function POST(request) {
       await connection.rollback();
       return NextResponse.json({ error: "Playgroup booking not found." }, { status: 404 });
     }
-    if (["approved", "confirmed"].includes(status)) {
+    if (["to_pay", "awaiting_payment_approval", "approved", "confirmed"].includes(status)) {
       await connection.rollback();
-      return NextResponse.json({ ok: true, status: "approved", alreadyApproved: true });
+      return NextResponse.json({ ok: true, status, alreadyApproved: true });
     }
     if (!["pending", "awaiting_admin"].includes(status)) {
       await connection.rollback();
@@ -54,8 +54,13 @@ export async function POST(request) {
       return NextResponse.json({ error: "Assign an available tutor for every Playgroup date before approving this booking." }, { status: 409 });
     }
 
-    target.status = "approved";
-    target.bookingStatus = "approved";
+    const paymentDeadlineAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+    target.status = "to_pay";
+    target.bookingStatus = "to_pay";
+    target.paymentStatus = "to_pay";
+    target.paymentDeadlineAt = paymentDeadlineAt;
+    target.expiresAt = paymentDeadlineAt;
+    target.paymentAmount = target.totalFee;
     target.tutorAssignmentStatus = "Confirmed";
     target.tutorAssignments = assignments;
     const assignedTutorIds = [...new Set(Object.values(assignments))];
@@ -66,7 +71,7 @@ export async function POST(request) {
     }
 
     const notices = [
-      { userId: target.tuteeId, text: "Your Playgroup booking is approved. Your tutors are confirmed for all 12 sessions.", channels: ["web", "email", "sms"] },
+      { userId: target.tuteeId, text: "Your Playgroup booking is approved and your tutors are confirmed for all sessions. Please submit payment proof within 48 hours to secure your place.", channels: ["web", "email", "sms"] },
       ...assignedTutorIds.map((tutorId) => {
         const tutorDates = target.dates.filter((date) => assignments[date] === tutorId);
         return { userId: tutorId, text: `Your Playgroup assignment is confirmed for ${tutorDates.length} sessions, starting ${fmtDate(tutorDates[0])}.`, channels: ["web", "email"] };
@@ -77,7 +82,7 @@ export async function POST(request) {
     await persistRelationalState(connection, nextState, state);
     await connection.execute("UPDATE application_state SET revision = revision + 1 WHERE id = 1");
     await connection.commit();
-    return NextResponse.json({ ok: true, status: "approved" });
+    return NextResponse.json({ ok: true, status: "to_pay", paymentDeadlineAt });
   } catch (error) {
     if (connection) await connection.rollback().catch(() => undefined);
     console.error("[approve-playgroup-booking]", error?.code ?? "UNKNOWN", error?.message ?? "No error detail");

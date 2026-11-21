@@ -160,9 +160,9 @@ function PlaygroupFlow() {
     const eligible = months !== null && months >= 34 && months < 60; // 2.8 – 4.x yrs
     const today = todayISO();
     const myPlaygroupBookings = s.db.bookings
-      .filter((booking) => booking.tuteeId === id && String(booking.program || "").toLowerCase() === "playgroup" && ["pending", "awaiting_admin", "approved", "confirmed"].includes(String(booking.status || booking.bookingStatus || "").toLowerCase()))
+      .filter((booking) => booking.tuteeId === id && String(booking.program || "").toLowerCase() === "playgroup" && ["pending", "awaiting_admin", "approved", "confirmed", "to_pay", "awaiting_payment_approval"].includes(String(booking.status || booking.bookingStatus || "").toLowerCase()))
       .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
-    const myEnrolledBooking = myPlaygroupBookings.find((booking) => ["approved", "confirmed"].includes(String(booking.status || booking.bookingStatus || "").toLowerCase()));
+    const myEnrolledBooking = myPlaygroupBookings.find((booking) => ["approved", "confirmed", "to_pay", "awaiting_payment_approval"].includes(String(booking.status || booking.bookingStatus || "").toLowerCase()));
     const myPendingBooking = myPlaygroupBookings.find((booking) => ["pending", "awaiting_admin"].includes(String(booking.status || booking.bookingStatus || "").toLowerCase()));
     useEffect(() => {
       const signature = JSON.stringify(s.db.bookings

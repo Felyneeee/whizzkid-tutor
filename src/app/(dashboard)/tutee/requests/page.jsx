@@ -139,7 +139,7 @@ export default function TuteeRequests() {
   };
   const paymentDueFor = (booking) => {
     const status = statusOf(booking);
-    if (isPlaygroup(booking) || ["cancelled", "rejected", "expired", "declined", "terminated", "awaiting_payment_approval", "awaiting_approval", "completed"].includes(status) || booking.paymentStatus === "paid" || booking.paymentStatus === "expired") return false;
+    if (["cancelled", "rejected", "expired", "declined", "terminated", "awaiting_payment_approval", "awaiting_approval", "completed"].includes(status) || booking.paymentStatus === "paid" || booking.paymentStatus === "expired") return false;
     return status === "to_pay" || ["confirmed", "approved"].includes(status) || fullyAssigned(booking);
   };
   const categoryOf = (booking) => {
