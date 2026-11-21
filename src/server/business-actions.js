@@ -5,6 +5,15 @@ import { cohortSessionDates, computeRate, matchTutors, onApprovedLeave, tutorBus
 import { HOURS, PLAYGROUP_SESSION_RATE, SHOP_ITEMS, SUBJECTS } from "@/lib/constants";
 
 export function createBusinessActions({ get, mutate }) {
+  const nextBookingId = (state, program) => {
+      const prefix = program === "academic" ? "bk_acd" : program === "playgroup" ? "bk_plg" : "bk_rd";
+      const pattern = new RegExp(`^${prefix}(\\d+)$`);
+      const lastNumber = state.bookings.reduce((max, booking) => {
+          const match = String(booking.id).match(pattern);
+          return match ? Math.max(max, Number(match[1])) : max;
+      }, 0);
+      return `${prefix}${lastNumber + 1}`;
+  };
   const pushNotif = (d, userId, text, channels = ["web", "email"], threadId) => {
     d.notifications.unshift({ id: uid("n"), userId, threadId, text, at: nowISO(), read: false, channels });
   };
@@ -170,7 +179,7 @@ export function createBusinessActions({ get, mutate }) {
           return { ok: false, error: "This class is full. Please choose another schedule." };
       if ((c.modality ?? "face-to-face") !== "face-to-face" || c.time !== "10:00" || JSON.stringify(c.weekdays) !== JSON.stringify([1, 3, 5]))
           return { ok: false, error: "Playgroup classes must meet Monday, Wednesday and Friday at 10:00 AM, Face-to-Face." };
-      const bookingId = uid("b");
+      const bookingId = nextBookingId(d, "playgroup");
       const tutee = d.tutees.find((t) => t.userId === tuteeId);
       const dates = cohortSessionDates(c);
       const tutorAssignments = {};
@@ -283,7 +292,7 @@ export function createBusinessActions({ get, mutate }) {
           dates: v.dates,
           time: v.time,
       });
-      const bookingId = uid("b");
+      const bookingId = nextBookingId(d, v.program);
       const rate = computeRate(v.program, v.gradeLevel, v.modality);
       let readingAssessmentComplete = false;
       let bookingLearningNeeds = v.learningNeeds;
