@@ -60,6 +60,8 @@ export function createBusinessActions({ get, mutate }) {
           n.messages.push({ id: uid("m"), threadId, fromId, text: messageText, at: nowISO() });
           const sender = n.users.find((u) => u.id === fromId);
           const recipientId = sender?.role === "admin" ? threadId : adminIdOf(n);
+          logAct(n, fromId, "other", "Sent a chat message");
+          if (recipientId !== fromId && n.users.some((u) => u.id === recipientId)) logAct(n, recipientId, "other", "Received a chat message");
           if (recipientId !== fromId && n.users.some((u) => u.id === recipientId)) {
               pushNotif(n, recipientId, `New message from ${firstNameOf(n, fromId)}`, ["web"], threadId);
           }
@@ -444,6 +446,7 @@ export function createBusinessActions({ get, mutate }) {
       const leaveReason = dates ? endDateOrReason : reason;
       mutate((n) => {
           n.leaves.push({ id: uid("lv"), tutorId, startDate, endDate, ...(dates ? { dates } : {}), reason: leaveReason, leaveType: details.leaveType || leaveReason, otherReason: details.otherReason || "", note: details.note || "", signature: details.signature || "", status: "pending", submittedAt: nowISO() });
+          logAct(n, tutorId, "other", "Submitted a leave request");
           pushAdmins(n, `${nameOf(n, tutorId)} requested leave ${dates ? dates.map(fmtDate).join(", ") : `${fmtDate(startDate)} – ${fmtDate(endDate)}`}`);
           pushNotif(n, tutorId, "Leave request submitted. Status: Pending Approval.", ["web"]);
       });
@@ -457,6 +460,7 @@ export function createBusinessActions({ get, mutate }) {
           t.status = "interview";
           t.interviewAt = at;
           t.interviewNotes = notes;
+          logAct(n, tutorId, "other", `Interview scheduled: ${new Date(at).toLocaleString()}`);
           pushNotif(n, tutorId, `Interview scheduled: ${new Date(at).toLocaleString()}. ${notes}`, ["web", "email", "sms"]);
       });
   },
@@ -468,6 +472,7 @@ export function createBusinessActions({ get, mutate }) {
           t.status = accept ? "active" : "rejected";
           t.verifiedAt = accept ? nowISO() : undefined;
           t.rejectionReason = accept ? undefined : reason;
+          logAct(n, tutorId, "other", accept ? "Tutor application approved" : `Tutor application rejected${reason ? `: ${reason}` : ""}`);
           pushNotif(n, tutorId, accept ? "Congratulations! Your application is approved. Your account is now a Tutor account." : `Your application was not approved. ${reason || ""}`, ["web", "email", "sms"]);
       });
   },
@@ -963,12 +968,9 @@ export function createBusinessActions({ get, mutate }) {
                   c.enrolled = c.enrolled.filter((x) => x !== b.tuteeId);
           }
           const txt = `Contract terminated: ${b.subject} (${reason || "completed"}).`;
-          logAct(n, b.tuteeId, "termination", txt);
           if (b.tutorId) {
-              logAct(n, b.tutorId, "termination", `${txt} Tutee: ${firstNameOf(n, b.tuteeId)}`);
               pushNotif(n, b.tutorId, `Contract with ${firstNameOf(n, b.tuteeId)} ended.`, ["web"]);
           }
-          logAct(n, adminIdOf(n), "termination", `${txt} Tutee: ${nameOf(n, b.tuteeId)}`);
           pushNotif(n, b.tuteeId, txt, ["web", "email"]);
       });
   },
@@ -1233,6 +1235,10 @@ export function createBusinessActions({ get, mutate }) {
       mutate((n) => {
           const p = n.purchases.find((x) => x.id === id);
           p.status = status;
+          if (status === "paid") {
+              logAct(n, adminIdOf(n), "other", `Marked payment from ${nameOf(n, p.tuteeId)} as paid`);
+              logAct(n, p.tuteeId, "other", "Payment marked as paid");
+          }
           pushNotif(n, p.tuteeId, `Your order is now marked "${status}".`, ["web", "email"]);
       });
       return { ok: true };

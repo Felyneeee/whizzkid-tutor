@@ -123,26 +123,79 @@ export function ChatView({ meId, isAdmin }) {
       </div>
     </>);
 }
-const KINDS = ["all", "booking", "match", "attendance", "rating", "upload", "termination"];
+const HISTORY_ACTION_GROUPS = [
+    { role: "admin", label: "Admin Actions", actions: [["payments", "Payments"], ["schedule", "Schedule"], ["chats", "Chats"], ["matches", "Matches"], ["records", "Records"], ["applications", "Applications"], ["logins", "Logins"]] },
+    { role: "tutee", label: "Tutee Actions", actions: [["schedule", "Schedule"], ["payments", "Payments"], ["chats", "Chats"], ["logins", "Logins"]] },
+    { role: "tutor", label: "Tutor Actions", actions: [["leave", "Leave Requests"], ["schedule", "Schedule"], ["chats", "Chats"], ["logins", "Logins"], ["matches", "Matches"], ["records", "Records"]] },
+    { role: "applicant", label: "Applicant Actions", actions: [["applications", "Applications"], ["chats", "Chats"], ["logins", "Logins"]] },
+];
+function historyAction(activity) {
+    const kind = typeof activity.kind === "string" ? activity.kind : "";
+    const text = String(activity.text ?? "").toLowerCase();
+    if (kind === "termination") return "termination";
+    if (kind === "booking") return "schedule";
+    if (kind === "availability") return "schedule";
+    if (kind === "match") return "matches";
+    if (["upload", "attendance", "rating"].includes(kind)) return "records";
+    if (kind === "other") {
+        if (/payment|paid|purchase|order/.test(text)) return "payments";
+        if (/leave request|leave submitted/.test(text)) return "leave";
+        if (/message|chat/.test(text)) return "chats";
+        if (/log(?:ged)? in|login/.test(text)) return "logins";
+        if (/application|applicant|interview/.test(text)) return "applications";
+    }
+    return "other";
+}
+const HISTORY_ROLES = [
+    { id: "all", label: "All Roles" },
+    { id: "tutor", label: "Tutors" },
+    { id: "tutee", label: "Tutees" },
+    { id: "admin", label: "Admins" },
+    { id: "applicant", label: "Applicants" },
+];
 export function HistoryView({ userId, isAdmin }) {
     const s = useStore();
+    const [role, setRole] = useState("all");
     const [kind, setKind] = useState("all");
+    const [sortOrder, setSortOrder] = useState("newest");
+    const roleForUser = (id, activity) => {
+        const user = s.db.users.find((entry) => entry.id === id);
+        const tutor = s.db.tutors.find((entry) => entry.userId === id);
+        if (historyAction(activity ?? {}) === "applications" || ["pending_review", "interview", "pending_verification"].includes(tutor?.status)) return "applicant";
+        return user?.role ?? "unknown";
+    };
     let list = isAdmin ? s.db.activities : s.db.activities.filter((a) => a.userId === userId);
-    if (kind !== "all")
-        list = list.filter((a) => a.kind === kind);
+    if (isAdmin && role !== "all") list = list.filter((a) => roleForUser(a.userId, a) === role);
+    // Termination is a retired event and should not appear in the admin history.
+    list = list.filter((activity) => historyAction(activity) !== "termination");
+    const selectedGroup = HISTORY_ACTION_GROUPS.find((group) => group.role === role);
+    list = [...list].sort((a, b) => sortOrder === "newest"
+        ? new Date(b.at).getTime() - new Date(a.at).getTime()
+        : new Date(a.at).getTime() - new Date(b.at).getTime());
+    const visibleList = list.filter((activity) => kind === "all" || `${roleForUser(activity.userId, activity)}:${historyAction(activity)}` === kind);
     return (<>
-      <PageHeader title="Activity History" subtitle={isAdmin ? "Ratings, matches, uploads, terminated contracts and bookings." : "Your matches, uploads and terminated contracts."}/>
-      <div className="mb-4 flex flex-wrap gap-2">
-        {KINDS.map((k) => (<button key={k} onClick={() => setKind(k)} className={cn("rounded-full border px-3 py-1 text-xs font-bold capitalize", kind === k ? "border-brand-500 bg-brand-500 text-white" : "border-slate-200 bg-white text-slate-500")}>
-            {k}
-          </button>))}
-      </div>
-      {list.length === 0 ? (<Empty>No activity yet.</Empty>) : (<ol className="space-y-2">
-          {list.map((a) => (<Card key={a.id} className="flex items-center gap-3 !p-3">
-              <Badge status={a.kind === "termination" ? "terminated" : a.kind === "rating" ? "approved" : "booked"}>{a.kind}</Badge>
+      <PageHeader title="Activity History" subtitle={isAdmin ? "Track bookings, payments, schedules, chats, matches, records, and applications." : "Your bookings, schedules, matches, and records."}/>
+      {isAdmin && <Card className="mb-4 flex flex-wrap items-center gap-3 !p-4">
+        <span className="mr-auto text-sm font-extrabold text-slate-700">Filter Logs</span>
+        <select aria-label="Filter by role" value={role} onChange={(e) => { setRole(e.target.value); setKind("all"); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+          {HISTORY_ROLES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+        </select>
+        <select aria-label="Filter by action" value={kind} onChange={(e) => setKind(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+          <option value="all">All Actions</option>
+          {(selectedGroup ? [selectedGroup] : HISTORY_ACTION_GROUPS).map((group) => <optgroup key={group.role} label={group.label}>
+            {group.actions.map(([action, label]) => <option key={`${group.role}:${action}`} value={`${group.role}:${action}`}>{label}</option>)}
+          </optgroup>)}
+        </select>
+        <select aria-label="Sort activity" defaultValue="newest" onChange={(e) => setSortOrder(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+          <option value="newest">Newest First</option><option value="oldest">Oldest First</option>
+        </select>
+      </Card>}
+      {visibleList.length === 0 ? (<Empty>No activity yet.</Empty>) : (<ol className="space-y-2">
+          {visibleList.map((a) => { const action = historyAction(a); const label = action === "other" ? "Activity" : action.replace(/^./, (letter) => letter.toUpperCase()); return (<Card key={a.id} className="flex items-center gap-3 !p-3">
+              <Badge status={action === "rating" ? "approved" : "booked"}>{label}</Badge>
               <span className="flex-1 text-sm">{isAdmin ? a.text : hideOtherPartyFullNames(a.text, userId, s.db)}</span>
               <span className="text-xs text-slate-400">{fmtDateTime(a.at)}</span>
-            </Card>))}
+            </Card>); })}
         </ol>)}
     </>);
 }

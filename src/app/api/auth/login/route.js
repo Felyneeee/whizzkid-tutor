@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { findLoginUser, issueSession, publicUser, verifyPassword } from "@/server/auth";
+import { mysqlPool } from "@/server/mysql";
 export const runtime = "nodejs";
 export async function POST(request) {
     try {
@@ -13,6 +15,10 @@ export async function POST(request) {
         if (!row?.password_hash || !(await verifyPassword(password, row.password_hash))) {
             return NextResponse.json({ error: "Email/username or password is incorrect." }, { status: 401 });
         }
+        await mysqlPool.query(
+            "INSERT INTO activities (id, user_id, kind, activity_text, created_at) VALUES (?, ?, 'other', 'Logged in', UTC_TIMESTAMP())",
+            [randomUUID(), row.id],
+        );
         const response = NextResponse.json({ user: publicUser(row) });
         await issueSession(row.id, response);
         return response;

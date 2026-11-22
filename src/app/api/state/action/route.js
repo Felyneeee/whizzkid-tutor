@@ -54,6 +54,11 @@ function bookingSlotsFullyAssigned(booking, sessions) {
   return requestedSlots.length > 0 && requestedSlots.every((slot) => sessions.some((session) => session.date === slot.date && session.time === slot.time && session.tutorId && session.status !== "cancelled"));
 }
 
+function logActivity(state, userId, text) {
+  state.activities ??= [];
+  state.activities.unshift({ id: uid("a"), userId, kind: "other", text, at: nowISO() });
+}
+
 export async function POST(request) {
   let connection;
   try {
@@ -450,6 +455,8 @@ export async function POST(request) {
         booking.paymentStatus = "awaiting_approval";
         booking.status = "awaiting_payment_approval";
         booking.expirationWarningAt = undefined;
+        logActivity(nextState, user.id, `Submitted payment receipt for ${booking.subject} program`);
+        for (const admin of nextState.users.filter((entry) => entry.role === "admin")) logActivity(nextState, admin.id, `Payment receipt submitted for ${booking.subject} program`);
         nextState.notifications.unshift({ id: uid("n"), userId: user.id, text: `Payment proof received for ${booking.subject}. Your reservation remains active while it is reviewed.`, at: nowISO(), read: false, channels: ["web", "email"] });
         for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `Payment proof for ${booking.subject} booking from ${user.id} is awaiting verification.`, at: nowISO(), read: false, channels: ["web", "email"] });
         return { ok: true };
@@ -462,6 +469,8 @@ export async function POST(request) {
         purchase.paymentMethod = method;
         purchase.paymentSubmittedAt = nowISO();
         purchase.status = "awaiting_verification";
+        logActivity(nextState, user.id, "Submitted a payment receipt for a purchase");
+        for (const admin of nextState.users.filter((entry) => entry.role === "admin")) logActivity(nextState, admin.id, "Payment receipt submitted for a purchase");
         nextState.notifications.unshift({ id: uid("n"), userId: user.id, text: "Your purchase payment proof was received and is awaiting verification.", at: nowISO(), read: false, channels: ["web", "email"] });
         for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `Purchase payment from ${user.id} is awaiting verification.`, at: nowISO(), read: false, channels: ["web", "email"] });
         return { ok: true };
@@ -475,8 +484,12 @@ export async function POST(request) {
           if (approve) {
             purchase.status = "paid";
             purchase.pickupReminderAt = nowISO();
+            logActivity(nextState, user.id, `Approved payment receipt for ${purchase.tuteeId}'s purchase`);
+            logActivity(nextState, purchase.tuteeId, "Payment receipt approved; purchase paid");
             nextState.notifications.unshift({ id: uid("n"), userId: purchase.tuteeId, text: "Your purchase payment was approved. Your items are ready for pickup at the center.", at: nowISO(), read: false, channels: ["web", "email"] });
           } else {
+            logActivity(nextState, user.id, `Rejected payment receipt for ${purchase.tuteeId}'s purchase`);
+            logActivity(nextState, purchase.tuteeId, "Payment receipt rejected; please submit a new receipt");
             purchase.status = "pending";
             purchase.paymentProof = undefined;
             purchase.paymentMethod = undefined;
@@ -496,10 +509,14 @@ export async function POST(request) {
             booking.status = "confirmed";
             booking.paymentStatus = "paid";
             booking.paymentApprovedAt = nowISO();
+            logActivity(nextState, user.id, `Approved payment receipt for ${booking.subject} program`);
+            logActivity(nextState, booking.tuteeId, `Payment receipt approved for ${booking.subject} program`);
             for (const session of nextState.sessions.filter((entry) => entry.bookingId === booking.id && entry.status === "awaiting_payment")) session.status = "scheduled";
             nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, text: `Your payment was approved. ${booking.subject} booking is confirmed and now appears on your schedule.`, at: nowISO(), read: false, channels: ["web", "email"] });
             for (const tutorId of new Set(nextState.sessions.filter((entry) => entry.bookingId === booking.id).map((entry) => entry.tutorId))) nextState.notifications.unshift({ id: uid("n"), userId: tutorId, text: `Payment for ${booking.subject} booking from ${booking.tuteeId} was approved; the sessions are confirmed.`, at: nowISO(), read: false, channels: ["web", "email"] });
           } else {
+            logActivity(nextState, user.id, `Rejected payment receipt for ${booking.subject} program`);
+            logActivity(nextState, booking.tuteeId, `Payment receipt rejected for ${booking.subject} program`);
             booking.status = "to_pay";
             booking.paymentStatus = "proof_rejected";
             booking.paymentProofHistory = [...(booking.paymentProofHistory || []), {
