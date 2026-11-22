@@ -237,8 +237,9 @@ function PlaygroupFlow() {
           <h3 className="font-extrabold">Choose a cohort</h3>
           {cohorts.map(({ c, dates, left, active, playgroupConflict }) => {
             const enrolled = active.some((booking) => booking.tuteeId === id);
-            return <button key={c.id} type="button" disabled={playgroupConflict || left <= 0} onClick={() => { setSelectedCohortId(c.id); setMsg(null); }} className="block w-full text-left disabled:cursor-not-allowed disabled:opacity-60">
-              <Card className="!p-4 transition hover:border-brand-200 hover:shadow-md">
+            const selected = selectedCohort?.c.id === c.id;
+            return <button key={c.id} type="button" aria-pressed={selected} disabled={playgroupConflict || left <= 0} onClick={() => { setSelectedCohortId(c.id); setMsg(null); }} className="block w-full text-left disabled:cursor-not-allowed disabled:opacity-60">
+              <Card className={`!p-4 transition ${selected ? "border-brand-600 bg-brand-50 ring-2 ring-brand-300 shadow-md" : "hover:border-brand-200 hover:shadow-md"}`}>
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <div className="font-extrabold">{c.label}</div>

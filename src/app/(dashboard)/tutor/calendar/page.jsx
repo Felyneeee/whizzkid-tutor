@@ -28,28 +28,20 @@ export default function TutorCalendar() {
     const cohorts = s.db.cohorts.filter((cohort) => cohort.tutorId === id || Object.values(cohort.weekdayTutorIds || {}).includes(id));
     const weeklySchedule = s.db.tutorSchedules?.[id];
     const weekdayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    const workingOnDate = (date) => !!weeklySchedule?.days?.[weekdayNames[weekday(date)]];
+    const workingOnDate = (date) => weeklySchedule
+      ? !!weeklySchedule.days?.[weekdayNames[weekday(date)]]
+      : s.db.availability.some((entry) => entry.tutorId === id && entry.status === "approved" && entry.date === date && entry.slots?.length > 0);
     return (<>
-      <PageHeader title="My calendar" subtitle="Your admin-assigned work days, day off, confirmed sessions, and approved leave."/>
+      <PageHeader title="My calendar" subtitle="Your work days, days off, and approved leave."/>
       <div className="grid gap-4 md:grid-cols-2">
-        <Calendar selected={[sel]} onSelect={setSel} isDisabled={() => false} mark={(d) => {
-            const n = mine.filter((x) => x.date === d).length;
-            const pg = playgroupDays.filter((item) => item.date === d).length;
-            if (onApprovedLeave(s.db, id, d))
-                return { text: "leave", tone: "coral" };
-            const working = workingOnDate(d);
-            if (!weeklySchedule) return n || pg ? { text: pg ? `${pg} Playgroup` : `${n} sess.`, tone: pg ? "mint" : "brand", ...(n && pg ? { subtext: `${n} other session${n === 1 ? "" : "s"}`, subtone: "brand" } : {}) } : null;
-            const isSunday = weekdayNames[weekday(d)] === "Sunday";
-            return {
-                text: working ? "WORK DAY" : isSunday ? "CLOSED" : "DAY OFF",
-                tone: working ? "mint" : "slate",
-                subtext: pg ? `${pg} Playgroup` : n ? `${n} session${n === 1 ? "" : "s"}` : undefined,
-                subtone: pg ? "mint" : n ? "brand" : "slate",
-            };
+        <Calendar selected={[sel]} onSelect={setSel} allowPast isDisabled={() => false} mark={(date) => {
+            if (onApprovedLeave(s.db, id, date)) return { text: "ON LEAVE", tone: "coral" };
+            const working = weekdayNames[weekday(date)] !== "Sunday" && workingOnDate(date);
+            return { text: working ? "WORK DAY" : "DAY OFF", tone: working ? "mint" : "slate" };
         }}/>
         <div className="space-y-3">
           <h2 className="font-extrabold">{fmtDate(sel)}</h2>
-          {weeklySchedule && <Card className="!p-4"><div className="text-xs font-bold uppercase tracking-wide text-slate-400">Schedule</div><div className="mt-1 font-extrabold">{workingOnDate(sel) ? "Working day" : weekdayNames[weekday(sel)] === "Sunday" ? "Center closed" : "Day off"}</div></Card>}
+          <Card className="!p-4"><div className="text-xs font-bold uppercase tracking-wide text-slate-400">Schedule</div><div className={`mt-1 font-extrabold ${onApprovedLeave(s.db, id, sel) ? "text-orange-600" : ""}`}>{onApprovedLeave(s.db, id, sel) ? "On Leave" : workingOnDate(sel) && weekdayNames[weekday(sel)] !== "Sunday" ? "Working day" : "Day off"}</div></Card>
           {day.length === 0 && <Empty>No sessions.</Empty>}
           {day.map((x) => (<Card key={x.id} className="!p-4">
               <div className="flex items-center justify-between">
