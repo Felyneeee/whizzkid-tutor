@@ -131,8 +131,10 @@ export default function Approvals({ embedded = false, defaultTab = "schedules" }
       </section>
     </Card>}
 
-    {tab === "leaves" && (leaves.length === 0 ? <Empty>No leave requests.</Empty> : <div className="space-y-3">
-      {leaves.map((leave) => {
+    {tab === "leaves" && <div className="space-y-8">
+      <section className="space-y-3">
+        <h2 className="text-xl font-extrabold">Pending Requests</h2>
+        {leaves.filter((leave) => leave.status === "pending").length === 0 ? <Empty>No pending leave requests.</Empty> : leaves.filter((leave) => leave.status === "pending").map((leave) => {
         const affected = db.sessions.filter((session) => session.tutorId === leave.tutorId && session.status === "scheduled" && (leave.dates ? leave.dates.includes(session.date) : session.date >= leave.startDate && session.date <= leave.endDate)).length;
         return <Card key={leave.id} className="flex flex-wrap items-center justify-between gap-3 !p-4">
           <div>
@@ -146,8 +148,19 @@ export default function Approvals({ embedded = false, defaultTab = "schedules" }
             <Button size="sm" variant="danger" onClick={() => s.decideLeave(leave.id, false)}>Reject</Button>
           </>}</div>
         </Card>;
-      })}
-    </div>)}
+        })}
+      </section>
+      <section>
+        <h2 className="mb-3 text-xl font-extrabold">Leave Records</h2>
+        {leaves.filter((leave) => leave.status !== "pending").length === 0 ? <Empty>No completed leave records.</Empty> : <div className="overflow-x-auto rounded-2xl bg-white shadow-sm"><table className="w-full min-w-[760px] text-sm"><thead className="bg-slate-400 text-left text-white"><tr>{["Name", "Date Requested", "Date Approved/Rejected", "Status", ""].map((heading) => <th key={heading} className="px-4 py-3">{heading}</th>)}</tr></thead><tbody className="divide-y divide-slate-200">{leaves.filter((leave) => leave.status !== "pending").map((leave) => {
+          const start = leave.startDate || leave.dates?.[0];
+          const end = leave.endDate || leave.dates?.[leave.dates.length - 1] || start;
+          const requestRange = start ? `${fmtDate(String(start).slice(0,10))} to ${fmtDate(String(end).slice(0,10))}` : "—";
+          const decidedAt = leave.decidedAt ? new Date(leave.decidedAt).toLocaleString("en-PH", { dateStyle: "long", timeStyle: "short" }) : "—";
+          return <tr key={leave.id}><td className="px-4 py-3 font-semibold">{tn(leave.tutorId)}</td><td>{requestRange}</td><td>{decidedAt}</td><td><Badge status={leave.status}/></td><td><Button size="sm" variant="secondary" onClick={() => setLeaveForm(leave)}>View Leave Form</Button></td></tr>;
+        })}</tbody></table></div>}
+      </section>
+    </div>}
     <Modal open={!!leaveForm} onClose={() => setLeaveForm(null)} title="Leave Form" wide>{leaveForm && <div className="space-y-4 text-sm text-slate-700"><p>Date Submitted: <b>{leaveForm.submittedAt ? new Date(leaveForm.submittedAt).toLocaleDateString("en-PH") : "—"}</b></p><div className="rounded-2xl border-2 border-slate-300"><div className="border-b-2 border-slate-300 px-4 py-3">Employee Name: <b>{tn(leaveForm.tutorId)}</b></div><div className="space-y-3 px-4 py-4"><p>Reason for requested leave:</p><b>{leaveForm.leaveType || leaveForm.reason}</b>{leaveForm.otherReason && <p>Other: {leaveForm.otherReason}</p>}</div><div className="border-t-2 border-slate-300 px-4 py-3">Date Requested: <b>{fmtDate(leaveForm.startDate)} to {fmtDate(leaveForm.endDate)}</b></div></div><div className="grid gap-4 sm:grid-cols-2"><div className="rounded-xl border border-slate-300 p-4"><b>Note</b><p className="mt-2 min-h-16">{leaveForm.note || "—"}</p></div><div className="rounded-xl border border-slate-300 p-4"><b>Employee’s Signature</b><p className="mt-3 font-serif italic">{leaveForm.signature || tn(leaveForm.tutorId)}</p></div></div><div className="flex flex-wrap items-center justify-between gap-2"><Badge status={leaveForm.status}/>{leaveForm.status === "pending" && <div className="flex gap-2"><Button variant="success" onClick={() => { s.decideLeave(leaveForm.id, true); setLeaveForm(null); }}>Approve</Button><Button variant="danger" onClick={() => { s.decideLeave(leaveForm.id, false); setLeaveForm(null); }}>Reject</Button></div>}</div></div>}</Modal>
   </>;
 }
