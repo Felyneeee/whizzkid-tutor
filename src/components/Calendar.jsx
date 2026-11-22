@@ -10,7 +10,7 @@ const tone = {
     sunny: "bg-sunny-100 text-sunny-500",
     slate: "bg-slate-100 text-slate-500",
 };
-export function Calendar({ selected = [], onSelect, isDisabled, mark, initialMonth, highlight, allowPast = false, readOnly = false }) {
+export function Calendar({ selected = [], onSelect, onMonthChange, isDisabled, mark, initialMonth, highlight, allowPast = false, readOnly = false }) {
     const start = initialMonth ? parseISO(initialMonth) : new Date();
     const [cursor, setCursor] = useState({ y: start.getFullYear(), m: start.getMonth() });
     useEffect(() => {
@@ -29,6 +29,7 @@ export function Calendar({ selected = [], onSelect, isDisabled, mark, initialMon
     const go = (n) => {
         const d = new Date(cursor.y, cursor.m + n, 1);
         setCursor({ y: d.getFullYear(), m: d.getMonth() });
+        onMonthChange?.(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`);
     };
     return (<div className="w-full rounded-2xl border border-slate-100 bg-white p-3">
       <div className="mb-2 flex items-center justify-between">

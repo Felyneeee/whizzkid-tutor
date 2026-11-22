@@ -93,6 +93,10 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
     const subject = subjectForSlot(day, index);
     const options = { program: params.program, subject, gradeLevel: params.gradeLevel, modality: params.modality, sessionType: params.sessionType };
     return HOURS.filter((time) => byDay(day).every((date) => {
+      const activeStatuses = ["pending", "approved", "pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "to_pay", "awaiting_payment_approval", "confirmed"];
+      const requestedByTutee = s.db.bookings.some((booking) => booking.tuteeId === tuteeId && activeStatuses.includes(booking.status) && (booking.sessionSlots || (booking.dates || []).map((bookingDate) => ({ date: bookingDate, time: booking.sessionTimes?.[bookingDate] ?? booking.time }))).some((slot) => slot.date === date && slot.time === time));
+      const scheduledForTutee = s.db.sessions.some((session) => session.tuteeId === tuteeId && ["scheduled", "needs_reassignment"].includes(session.status) && session.date === date && session.time === time);
+      if (requestedByTutee || scheduledForTutee) return false;
       if (unavailableDateTimes.includes(`${slotKey(day, index)}-${time}-${subject}`)) return false;
       if (unavailableDateTimes.includes(`${date}-${time}-${subject}`)) return false;
       const dow = weekday(date);
@@ -208,6 +212,9 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
     return selectedSubjects.some((subject) => HOURS.some((time) => {
       const day = weekday(date);
       if (day === 0 || ([1, 3, 5].includes(day) && ["10:00", "10:45"].includes(time))) return false;
+      const activeStatuses = ["pending", "approved", "pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "to_pay", "awaiting_payment_approval", "confirmed"];
+      if (s.db.bookings.some((booking) => booking.tuteeId === tuteeId && activeStatuses.includes(booking.status) && (booking.sessionSlots || (booking.dates || []).map((bookingDate) => ({ date: bookingDate, time: booking.sessionTimes?.[bookingDate] ?? booking.time }))).some((slot) => slot.date === date && slot.time === time))) return false;
+      if (s.db.sessions.some((session) => session.tuteeId === tuteeId && ["scheduled", "needs_reassignment"].includes(session.status) && session.date === date && session.time === time)) return false;
       return slotRequestable(s.db, date, time, { program: params.program, subject, gradeLevel: params.gradeLevel, modality: params.modality, sessionType: params.sessionType });
     }));
   };

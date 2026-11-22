@@ -195,11 +195,12 @@ function PlaygroupFlow() {
         .filter(({ dates }) => dates[0] >= today)
         .filter(({ c }) => c.modality !== "online" || c.enrolled.includes(id))
         .map((c) => {
-          const active = s.db.bookings.filter((b) => b.program === "playgroup" && b.cohortId === c.c.id && ["pending", "approved", "confirmed", "awaiting_admin"].includes(b.status));
+          const active = s.db.bookings.filter((b) => b.program === "playgroup" && b.cohortId === c.c.id && ["pending", "approved", "confirmed", "awaiting_admin", "to_pay", "awaiting_payment_approval"].includes(b.status));
           // Tutees only receive their own booking records. The cohort roster is
           // anonymized for them, but its length still reflects all reserved slots.
           const reservedCount = Array.isArray(c.c.enrolled) ? c.c.enrolled.length : active.length;
-          return { ...c, left: Math.max(0, 6 - reservedCount), active };
+          const playgroupConflict = c.dates.some((date) => s.db.bookings.some((booking) => booking.tuteeId === id && ["pending", "approved", "pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "to_pay", "awaiting_payment_approval", "confirmed"].includes(booking.status) && (booking.sessionSlots || (booking.dates || []).map((bookingDate) => ({ date: bookingDate, time: booking.sessionTimes?.[bookingDate] ?? booking.time }))).some((slot) => slot.date === date && slot.time === (c.c.time || "10:00"))) || s.db.sessions.some((session) => session.tuteeId === id && ["scheduled", "needs_reassignment"].includes(session.status) && session.date === date && session.time === (c.c.time || "10:00")));
+          return { ...c, left: Math.max(0, 6 - reservedCount), active, playgroupConflict };
         });
     const selectedCohort = cohorts.find(({ c }) => c.id === selectedCohortId) || cohorts.find((cohort) => cohort.left > 0) || cohorts[0];
     const alreadyReserved = selectedCohort?.active.some((booking) => booking.tuteeId === id);
@@ -234,9 +235,9 @@ function PlaygroupFlow() {
         </Card>
         <div className="space-y-3">
           <h3 className="font-extrabold">Choose a cohort</h3>
-          {cohorts.map(({ c, dates, left, active }) => {
+          {cohorts.map(({ c, dates, left, active, playgroupConflict }) => {
             const enrolled = active.some((booking) => booking.tuteeId === id);
-            return <button key={c.id} type="button" onClick={() => { setSelectedCohortId(c.id); setMsg(null); }} className="block w-full text-left">
+            return <button key={c.id} type="button" disabled={playgroupConflict || left <= 0} onClick={() => { setSelectedCohortId(c.id); setMsg(null); }} className="block w-full text-left disabled:cursor-not-allowed disabled:opacity-60">
               <Card className="!p-4 transition hover:border-brand-200 hover:shadow-md">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
@@ -244,12 +245,12 @@ function PlaygroupFlow() {
                     <div className="mt-1 text-xs text-slate-500">{fmtDate(dates[0])} until {fmtDate(dates[dates.length - 1])}</div>
                     <div className="mt-1 text-xs text-slate-500">Mon | Wed | Fri · {dates.length} sessions · {fmtTime(c.time || "10:00")}</div>
                   </div>
-                  <span className={`shrink-0 rounded-full px-4 py-2 text-xs font-extrabold ${left > 0 ? "bg-mint-100 text-mint-700" : "bg-coral-100 text-coral-600"}`}>{enrolled ? "Already booked" : left > 0 ? `${left} Slots Available` : "Full"}</span>
+                  <span className={`shrink-0 rounded-full px-4 py-2 text-xs font-extrabold ${left > 0 && !playgroupConflict ? "bg-mint-100 text-mint-700" : "bg-coral-100 text-coral-600"}`}>{enrolled ? "Already booked" : playgroupConflict ? "Schedule conflict" : left > 0 ? `${left} Slots Available` : "Full"}</span>
                 </div>
               </Card>
             </button>;
           })}
-          {selectedCohort && <Button className="mt-1 px-6" disabled={!eligible || alreadyReserved || selectedCohort.left <= 0} onClick={book}>{alreadyReserved ? "Slot already reserved" : "Book a slot"}</Button>}
+          {selectedCohort && <Button className="mt-1 px-6" disabled={!eligible || alreadyReserved || selectedCohort.left <= 0 || selectedCohort.playgroupConflict} onClick={book}>{alreadyReserved ? "Slot already reserved" : selectedCohort.playgroupConflict ? "Schedule conflict" : "Book a slot"}</Button>}
         </div>
       </div>
       }

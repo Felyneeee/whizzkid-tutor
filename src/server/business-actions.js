@@ -31,7 +31,7 @@ export function createBusinessActions({ get, mutate }) {
       const end = start + (Number(session.durationMinutes) || 45);
       return start < 690 && end > 600;
     });
-    const overlappingCohort = d.bookings.some((booking) => booking.cohortId !== ignoreCohortId && ["pending", "approved", "confirmed", "awaiting_admin"].includes(booking.status) && (booking.tutorAssignments?.[date] === tutorId || (!booking.tutorAssignments && booking.tutorId === tutorId && booking.dates.includes(date))));
+    const overlappingCohort = d.bookings.some((booking) => booking.cohortId !== ignoreCohortId && ["pending", "approved", "confirmed", "awaiting_admin", "to_pay", "awaiting_payment_approval"].includes(booking.status) && (booking.tutorAssignments?.[date] === tutorId || (!booking.tutorAssignments && booking.tutorId === tutorId && booking.dates.includes(date))));
     return !overlappingSession && !overlappingCohort;
   });
   const playgroupTutorLoad = (d, tutorId, weekdayNumber) => d.bookings.reduce((total, booking) => {
@@ -174,7 +174,7 @@ export function createBusinessActions({ get, mutate }) {
           return { ok: false, error: "Class not found." };
       if (d.bookings.some((b) => b.program === "playgroup" && b.cohortId === cohortId && b.tuteeId === tuteeId && !["declined", "rejected", "cancelled", "terminated", "completed"].includes(b.status)))
           return { ok: false, error: "You are already enrolled in this class." };
-      const activeBookings = d.bookings.filter((b) => b.program === "playgroup" && b.cohortId === cohortId && ["pending", "approved", "confirmed", "awaiting_admin"].includes(b.status));
+      const activeBookings = d.bookings.filter((b) => b.program === "playgroup" && b.cohortId === cohortId && ["pending", "approved", "confirmed", "awaiting_admin", "to_pay", "awaiting_payment_approval"].includes(b.status));
       if (activeBookings.length >= 6)
           return { ok: false, error: "This class is full. Please choose another schedule." };
       if ((c.modality ?? "face-to-face") !== "face-to-face" || c.time !== "10:00" || JSON.stringify(c.weekdays) !== JSON.stringify([1, 3, 5]))
@@ -182,6 +182,9 @@ export function createBusinessActions({ get, mutate }) {
       const bookingId = nextBookingId(d, "playgroup");
       const tutee = d.tutees.find((t) => t.userId === tuteeId);
       const dates = cohortSessionDates(c);
+      const activeTuteeStatuses = ["pending", "approved", "pending_assessment", "assessment_scheduled", "ready_for_matching", "confirmed", "awaiting_admin", "to_pay", "awaiting_payment_approval"];
+      const dateConflict = dates.some((date) => d.bookings.some((booking) => booking.tuteeId === tuteeId && activeTuteeStatuses.includes(booking.status) && (booking.sessionSlots || (booking.dates || []).map((bookingDate) => ({ date: bookingDate, time: booking.sessionTimes?.[bookingDate] ?? booking.time }))).some((slot) => slot.date === date && slot.time === (c.time || "10:00"))) || d.sessions.some((session) => session.tuteeId === tuteeId && ["scheduled", "needs_reassignment"].includes(session.status) && session.date === date && session.time === (c.time || "10:00")));
+      if (dateConflict) return { ok: false, error: "You already have a booking or request at one or more Playgroup dates and times." };
       const tutorAssignments = {};
       for (const weekdayNumber of [1, 3, 5]) {
           const weekdayDates = dates.filter((date) => weekday(date) === weekdayNumber);
@@ -434,13 +437,13 @@ export function createBusinessActions({ get, mutate }) {
       });
       return { ok: true, conflicts };
   },
-  submitLeave(tutorId, datesOrStart, endDateOrReason, reason) {
+  submitLeave(tutorId, datesOrStart, endDateOrReason, reason, details = {}) {
       const dates = Array.isArray(datesOrStart) ? [...new Set(datesOrStart)].sort() : null;
       const startDate = dates ? dates[0] : datesOrStart;
       const endDate = dates ? dates[dates.length - 1] : endDateOrReason;
       const leaveReason = dates ? endDateOrReason : reason;
       mutate((n) => {
-          n.leaves.push({ id: uid("lv"), tutorId, startDate, endDate, ...(dates ? { dates } : {}), reason: leaveReason, status: "pending", submittedAt: nowISO() });
+          n.leaves.push({ id: uid("lv"), tutorId, startDate, endDate, ...(dates ? { dates } : {}), reason: leaveReason, leaveType: details.leaveType || leaveReason, otherReason: details.otherReason || "", note: details.note || "", signature: details.signature || "", status: "pending", submittedAt: nowISO() });
           pushAdmins(n, `${nameOf(n, tutorId)} requested leave ${dates ? dates.map(fmtDate).join(", ") : `${fmtDate(startDate)} – ${fmtDate(endDate)}`}`);
           pushNotif(n, tutorId, "Leave request submitted. Status: Pending Approval.", ["web"]);
       });
@@ -607,6 +610,7 @@ export function createBusinessActions({ get, mutate }) {
           if (!l)
               return;
           l.status = approve ? "approved" : "rejected";
+          l.decidedAt = nowISO();
           if (!approve) {
               pushNotif(n, l.tutorId, "Your leave request was not approved. Existing schedule remains unchanged.", ["web", "email"]);
               return;
@@ -1159,7 +1163,7 @@ export function createBusinessActions({ get, mutate }) {
       const cohort = d.cohorts.find((item) => item.id === cohortId);
       const tutor = d.tutors.find((item) => item.userId === tutorId && item.status === "active");
       if (!cohort || !tutor) return { ok: false, error: "Choose an active tutor and Playgroup cohort." };
-      const bookings = d.bookings.filter((booking) => booking.program === "playgroup" && booking.cohortId === cohortId && ["pending", "approved", "confirmed"].includes(booking.status));
+      const bookings = d.bookings.filter((booking) => booking.program === "playgroup" && booking.cohortId === cohortId && ["pending", "approved", "confirmed", "to_pay", "awaiting_payment_approval"].includes(booking.status));
       if (bookings.some((booking) => ["approved", "confirmed"].includes(booking.status) && booking.dates.some((date) => date >= todayISO() && weekday(date) === Number(weekdayNumber) && booking.tutorAssignments?.[date] !== tutorId))) return { ok: false, error: "This weekday has a confirmed tutor. Get administrator approval before changing it." };
       const dates = [...new Set((bookings.length ? bookings.flatMap((booking) => booking.dates) : cohortSessionDates(cohort)).filter((date) => date >= todayISO() && weekday(date) === Number(weekdayNumber)))];
       if (!dates.every((date) => tutorWorksPlaygroupDate(d, tutorId, date) && !onApprovedLeave(d, tutorId, date) && !tutorBusy(d, tutorId, date, "10:00", undefined)) || !playgroupTutorFree(d, tutorId, dates, undefined, cohortId)) return { ok: false, error: "That tutor is not scheduled to work or has a conflict on one or more dates for this weekday." };
@@ -1184,8 +1188,8 @@ export function createBusinessActions({ get, mutate }) {
       const assignedTutorIds = [...new Set(Object.values(booking.tutorAssignments))];
       mutate((n) => {
           const target = n.bookings.find((b) => b.id === bookingId);
-          target.status = "approved"; target.bookingStatus = "approved"; target.tutorAssignmentStatus = "Confirmed";
-          pushNotif(n, target.tuteeId, `Your Playgroup booking is approved. Your tutors are confirmed for all 12 sessions.`, ["web", "email", "sms"]);
+          target.status = "to_pay"; target.bookingStatus = "to_pay"; target.paymentStatus = "unpaid"; target.paymentDeadlineAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(); target.expiresAt = target.paymentDeadlineAt; target.tutorAssignmentStatus = "Confirmed";
+          pushNotif(n, target.tuteeId, `Your Playgroup booking was approved. Please submit payment within 48 hours to confirm all 12 sessions.`, ["web", "email", "sms"]);
           assignedTutorIds.forEach((tutorId) => {
               const tutorDates = target.dates.filter((date) => target.tutorAssignments[date] === tutorId);
               pushNotif(n, tutorId, `Your Playgroup assignment is confirmed for ${tutorDates.length} sessions, starting ${fmtDate(tutorDates[0])}.`, ["web", "email"]);

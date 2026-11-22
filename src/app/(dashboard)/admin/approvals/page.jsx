@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Badge, Button, Card, Empty, Field, PageHeader, Select, Tabs } from "@/components/ui";
+import { Alert, Badge, Button, Card, Empty, Field, Modal, PageHeader, Select, Tabs } from "@/components/ui";
 import { fmtDate } from "@/lib/dates";
 import { useStore } from "@/lib/store";
 
@@ -22,6 +22,7 @@ export default function Approvals({ embedded = false, defaultTab = "schedules" }
   const [scheduleTutor, setScheduleTutor] = useState(() => activeTutors[0]?.userId ?? "");
   const [scheduleDays, setScheduleDays] = useState({});
   const [scheduleResult, setScheduleResult] = useState(null);
+  const [leaveForm, setLeaveForm] = useState(null);
   const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
   const leaves = db.leaves.filter((leave) => db.tutors.some((tutor) => tutor.userId === leave.tutorId)).sort((a, b) => (a.status === "pending" ? -1 : 1) - (b.status === "pending" ? -1 : 1));
   const selectedWeek = useMemo(() => WEEK.map((day, index) => {
@@ -137,12 +138,13 @@ export default function Approvals({ embedded = false, defaultTab = "schedules" }
             <div className="text-sm text-slate-500">{leave.reason}</div>
             {leave.status === "pending" && affected > 0 && <div className="mt-1 text-xs font-bold text-coral-600">{affected} confirmed session(s) would need reassignment</div>}
           </div>
-          <div className="flex items-center gap-2"><Badge status={leave.status}/>{leave.status === "pending" && <>
+          <div className="flex items-center gap-2"><Button size="sm" variant="secondary" onClick={() => setLeaveForm(leave)}>View Leave Form</Button><Badge status={leave.status}/>{leave.status === "pending" && <>
             <Button size="sm" variant="success" onClick={() => s.decideLeave(leave.id, true)}>Approve</Button>
             <Button size="sm" variant="danger" onClick={() => s.decideLeave(leave.id, false)}>Reject</Button>
           </>}</div>
         </Card>;
       })}
     </div>)}
+    <Modal open={!!leaveForm} onClose={() => setLeaveForm(null)} title="Leave Form" wide>{leaveForm && <div className="space-y-4 text-sm text-slate-700"><p>Date Submitted: <b>{leaveForm.submittedAt ? new Date(leaveForm.submittedAt).toLocaleDateString("en-PH") : "—"}</b></p><div className="rounded-2xl border-2 border-slate-300"><div className="border-b-2 border-slate-300 px-4 py-3">Employee Name: <b>{tn(leaveForm.tutorId)}</b></div><div className="space-y-3 px-4 py-4"><p>Reason for requested leave:</p><b>{leaveForm.leaveType || leaveForm.reason}</b>{leaveForm.otherReason && <p>Other: {leaveForm.otherReason}</p>}</div><div className="border-t-2 border-slate-300 px-4 py-3">Date Requested: <b>{fmtDate(leaveForm.startDate)} to {fmtDate(leaveForm.endDate)}</b></div></div><div className="grid gap-4 sm:grid-cols-2"><div className="rounded-xl border border-slate-300 p-4"><b>Note</b><p className="mt-2 min-h-16">{leaveForm.note || "—"}</p></div><div className="rounded-xl border border-slate-300 p-4"><b>Employee’s Signature</b><p className="mt-3 font-serif italic">{leaveForm.signature || tn(leaveForm.tutorId)}</p></div></div><div className="flex flex-wrap items-center justify-between gap-2"><Badge status={leaveForm.status}/>{leaveForm.status === "pending" && <div className="flex gap-2"><Button variant="success" onClick={() => { s.decideLeave(leaveForm.id, true); setLeaveForm(null); }}>Approve</Button><Button variant="danger" onClick={() => { s.decideLeave(leaveForm.id, false); setLeaveForm(null); }}>Reject</Button></div>}</div></div>}</Modal>
   </>;
 }

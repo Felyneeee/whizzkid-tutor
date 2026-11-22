@@ -263,12 +263,12 @@ const tables = [
     stateKey: "leaves", table: "leaves", primaryKey: "id", orderBy: "submitted_at",
     toRow: (l) => ({
       id: l.id, tutor_id: l.tutorId, start_date: l.startDate, end_date: l.endDate,
-      reason: l.reason, status: l.status, submitted_at: sqlDateTime(l.submittedAt),
+      reason: jsonText({ text: l.reason, leaveType: l.leaveType, otherReason: l.otherReason, note: l.note, signature: l.signature, decidedAt: l.decidedAt }), status: l.status, submitted_at: sqlDateTime(l.submittedAt),
       affected_session_ids: jsonText(l.affectedSessionIds, []),
     }),
     fromRow: (r) => ({
       id: r.id, tutorId: r.tutor_id, startDate: dateOnly(r.start_date),
-      endDate: dateOnly(r.end_date), reason: r.reason, status: r.status,
+      endDate: dateOnly(r.end_date), ...(parseJson(r.reason, null) && typeof parseJson(r.reason, null) === "object" ? { reason: parseJson(r.reason, {}).text || "", leaveType: parseJson(r.reason, {}).leaveType, otherReason: parseJson(r.reason, {}).otherReason || "", note: parseJson(r.reason, {}).note || "", signature: parseJson(r.reason, {}).signature || "", decidedAt: parseJson(r.reason, {}).decidedAt } : { reason: r.reason }), status: r.status,
       submittedAt: isoDateTime(r.submitted_at),
       affectedSessionIds: parseJson(r.affected_session_ids, []),
     }),
