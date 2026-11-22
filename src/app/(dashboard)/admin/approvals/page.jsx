@@ -119,7 +119,10 @@ export default function Approvals({ embedded = false, defaultTab = "schedules" }
               <th className="px-3 py-5 text-left font-semibold">{tutor.fullName}</th>
               {selectedWeek.map(({ day }) => {
                 const working = !!db.tutorSchedules?.[tutor.userId]?.days?.[day];
-                return <td key={day} className={`px-2 py-5 text-sm font-medium ${working ? "text-green-600" : "text-red-500"}`}>{working ? "Working" : db.tutorSchedules?.[tutor.userId] ? "Day Off" : "—"}</td>;
+                const date = selectedWeek.find((item) => item.day === day)?.date;
+                const dateISO = date && asISO(date);
+                const onLeave = dateISO && db.leaves.some((leave) => leave.tutorId === tutor.userId && leave.status === "approved" && (leave.dates ? leave.dates.includes(dateISO) : dateISO >= leave.startDate && dateISO <= leave.endDate));
+                return <td key={day} className={`px-2 py-5 text-sm font-medium ${onLeave ? "text-orange-600" : working ? "text-green-600" : "text-red-500"}`}>{onLeave ? "On Leave" : working ? "Working" : db.tutorSchedules?.[tutor.userId] ? "Day Off" : "—"}</td>;
               })}
             </tr>)}</tbody>
           </table>
