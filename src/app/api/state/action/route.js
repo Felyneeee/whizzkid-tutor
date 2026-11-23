@@ -229,7 +229,7 @@ export async function POST(request) {
       const [bookingId, receiptData, reference, method] = permission.args;
       const booking = state.bookings.find((entry) => entry.id === bookingId && entry.tuteeId === user.id);
       const assignedSessions = state.sessions.filter((entry) => entry.bookingId === bookingId && entry.status !== "cancelled");
-      const isPayable = booking && (booking.status === "to_pay" || (["awaiting_admin", "ready_for_matching", "confirmed", "approved"].includes(booking.status) && booking.program !== "playgroup" && booking.paymentStatus !== "paid" && bookingSlotsFullyAssigned(booking, assignedSessions)));
+      const isPayable = booking && (booking.status === "to_pay" || (booking.program === "reading" && booking.paymentStatus === "to_pay" && ["ready_for_matching", "confirmed"].includes(booking.status)) || (["awaiting_admin", "ready_for_matching", "confirmed", "approved"].includes(booking.status) && booking.program !== "playgroup" && booking.paymentStatus !== "paid" && bookingSlotsFullyAssigned(booking, assignedSessions)));
       const validReceipt = typeof receiptData === "string" && /^data:(image\/(png|jpeg|webp)|application\/pdf);base64,[A-Za-z0-9+/=]+$/.test(receiptData) && Buffer.from(receiptData.split(",")[1] || "", "base64").byteLength <= 5 * 1024 * 1024;
       if (!isPayable || !validReceipt || (reference != null && (typeof reference !== "string" || reference.length > 120)) || !["online", "in_person"].includes(method)) {
         await connection.rollback();
@@ -301,7 +301,7 @@ export async function POST(request) {
           for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `${booking.subject} booking from ${personName(nextState, booking.tuteeId)} was matched and is awaiting payment within 48 hours.`, at: nowISO(), read: false, channels: ["web"] });
         }
       }
-      if (booking.status !== "to_pay" || !booking.paymentDeadlineAt) continue;
+      if (!(booking.status === "to_pay" || (booking.program === "reading" && booking.paymentStatus === "to_pay" && booking.status === "ready_for_matching")) || !booking.paymentDeadlineAt) continue;
       const expiresAt = Date.parse(booking.paymentDeadlineAt);
       if (expiresAt <= now) {
         booking.status = "expired";
@@ -418,7 +418,7 @@ export async function POST(request) {
         : body.action === "submitBookingPaymentProof"
       ? async (bookingId, receiptData, reference, method) => {
         const booking = nextState.bookings.find((entry) => entry.id === bookingId && entry.tuteeId === user.id);
-        if (!booking || booking.status !== "to_pay") return { ok: false, error: "This booking is no longer awaiting payment." };
+        if (!booking || !(booking.status === "to_pay" || (booking.program === "reading" && booking.paymentStatus === "to_pay" && ["ready_for_matching", "confirmed"].includes(booking.status)))) return { ok: false, error: "This booking is no longer awaiting payment." };
         booking.paymentProof = { receiptData, reference: reference || "", method, submittedAt: nowISO() };
         booking.paymentStatus = "awaiting_approval";
         booking.status = "awaiting_payment_approval";
@@ -480,7 +480,7 @@ export async function POST(request) {
       for (const booking of nextState.bookings.filter((entry) => requestedIds.includes(entry.id))) {
         const sessions = nextState.sessions.filter((entry) => entry.bookingId === booking.id && entry.status !== "cancelled");
         const fullyAssigned = bookingSlotsFullyAssigned(booking, sessions);
-        if (booking.status !== "confirmed" || !fullyAssigned || booking.paymentStatus === "paid") continue;
+        if (booking.status !== "confirmed" || !fullyAssigned || ["paid", "awaiting_approval"].includes(booking.paymentStatus)) continue;
         const prematureConfirmed = nextState.notifications.filter((entry) => !existingNotificationIds.has(entry.id) && entry.userId === booking.tuteeId && /confirmed/i.test(entry.text));
         if (prematureConfirmed.length) {
           const prematureIds = new Set(prematureConfirmed.map((entry) => entry.id));

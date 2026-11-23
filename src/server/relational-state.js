@@ -117,11 +117,13 @@ const tables = [
       id: a.id, tutee_id: a.tuteeId, modality: a.modality, assessment_date: a.date ?? null,
       assessment_time: a.time ?? null, status: a.status, results: a.results ?? null,
       learning_needs: a.learningNeeds ?? null, reading_level: a.readingLevel ?? null,
+      completed_at: sqlDateTime(a.completedAt),
     }),
     fromRow: (r) => ({
       id: r.id, tuteeId: r.tutee_id, modality: r.modality, date: dateOnly(r.assessment_date),
       time: r.assessment_time, status: r.status, results: r.results ?? undefined,
       learningNeeds: r.learning_needs ?? undefined, readingLevel: r.reading_level ?? undefined,
+      completedAt: isoDateTime(r.completed_at),
     }),
   },
   {

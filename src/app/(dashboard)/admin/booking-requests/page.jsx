@@ -25,10 +25,9 @@ export default function BookingRequests() {
       { id: "playgroup", label: "Playgroup Program", count: playgroupCount },
     ]} value={program} onChange={setProgram} />
 
-    {program === "academic" && <Matching embedded programFilter="academic" />}
+    {program === "academic" && <Matching embedded programFilter="academic" cardLayout />}
     {program === "reading" && <>
-      <Tabs variant="segmented" tabs={[{ id: "assessment", label: "Initial Assessment" }, { id: "assignment", label: "Assign Tutor", count: readingCount }]} value={readingStage} onChange={setReadingStage} />
-      {readingStage === "assessment" ? <Assessments embedded /> : <Matching embedded programFilter="reading" />}
+      {readingStage === "assessment" ? <Assessments embedded onAssignTutor={() => setReadingStage("assignment")} /> : <><button type="button" onClick={() => setReadingStage("assessment")} className="mb-3 text-sm font-bold text-brand-600 hover:underline">← Back to Reading requests</button><Matching embedded programFilter="reading" /></>}
     </>}
     {program === "playgroup" && <>
       <Tabs variant="segmented" tabs={[{ id: "schedule", label: "Playgroup Schedule" }, { id: "requests", label: "Booking Requests", count: playgroupCount }]} value={playgroupStage} onChange={setPlaygroupStage} />

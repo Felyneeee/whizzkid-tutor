@@ -6,6 +6,17 @@ export const parseISO = (s) => {
     return new Date(y, m - 1, d);
 };
 export const todayISO = () => toISO(new Date());
+export const assessmentExpiresAt = (assessment) => {
+    if (!assessment) return null;
+    const completed = new Date(assessment.completedAt || assessment.updatedAt || assessment.date || assessment.createdAt || "");
+    if (Number.isNaN(completed.getTime())) return null;
+    const expiry = new Date(completed);
+    const originalDay = expiry.getDate();
+    expiry.setMonth(expiry.getMonth() + 1);
+    if (expiry.getDate() !== originalDay) expiry.setDate(0);
+    return expiry;
+};
+export const isAssessmentOutdated = (assessment, now = new Date()) => assessment?.status === "completed" && !!assessmentExpiresAt(assessment) && now >= assessmentExpiresAt(assessment);
 export const addDays = (iso, n) => {
     const d = parseISO(iso);
     d.setDate(d.getDate() + n);

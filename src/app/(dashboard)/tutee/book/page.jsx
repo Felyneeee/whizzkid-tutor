@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { Laptop, School } from "lucide-react";
+import { CheckCircle2, Info, Laptop, School } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { Calendar } from "@/components/Calendar";
@@ -123,8 +123,8 @@ function ReadingFlow() {
     const id = s.me.id;
     const profile = s.db.tutees.find((t) => t.userId === id);
     const mine = s.db.assessments.filter((a) => a.tuteeId === id);
-    const booking = [...s.db.bookings].reverse().find((b) => b.tuteeId === id && b.program === "reading" && ["pending", "pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "confirmed"].includes(b.status));
-      const awaitingAssessment = booking && ["pending", "pending_assessment", "assessment_scheduled"].includes(booking.status);
+    const booking = [...s.db.bookings].reverse().find((b) => b.tuteeId === id && b.program === "reading" && ["pending", "pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "to_pay", "awaiting_payment_approval", "confirmed"].includes(b.status));
+      const awaitingAssessment = booking && ["pending", "pending_assessment", "assessment_scheduled", "to_pay", "awaiting_payment_approval"].includes(booking.status) && s.db.assessments.find((assessment) => assessment.id === booking.assessmentId)?.status !== "completed";
     const [params, setParams] = useState(null);
     const [modality, setModality] = useState("online");
     const [needs, setNeeds] = useState("");
@@ -156,6 +156,7 @@ function PlaygroupFlow() {
     const profile = s.db.tutees.find((t) => t.userId === id);
     const [selectedCohortId, setSelectedCohortId] = useState("");
     const [msg, setMsg] = useState(null);
+    const [confirmation, setConfirmation] = useState(null);
     const months = ageMonths(profile.birthday);
     const eligible = months !== null && months >= 34 && months < 60; // 2.8 – 4.x yrs
     const today = todayISO();
@@ -209,8 +210,14 @@ function PlaygroupFlow() {
       || s.db.cohorts.find((cohort) => trackedBooking.dates?.length && trackedBooking.dates.every((date) => cohortSessionDates(cohort).includes(date))));
     const book = async () => {
         const r = await s.bookPlaygroup(id, selectedCohort.c.id);
-        setMsg(r.ok ? { kind: "success", text: "Booking submitted. It is pending administrator approval; tutor assignment may still be pending." } : { kind: "error", text: r.error });
+        if (r.ok) setConfirmation({ sessions: selectedCohort.dates.length, amount: selectedCohort.dates.length * PLAYGROUP_SESSION_RATE });
+        else setMsg({ kind: "error", text: r.error });
     };
+    if (confirmation) return <Card className="space-y-6 rounded-3xl p-6 sm:p-10">
+      <div className="space-y-2 text-center"><CheckCircle2 className="mx-auto h-14 w-14 text-green-600"/><h2 className="text-2xl font-extrabold text-slate-800">Booking request submitted!</h2><p className="mx-auto max-w-3xl text-sm font-semibold text-slate-500">Your booking request has been successfully submitted and is now awaiting admin review.</p><Link href="/tutee/requests" prefetch={false} className="inline-flex items-center gap-3 pt-2 text-lg font-extrabold text-brand-600 hover:underline">Go to My Bookings <span aria-hidden="true" className="text-2xl">⟶</span></Link></div>
+      <section className="rounded-3xl border-2 border-slate-300 px-5 py-6 sm:px-8" aria-label="Booking summary"><div className="flex flex-wrap items-start justify-between gap-3"><h3 className="text-2xl font-extrabold text-slate-800">Booking Summary</h3><span className="min-w-36 rounded-xl bg-amber-100 px-4 py-3 text-center text-sm font-extrabold text-amber-700">Pending</span></div><p className="mt-5 text-2xl font-extrabold">Total Amount: <span className="text-green-600">{peso(confirmation.amount)}</span></p><p className="mt-1 font-bold text-slate-500">{confirmation.sessions} sessions × {peso(PLAYGROUP_SESSION_RATE)}</p></section>
+      <p className="flex items-start gap-3 px-1 text-sm font-semibold leading-6 text-slate-500"><Info className="mt-0.5 h-5 w-5 shrink-0 text-brand-600"/>Once approved, your payment details and deadline will be available in My Bookings. Please settle the payment for your requested sessions before the deadline to avoid automatic cancellation of your booking.</p>
+    </Card>;
     if (myEnrolledBooking) return <div className="rounded-3xl bg-gradient-to-br from-blue-50 via-slate-50 to-amber-50 p-2 sm:p-4"><Card className="mx-auto max-w-2xl space-y-3 border-0 text-center shadow-sm"><Badge status="approved">Enrolled</Badge><h2 className="text-xl font-extrabold">Student is currently enrolled in the recent Playgroup cohort</h2><p className="text-slate-600">{trackedCohort ? `Cohort: ${trackedCohort.label}` : "The student is enrolled in the recent Playgroup cohort."}</p>{trackedBooking.dates?.length > 0 && <p className="text-sm text-slate-500">{fmtDate(trackedBooking.dates[0])} until {fmtDate(trackedBooking.dates[trackedBooking.dates.length - 1])} · 12 sessions</p>}<p className="text-sm text-slate-500">The cohort booking page is unavailable while the student is enrolled.</p><Link href="/tutee/requests" prefetch={false} className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50">My Bookings</Link></Card></div>;
     if (myPendingBooking) return <div className="rounded-3xl bg-gradient-to-br from-blue-50 via-slate-50 to-amber-50 p-2 sm:p-4"><Card className="mx-auto max-w-2xl space-y-3 border-0 text-center shadow-sm"><Badge status="pending">Pending approval</Badge><h2 className="text-xl font-extrabold">Playgroup booking request received</h2><p className="text-slate-600">Your request for {trackedCohort?.label || "the Playgroup cohort"} has been submitted and is waiting for administrator approval.</p>{myPendingBooking.dates?.length > 0 && <p className="text-sm text-slate-500">{fmtDate(myPendingBooking.dates[0])} until {fmtDate(myPendingBooking.dates[myPendingBooking.dates.length - 1])} · 12 sessions</p>}<p className="text-sm text-slate-500">We’ll notify you when the request is approved or declined.</p><Link href="/tutee/requests" prefetch={false} className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50">My Bookings</Link></Card></div>;
     return (<div className="space-y-5 rounded-3xl bg-gradient-to-br from-blue-50 via-slate-50 to-amber-50 p-1 sm:p-2">

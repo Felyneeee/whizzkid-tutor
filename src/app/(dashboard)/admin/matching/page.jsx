@@ -1,9 +1,10 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Alert, Badge, Button, Card, Empty, Field, Input, Modal, PageHeader, Select, Textarea, peso } from "@/components/ui";
 import { addDays, fmtDate, fmtTime, todayISO } from "@/lib/dates";
 import { HOURS } from "@/lib/constants";
 import { matchTutors } from "@/lib/logic";
+import { isAssessmentOutdated } from "@/lib/dates";
 import { useStore } from "@/lib/store";
 
 function sessionEndTime(time) {
@@ -13,7 +14,7 @@ function sessionEndTime(time) {
 }
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-export default function Matching({ embedded = false, programFilter = null } = {}) {
+export default function Matching({ embedded = false, programFilter = null, cardLayout = false } = {}) {
   const s = useStore();
   const [msg, setMsg] = useState({});
   const [selectedId, setSelectedId] = useState(null);
@@ -27,12 +28,13 @@ export default function Matching({ embedded = false, programFilter = null } = {}
   const [rescheduleErrors, setRescheduleErrors] = useState({});
   const [rescheduleBusy, setRescheduleBusy] = useState({});
   const [sortOrder, setSortOrder] = useState("newest");
+  const [scheduleModal, setScheduleModal] = useState(null);
   const sortByCreatedAt = (a, b) => {
     const comparison = String(a.createdAt || "").localeCompare(String(b.createdAt || ""));
     return sortOrder === "newest" ? -comparison : comparison;
   };
-  const allPending = s.db.bookings.filter((b) => (!programFilter || b.program === programFilter) && ["awaiting_admin", "ready_for_matching"].includes(b.status)
-    && (b.program !== "reading" || s.db.assessments.some((a) => a.id === b.assessmentId && a.tuteeId === b.tuteeId && a.status === "completed"))).sort(sortByCreatedAt);
+  const allPending = s.db.bookings.filter((b) => (!programFilter || b.program === programFilter) && (["awaiting_admin", "ready_for_matching"].includes(b.status) || (b.program === "reading" && ["to_pay", "awaiting_payment_approval", "confirmed"].includes(b.status) && !(b.sessionSlots ?? b.dates.map((date) => ({ date, time: b.sessionTimes?.[date] ?? b.time }))).every((slot) => s.db.sessions.some((session) => session.bookingId === b.id && session.date === slot.date && session.time === slot.time && session.tutorId && session.status !== "cancelled"))))
+    && (b.program !== "reading" || s.db.assessments.some((a) => a.id === b.assessmentId && a.tuteeId === b.tuteeId && a.status === "completed" && !isAssessmentOutdated(a)))).sort(sortByCreatedAt);
   const pending = allPending.filter((booking, index) => booking.program !== "reading" || allPending.findIndex((other) => other.program === "reading" && other.tuteeId === booking.tuteeId && other.assessmentId === booking.assessmentId) === index);
   const booking = pending.find((b) => b.id === selectedId);
   const bookingGroup = booking?.program === "reading" ? allPending.filter((entry) => entry.program === "reading" && entry.tuteeId === booking.tuteeId && entry.assessmentId === booking.assessmentId) : booking ? [booking] : [];
@@ -44,8 +46,8 @@ export default function Matching({ embedded = false, programFilter = null } = {}
   const assessment = booking?.assessmentId ? s.db.assessments.find((a) => a.id === booking.assessmentId) : undefined;
   const proposalPending = !!booking?.scheduleProposal;
   const individual = booking?.program === "academic" || booking?.program === "reading";
-  const assignments = useMemo(() => booking ? s.db.sessions.filter((session) => session.bookingId === booking.id && session.status !== "cancelled") : [], [booking, s.db.sessions]);
-  const sessions = useMemo(() => {
+  const assignments = booking ? s.db.sessions.filter((session) => session.bookingId === booking.id && session.status !== "cancelled") : [];
+  const sessions = (() => {
     if (!booking || !individual || proposalPending) return [];
     const groups = new Map();
     const requestedSlots = booking.sessionSlots ?? booking.dates.map((date) => ({ seriesKey: `day-${new Date(`${date}T00:00:00Z`).getUTCDay()}`, day: new Date(`${date}T00:00:00Z`).getUTCDay(), date, subject: booking.sessionSubjects?.[date] ?? booking.subject, time: booking.sessionTimes?.[date] ?? booking.time }));
@@ -64,7 +66,7 @@ export default function Matching({ embedded = false, programFilter = null } = {}
       }).filter((match) => match.full);
       return { ...group, dates: group.slots.map((slot) => slot.date), assigned, eligibleCount: ranked.length, matches: ranked.slice(0, 3) };
     });
-  }, [booking, individual, proposalPending, assignments, s.db]);
+  })();
   const openScheduleEditor = (b) => {
     setEditing(b);
     setScheduleError("");
@@ -103,7 +105,7 @@ export default function Matching({ embedded = false, programFilter = null } = {}
 
   return <>
     {!embedded && <PageHeader title="Tutor–tutee matching" subtitle="Review each booking, then assign tutors to its sessions."/>}
-    {!booking && (pending.length > 0 || pendingReschedules.length > 0) && <div className="mb-3 flex justify-end"><label className="flex items-center gap-2 text-sm font-semibold text-slate-600"><span>Sort by</span><Select className="w-auto min-w-36" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option></Select></label></div>}
+    {!booking && (pending.length > 0 || pendingReschedules.length > 0) && <div className="mb-3 flex justify-end">{cardLayout ? <div className="flex items-center gap-2 text-sm font-semibold"><span>Sort by:</span>{[{id:"oldest",label:"Oldest"},{id:"newest",label:"Newest"}].map((item) => <button key={item.id} type="button" className={sortOrder === item.id ? "font-extrabold text-brand-600" : "text-slate-500 hover:text-brand-600"} onClick={() => setSortOrder(item.id)}>{item.label} ↕</button>)}</div> : <label className="flex items-center gap-2 text-sm font-semibold text-slate-600"><span>Sort by</span><Select className="w-auto min-w-36" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option></Select></label>}</div>}
     {pendingReschedules.length > 0 && <Card className="border-sunny-200 bg-sunny-50/50"><h2 className="mb-3 font-extrabold">Reschedule matching ({pendingReschedules.length})</h2><p className="mb-3 text-sm text-slate-600">Review the requested slots and assign the same tutor or another tutor who is available.</p><div className="space-y-3">{pendingReschedules.map((entry) => {
       const proposal = entry.rescheduleProposal;
       const items = proposal.sessions || [proposal];
@@ -117,11 +119,20 @@ export default function Matching({ embedded = false, programFilter = null } = {}
       })}{rescheduleErrors[entry.id] && <Alert kind="error">{rescheduleErrors[entry.id]}</Alert>}<div className="mt-3 flex justify-end gap-2"><Button size="sm" variant="danger" disabled={rescheduleBusy[entry.id]} onClick={() => reviewReschedule(entry, false)}>Reject</Button><Button size="sm" variant="success" disabled={rescheduleBusy[entry.id] || !availableForAll} onClick={() => reviewReschedule(entry, true)}>{rescheduleBusy[entry.id] ? "Saving…" : "Approve matches"}</Button></div></div>;
     })}</div></Card>}
     {!booking ? <>
-      {pending.length === 0 ? <Empty>No booking requests waiting for review.</Empty> : <div className="space-y-3">{pending.map((b) => {
+      {pending.length === 0 ? <Empty>No booking requests waiting for review.</Empty> : <div className="space-y-4">{pending.map((b) => {
         const student = s.db.tutees.find((t) => t.userId === b.tuteeId);
         const grouped = b.program === "reading" ? allPending.filter((entry) => entry.program === "reading" && entry.tuteeId === b.tuteeId && entry.assessmentId === b.assessmentId) : [b];
         const done = s.db.sessions.filter((session) => grouped.some((entry) => entry.id === session.bookingId) && session.status !== "cancelled").length;
         const bookingSlots = b.program === "reading" ? [...new Map(grouped.flatMap((entry) => entry.sessionSlots ?? entry.dates.map((date) => ({ date, subject: "Reading", time: entry.sessionTimes?.[date] ?? entry.time }))).map((slot) => [`${slot.date}|${slot.time}`, slot])).values()] : b.sessionSlots ?? b.dates.map((date) => ({ date, subject: b.sessionSubjects?.[date] ?? b.subject, time: b.sessionTimes?.[date] ?? b.time }));
+        if (cardLayout) {
+          const subjects = [...new Set(bookingSlots.map((slot) => slot.subject).filter(Boolean))];
+          const bookedAt = b.createdAt ? new Date(b.createdAt).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" }) : "—";
+          return <article key={b.id} className="rounded-3xl border-0 bg-white p-5 shadow-sm sm:px-7 sm:py-6">
+            <header className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-extrabold text-slate-800">{student?.fullName || b.tuteeId} · {student?.gradeLevel || b.gradeLevel}</h2><p className="text-sm font-bold text-slate-600">{subjects.join(" · ") || b.subject} · {bookingSlots.length} sessions · {peso(b.totalFee)} · {b.modality === "face-to-face" ? "Face-to-Face" : "Online"}</p></div><span className="min-w-36 rounded-xl bg-amber-100 px-4 py-2 text-center text-sm font-extrabold text-amber-700">Pending</span></header>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2"><Button className="w-full rounded-2xl py-4" onClick={() => setSelectedId(b.id)}>Assign a Tutor</Button><Button className="w-full rounded-2xl py-4" onClick={() => setScheduleModal(b)}>View Requested Schedule</Button></div>
+            <p className="mt-4 text-sm text-slate-400">Booked on {bookedAt}</p>
+          </article>;
+        }
         return <button type="button" key={b.id} onClick={() => setSelectedId(b.id)} className="block w-full text-left"><Card className="transition hover:border-brand-300 hover:shadow-md"><div className="flex flex-wrap items-center justify-between gap-2"><div><div className="font-extrabold">{student?.fullName} <span className="font-normal text-slate-500">· {student?.gradeLevel}</span></div><div className="mt-1 text-sm text-slate-600">{b.program === "academic" ? "Academic" : b.program === "reading" ? "Reading Program assignment" : b.program} · {b.subject} · {bookingSlots.length} session(s) · {peso(b.program === "reading" ? b.ratePerHour * bookingSlots.length : b.totalFee)}</div></div><Badge status={b.status}/></div><div className="mt-2 text-xs text-slate-500">{bookingSlots.map((slot, index) => <span key={`${slot.date}-${slot.time}-${index}`}>{fmtDate(slot.date)} · {slot.subject} · {fmtTime(slot.time)}{index < bookingSlots.length - 1 ? "  /  " : ""}</span>)}</div>{done > 0 && <div className="mt-2 text-xs font-bold text-brand-700">{done}/{bookingSlots.length} sessions assigned</div>}</Card></button>;
       })}</div>}
     </> : <div className="space-y-4">
@@ -156,5 +167,8 @@ export default function Matching({ embedded = false, programFilter = null } = {}
     </div>}
     <Modal open={!!rej} onClose={() => setRej(null)} title="Request rescheduling"><div className="space-y-4"><Field label="Message to parent"><Textarea value={reason} onChange={(e) => setReason(e.target.value)}/></Field><Button variant="danger" onClick={async () => { if (rej.program === "reading") await s.rejectReadingAssignment(rejectedGroup.map((entry) => entry.id), reason); else await s.rejectBooking(rej.id, reason); setRej(null); setSelectedId(null); }}>Release slots & notify</Button></div></Modal>
     <Modal open={!!editing} onClose={() => setEditing(null)} title="Propose schedule change"><div className="space-y-4"><div className="space-y-2">{scheduleDraft.map((session, index) => <div key={index} className="grid grid-cols-[1fr_1fr_auto] items-end gap-2"><Field label={index === 0 ? "Date" : ""}><Input type="date" min={todayISO()} value={session.date} onChange={(e) => setScheduleDraft((current) => current.map((row, i) => i === index ? { ...row, date: e.target.value } : row))}/></Field><Field label={index === 0 ? "Time" : ""}><Select value={session.time} onChange={(e) => setScheduleDraft((current) => current.map((row, i) => i === index ? { ...row, time: e.target.value } : row))}>{HOURS.map((hour) => <option key={hour} value={hour}>{fmtTime(hour)}</option>)}</Select></Field><Button size="sm" variant="danger" onClick={() => setScheduleDraft((current) => current.filter((_, i) => i !== index))}>Remove</Button></div>)}</div><Button variant="secondary" onClick={() => setScheduleDraft((current) => [...current, { date: addDays(current[current.length - 1]?.date || todayISO(), 1), time: current[0]?.time || HOURS[0] }])}>Add session date</Button>{scheduleError && <Alert kind="error">{scheduleError}</Alert>}<Button onClick={async () => { const result = await s.proposeBookingSchedule(editing.id, scheduleDraft); if (!result.ok) return setScheduleError(result.error); setEditing(null); }}>Send for tutee approval</Button></div></Modal>
+    <Modal open={!!scheduleModal} onClose={() => setScheduleModal(null)} title="Requested Academic Schedule">
+      {scheduleModal && <div className="space-y-2">{(scheduleModal.sessionSlots || scheduleModal.dates.map((date) => ({ date, subject: scheduleModal.sessionSubjects?.[date] || scheduleModal.subject, time: scheduleModal.sessionTimes?.[date] || scheduleModal.time }))).map((slot, index) => <div key={`${slot.date}-${slot.time}-${index}`} className="grid grid-cols-[1fr_1fr_1fr] rounded-xl bg-slate-50 p-3 text-sm font-semibold"><span>{fmtDate(slot.date)}</span><span>{slot.subject || scheduleModal.subject}</span><span className="text-right">{fmtTime(slot.time)}</span></div>)}</div>}
+    </Modal>
   </>;
 }

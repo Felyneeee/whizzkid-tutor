@@ -14,7 +14,8 @@ export function DashboardShell({ role, nav, children, gate }) {
     const s = useStore();
     const router = useRouter();
     const path = usePathname();
-    const [open, setOpen] = useState(false);
+    const [menuState, setMenuState] = useState({ path, open: false });
+    const open = menuState.path === path && menuState.open;
     const [notificationsOpen, setNotificationsOpen] = useState(false);
     useEffect(() => {
         if (!s.ready)
@@ -24,7 +25,6 @@ export function DashboardShell({ role, nav, children, gate }) {
         else if (s.me.role !== role)
             router.replace(homeFor(s.me.role));
     }, [s.ready, s.me, role, router]);
-    useEffect(() => setOpen(false), [path]);
     if (!s.ready || !s.me || s.me.role !== role) {
         return <div className="grid min-h-screen place-items-center text-slate-400">Loading…</div>;
     }
@@ -66,12 +66,12 @@ export function DashboardShell({ role, nav, children, gate }) {
     return (<div className="min-h-screen lg:flex">
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-slate-100 bg-white lg:block">{sidebar}</aside>
       {open && (<div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 bg-slate-900/40" onClick={() => setOpen(false)}/>
+          <div className="absolute inset-0 bg-slate-900/40" onClick={() => setMenuState({ path, open: false })}/>
           <div className="absolute left-0 top-0 h-full w-64 bg-white shadow-xl">{sidebar}</div>
         </div>)}
       <div className="min-w-0 flex-1">
         <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-100 bg-white px-4 py-3 lg:px-8">
-          <button className="rounded-lg p-2 hover:bg-slate-100 lg:hidden" onClick={() => setOpen(!open)} aria-label="Menu">
+          <button className="rounded-lg p-2 hover:bg-slate-100 lg:hidden" onClick={() => setMenuState({ path, open: !open })} aria-label="Menu">
             {open ? <X className="h-5 w-5"/> : <Menu className="h-5 w-5"/>}
           </button>
           <div className="flex-1"/>

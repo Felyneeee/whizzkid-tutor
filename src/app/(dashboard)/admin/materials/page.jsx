@@ -1,5 +1,6 @@
 "use client";
 import { Eye, Pencil, Search, SlidersHorizontal, Trash2, Upload, CloudUpload, ChevronDown } from "lucide-react";
+import Image from "next/image";
 import { useRef, useState } from "react";
 import { SUBJECTS } from "@/lib/constants";
 import { Alert, Button, Empty, Field, Input, Modal, PageHeader, Select, Textarea } from "@/components/ui";
@@ -55,6 +56,6 @@ export default function AdminMaterials() {
         <div className="flex justify-end gap-2 border-t border-slate-100 pt-4"><Button type="button" variant="secondary" onClick={closeUpload}>Cancel</Button><Button type="submit"><CloudUpload className="h-4 w-4"/> {editing ? "Save changes" : "Upload material"}</Button></div>
       </form>
     </Modal>
-    <Modal open={!!preview} onClose={() => setPreview(null)} title={preview?.title || "Material preview"} wide>{preview?.data ? preview.mime?.startsWith("image/") ? <img src={preview.data} alt={preview.title} className="mx-auto max-h-[75vh] max-w-full object-contain"/> : <iframe title={preview.title} src={preview.data} className="h-[75vh] w-full rounded-xl border border-slate-200 bg-white"/> : <Empty>No preview file is stored for this material.</Empty>}</Modal>
+    <Modal open={!!preview} onClose={() => setPreview(null)} title={preview?.title || "Material preview"} wide>{preview?.data ? preview.mime?.startsWith("image/") ? <Image src={preview.data} alt={preview.title} width={1600} height={1200} unoptimized className="mx-auto max-h-[75vh] max-w-full object-contain"/> : <iframe title={preview.title} src={preview.data} className="h-[75vh] w-full rounded-xl border border-slate-200 bg-white"/> : <Empty>No preview file is stored for this material.</Empty>}</Modal>
   </>;
 }

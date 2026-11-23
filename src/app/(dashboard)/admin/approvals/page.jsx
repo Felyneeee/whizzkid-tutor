@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Alert, Badge, Button, Card, Empty, Field, Modal, PageHeader, Select, Tabs } from "@/components/ui";
 import { fmtDate } from "@/lib/dates";
 import { useStore } from "@/lib/store";
@@ -19,8 +19,13 @@ export default function Approvals({ embedded = false, defaultTab = "schedules" }
   const db = s.db;
   const [tab, setTab] = useState(defaultTab);
   const activeTutors = db.tutors.filter((tutor) => tutor.status === "active");
-  const [scheduleTutor, setScheduleTutor] = useState(() => activeTutors[0]?.userId ?? "");
-  const [scheduleDays, setScheduleDays] = useState({});
+  const [scheduleTutorSelection, setScheduleTutorSelection] = useState("");
+  const scheduleTutor = activeTutors.some((tutor) => tutor.userId === scheduleTutorSelection)
+    ? scheduleTutorSelection
+    : activeTutors[0]?.userId ?? "";
+  const [scheduleDayEdits, setScheduleDayEdits] = useState({});
+  const savedScheduleDays = db.tutorSchedules?.[scheduleTutor]?.days || {};
+  const scheduleDays = scheduleDayEdits[scheduleTutor] ?? Object.fromEntries(Object.keys(savedScheduleDays).map((day) => [day, true]));
   const [scheduleResult, setScheduleResult] = useState(null);
   const [leaveForm, setLeaveForm] = useState(null);
   const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
@@ -33,14 +38,10 @@ export default function Approvals({ embedded = false, defaultTab = "schedules" }
   const isCurrentWeek = weekStart.getTime() === mondayOf(new Date()).getTime();
   const tn = (id) => db.tutors.find((tutor) => tutor.userId === id)?.fullName || "Admin";
 
-  useEffect(() => {
-    if (!activeTutors.some((tutor) => tutor.userId === scheduleTutor)) {
-      setScheduleTutor(activeTutors[0]?.userId ?? "");
-      return;
-    }
-    const savedDays = db.tutorSchedules?.[scheduleTutor]?.days || {};
-    setScheduleDays(Object.fromEntries(Object.keys(savedDays).map((day) => [day, true])));
-  }, [db.tutorSchedules, db.tutors, scheduleTutor]);
+  const setScheduleDays = (update) => setScheduleDayEdits((current) => {
+    const currentDays = current[scheduleTutor] ?? Object.fromEntries(Object.keys(savedScheduleDays).map((day) => [day, true]));
+    return { ...current, [scheduleTutor]: typeof update === "function" ? update(currentDays) : update };
+  });
 
   const toggleDay = (day) => setScheduleDays((current) => {
     const next = { ...current };
@@ -67,7 +68,7 @@ export default function Approvals({ embedded = false, defaultTab = "schedules" }
         {activeTutors.length === 0 ? <Empty>No active tutors to edit.</Empty> : <>
           <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
             <Field label="Tutor">
-              <Select className="min-w-[240px] !rounded-2xl !border-2 !border-slate-300 !px-4 !py-3 !text-base font-semibold" value={scheduleTutor} onChange={(event) => { setScheduleTutor(event.target.value); setScheduleResult(null); }}>
+              <Select className="min-w-[240px] !rounded-2xl !border-2 !border-slate-300 !px-4 !py-3 !text-base font-semibold" value={scheduleTutor} onChange={(event) => { setScheduleTutorSelection(event.target.value); setScheduleResult(null); }}>
                 <option value="">Select Tutor</option>
                 {activeTutors.map((tutor) => <option key={tutor.userId} value={tutor.userId}>{tutor.fullName}</option>)}
               </Select>

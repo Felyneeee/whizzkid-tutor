@@ -13,6 +13,7 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
   const s = useStore();
   const refreshSlotAvailability = s.refreshSlotAvailability;
   const isAcademic = params.program === "academic";
+  const isReading = params.program === "reading";
   const [selectedDays, setSelectedDays] = useState([]);
   const [weeks, setWeeks] = useState(null);
   const [firstWeekStart, setFirstWeekStart] = useState("");
@@ -23,6 +24,7 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
   const [slotCounts, setSlotCounts] = useState({});
   const [err, setErr] = useState("");
   const [doneId, setDoneId] = useState(null);
+  const [doneSummary, setDoneSummary] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const days = selectedDays;
   const start = firstWeekStart;
@@ -34,9 +36,9 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
   const lastDate = orderedDates[orderedDates.length - 1] || "";
   const rate = computeRate(params.program, params.gradeLevel, params.modality);
   const selectedSubjects = useMemo(() => isAcademic ? (params.subjects || [params.subject]) : ["Reading"], [isAcademic, params.subjects, params.subject]);
+  const availabilityRequestKey = JSON.stringify([dates, selectedSubjects, params.program, params.gradeLevel, params.modality, params.sessionType || "one-on-one"]);
   useEffect(() => {
     if (!cycleReady || !dates.length || submitting || doneId) {
-      setServerAvailability(null);
       return undefined;
     }
     let stopped = false;
@@ -50,7 +52,7 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
         sessionType: params.sessionType || "one-on-one",
       });
       inFlight = false;
-      if (!stopped && result.ok) setServerAvailability(result.available);
+      if (!stopped && result.ok) setServerAvailability({ key: availabilityRequestKey, available: result.available });
     };
     void refresh();
     const timer = window.setInterval(() => void refresh(), 5000);
@@ -60,7 +62,7 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [cycleReady, dates, selectedSubjects, params.program, params.gradeLevel, params.modality, params.sessionType, refreshSlotAvailability, submitting, doneId]);
+  }, [cycleReady, dates, selectedSubjects, params.program, params.gradeLevel, params.modality, params.sessionType, refreshSlotAvailability, submitting, doneId, availabilityRequestKey]);
   const byDay = useCallback((day) => dates.filter((date) => weekday(date) === day), [dates]);
   const slotKey = useCallback((day, index) => `${day}-${index}`, []);
   const slotCount = useCallback((day) => slotCounts[day] || 1, [slotCounts]);
@@ -102,24 +104,12 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
       const dow = weekday(date);
       if (dow === 0 || ([1, 3, 5].includes(dow) && ["10:00", "10:45"].includes(time))) return false;
       const availabilityKey = `${date}|${time}|${subject}`;
-      return serverAvailability && Object.hasOwn(serverAvailability, availabilityKey)
-        ? serverAvailability[availabilityKey]
+      const currentAvailability = serverAvailability?.key === availabilityRequestKey ? serverAvailability.available : null;
+      return currentAvailability && Object.hasOwn(currentAvailability, availabilityKey)
+        ? currentAvailability[availabilityKey]
         : slotRequestable(s.db, date, time, options);
     }) && Array.from({ length: slotCount(day) }, (_, other) => other).filter((other) => other !== index).every((other) => times[slotKey(day, other)] !== time));
-  }, [byDay, slotCount, times, unavailableDateTimes, subjectForSlot, serverAvailability, s.db, params.program, params.gradeLevel, params.modality, params.sessionType, slotKey]);
-  useEffect(() => {
-    const staleKeys = days.flatMap((day) => Array.from({ length: slotCount(day) }, (_, index) => {
-      const key = slotKey(day, index);
-      const selectedTime = times[key];
-      return selectedTime && !availability(day, index).includes(selectedTime) ? [key] : [];
-    }));
-    if (!staleKeys.length) return;
-    setTimes((current) => {
-      const next = { ...current };
-      staleKeys.forEach((key) => delete next[key]);
-      return next;
-    });
-  }, [availability, days, slotCount, times, slotKey]);
+  }, [byDay, slotCount, times, unavailableDateTimes, subjectForSlot, serverAvailability, availabilityRequestKey, s.db, params.program, params.gradeLevel, params.modality, params.sessionType, slotKey, tuteeId]);
   const dailySubjectLimitOk = days.every((day) => {
     const counts = Array.from({ length: slotCount(day) }, (_, index) => subjectForSlot(day, index)).reduce((all, subject) => ({ ...all, [subject]: (all[subject] || 0) + 1 }), {});
     return Object.values(counts).every((count) => count <= 2);
@@ -148,6 +138,11 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
   if (noAvailabilityDays.length) bookingBlockers.push(`No times are available for ${noAvailabilityDays.map((day) => ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][day]).join(", ")} across this cycle. Change the cycle or selected weekdays.`);
   else if (hasMissingTime) bookingBlockers.push("Choose an available time for every selected session.");
   else if (hasUnavailableSelectedTime) bookingBlockers.push("A saved time is no longer available for this cycle. Select another available time.");
+  if (doneId && (isAcademic || isReading)) return <Card className="space-y-6 rounded-3xl p-6 sm:p-10">
+    <div className="space-y-2 text-center"><CheckCircle2 className="mx-auto h-14 w-14 text-green-600"/><h2 className="text-2xl font-extrabold text-slate-800">Booking request submitted!</h2><p className="mx-auto max-w-3xl text-sm font-semibold text-slate-500">{isReading ? "Your booking request has been successfully submitted and is now awaiting an initial assessment schedule from the admin." : "Your booking request has been successfully submitted and is now awaiting admin review and tutor assignment."}</p><Link href="/tutee/requests" prefetch={false} className="inline-flex items-center gap-3 pt-2 text-lg font-extrabold text-brand-600 hover:underline">Go to My Bookings <span aria-hidden="true" className="text-2xl">⟶</span></Link></div>
+    <section className="rounded-3xl border-2 border-slate-300 px-5 py-6 sm:px-8" aria-label="Booking summary"><div className="flex flex-wrap items-start justify-between gap-3"><h3 className="text-2xl font-extrabold text-slate-800">Booking Summary</h3><span className="min-w-36 rounded-xl bg-amber-100 px-4 py-3 text-center text-sm font-extrabold text-amber-700">Pending</span></div><p className="mt-5 text-2xl font-extrabold">Total Amount: <span className="text-green-600">{peso(doneSummary?.amount || 0)}</span></p><p className="mt-1 font-bold text-slate-500">{doneSummary?.sessions || 0} sessions × {peso(rate)}</p></section>
+    <p className="flex items-start gap-3 px-1 text-sm font-semibold leading-6 text-slate-500"><CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-brand-600"/>{isReading ? "Once the admin provides your initial assessment schedule, your payment details and deadline will be available in My Bookings. Please settle the payment for your requested sessions before the deadline to avoid automatic cancellation of your booking." : "Once a tutor is assigned to your requested schedule, payment details and the deadline will be available in My Bookings. Please pay for your requested sessions by the deadline to avoid automatic cancellation."}</p>
+  </Card>;
   if (doneId) return <Card className="text-center"><CheckCircle2 className="mx-auto h-12 w-12 text-mint-500"/><h2 className="mt-2 text-xl font-extrabold">Booking request submitted!</h2><div className="mt-4 flex justify-center gap-2"><a href="/tutee/requests" className="inline-flex items-center justify-center rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700">My Bookings</a><Link href="/tutee" prefetch={false} className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50">Back to overview</Link></div></Card>;
   const submit = async () => {
     if (submitting) return;
@@ -175,6 +170,7 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
         setErr(r.error);
         return;
       }
+      setDoneSummary({ sessions: sessionSlots.length, amount: rate * sessionSlots.length });
       setDoneId(r.bookingId);
     } catch (error) {
       setErr(error?.message || "Could not submit booking request.");

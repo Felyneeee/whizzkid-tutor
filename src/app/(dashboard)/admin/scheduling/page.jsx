@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { SlidersHorizontal, ChevronDown, ChevronUp } from "lucide-react";
 import { Calendar } from "@/components/Calendar";
 import { Alert, Badge, Button, Card, Empty, PageHeader, Select } from "@/components/ui";
@@ -34,12 +34,12 @@ export default function Scheduling() {
   const [rescheduleError, setRescheduleError] = useState("");
   const selectDate = (date) => { setSelectedDate(date); setCalendarMonth(date.slice(0, 7)); };
 
-  const tn = (id) => db.tutors.find((t) => t.userId === id)?.fullName || "—";
-  const un = (id) => db.tutees.find((t) => t.userId === id)?.fullName || "—";
-  const bookings = db.bookings || [];
-  const activeSessions = (db.sessions || []).filter((x) => x.status !== "cancelled");
-  const activeAssessments = (db.assessments || []).filter((x) => x.date && ["booked", "completed"].includes(x.status));
-  const activePlaygroups = bookings.filter((b) => b.program === "playgroup" && ["pending", "approved", "confirmed", "awaiting_admin", "to_pay", "awaiting_payment_approval"].includes(b.status));
+  const tn = useCallback((id) => db.tutors.find((t) => t.userId === id)?.fullName || "—", [db.tutors]);
+  const un = useCallback((id) => db.tutees.find((t) => t.userId === id)?.fullName || "—", [db.tutees]);
+  const bookings = useMemo(() => db.bookings || [], [db.bookings]);
+  const activeSessions = useMemo(() => (db.sessions || []).filter((x) => x.status !== "cancelled"), [db.sessions]);
+  const activeAssessments = useMemo(() => (db.assessments || []).filter((x) => x.date && ["booked", "completed"].includes(x.status)), [db.assessments]);
+  const activePlaygroups = useMemo(() => bookings.filter((b) => b.program === "playgroup" && ["pending", "approved", "confirmed", "awaiting_admin", "to_pay", "awaiting_payment_approval"].includes(b.status)), [bookings]);
   const flagged = activeSessions.filter((x) => x.status === "needs_reassignment");
 
   const entries = useMemo(() => {
@@ -94,7 +94,7 @@ export default function Scheduling() {
       }
     }
     return result;
-  }, [db, calendarMonth, selectedDate]);
+  }, [db, calendarMonth, selectedDate, bookings, activeSessions, activeAssessments, activePlaygroups, tn, un]);
 
   const optionValues = (key) => {
     const values = entries.flatMap((item) => key === "bookingState" ? [item.state] : key === "program" && item.programNames ? item.programNames : key === "sessionType" ? [item.sessionType === "group" ? "Group Session" : item.sessionType ? "One-on-One" : ""] : key === "modality" ? [label(item.modality)] : [label(item[key])]).filter(Boolean);

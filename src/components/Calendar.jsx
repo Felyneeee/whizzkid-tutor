@@ -1,6 +1,6 @@
 "use client";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { DAY_NAMES, MONTH_NAMES, pad, parseISO, todayISO, toISO } from "@/lib/dates";
 import { cn } from "./ui";
 const tone = {
@@ -12,13 +12,10 @@ const tone = {
 };
 export function Calendar({ selected = [], onSelect, onMonthChange, isDisabled, mark, initialMonth, highlight, allowPast = false, readOnly = false }) {
     const start = initialMonth ? parseISO(initialMonth) : new Date();
-    const [cursor, setCursor] = useState({ y: start.getFullYear(), m: start.getMonth() });
-    useEffect(() => {
-        if (!initialMonth)
-            return;
-        const d = parseISO(initialMonth);
-        setCursor({ y: d.getFullYear(), m: d.getMonth() });
-    }, [initialMonth]);
+    const [manualCursor, setManualCursor] = useState(null);
+    const cursor = manualCursor?.initialMonth === initialMonth
+        ? manualCursor.cursor
+        : { y: start.getFullYear(), m: start.getMonth() };
     const first = new Date(cursor.y, cursor.m, 1);
     const lead = first.getDay();
     const days = new Date(cursor.y, cursor.m + 1, 0).getDate();
@@ -28,7 +25,7 @@ export function Calendar({ selected = [], onSelect, onMonthChange, isDisabled, m
     const today = todayISO();
     const go = (n) => {
         const d = new Date(cursor.y, cursor.m + n, 1);
-        setCursor({ y: d.getFullYear(), m: d.getMonth() });
+        setManualCursor({ initialMonth, cursor: { y: d.getFullYear(), m: d.getMonth() } });
         onMonthChange?.(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`);
     };
     return (<div className="w-full rounded-2xl border border-slate-100 bg-white p-3">

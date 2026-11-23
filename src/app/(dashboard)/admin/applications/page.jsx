@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Alert, Badge, Button, Card, Empty, Field, Input, Modal, PageHeader, Select, Tabs, Textarea } from "@/components/ui";
 import { SlidersHorizontal } from "lucide-react";
 import { fmtDate, fmtDateTime } from "@/lib/dates";
@@ -30,7 +30,7 @@ export default function Applications({ embedded = false } = {}) {
     const tutors = s.db.tutors;
     const newApps = tutors.filter((t) => t.applicantType === "new" && ["pending_review", "interview"].includes(t.status));
     const existing = tutors.filter((t) => t.status === "pending_verification");
-    const email = (id) => s.db.users.find((u) => u.id === id)?.email;
+    const email = useCallback((id) => s.db.users.find((u) => u.id === id)?.email, [s.db.users]);
     const tabList = tab === "new" ? newApps : tab === "existing" ? existing : tutors;
     const list = useMemo(() => tabList.filter((t) => {
       const query = search.trim().toLowerCase();
@@ -48,7 +48,7 @@ export default function Applications({ embedded = false } = {}) {
       if (sort === "verified_newest") return new Date(b.verifiedAt ?? 0) - new Date(a.verifiedAt ?? 0);
       if (sort === "verified_oldest") return new Date(a.verifiedAt ?? 0) - new Date(b.verifiedAt ?? 0);
       return a.fullName.localeCompare(b.fullName);
-    }), [tabList, search, filters, sort]);
+    }), [tabList, search, filters, sort, email]);
     const availableSubjects = [...SUBJECTS, "Reading"];
     const activeFilterCount = filters.subjects.length + filters.grades.length + filters.statuses.length;
     const draftFilterCount = draftSubjects.length + draftGrades.length + draftStatuses.length;

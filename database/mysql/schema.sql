@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS assessments (
   id VARCHAR(64) PRIMARY KEY, tutee_id VARCHAR(64) NOT NULL, modality ENUM('online','face-to-face') NOT NULL,
   assessment_date DATE NULL, assessment_time VARCHAR(5) NULL,
   status ENUM('pending_admin_scheduling','booked','completed','cancelled') NOT NULL,
-  results TEXT NULL, learning_needs TEXT NULL, reading_level VARCHAR(100) NULL,
+  results TEXT NULL, learning_needs TEXT NULL, reading_level VARCHAR(100) NULL, completed_at DATETIME NULL,
   FOREIGN KEY (tutee_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 

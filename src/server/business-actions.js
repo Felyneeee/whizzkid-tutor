@@ -1,6 +1,6 @@
 import "server-only";
 import { ADMIN_ID } from "@/lib/seed";
-import { ageFromBirthday, firstName, nowISO, todayISO, uid, fmtDate, fmtTime, addDays, rangeDates, weekday } from "@/lib/dates";
+import { ageFromBirthday, firstName, nowISO, todayISO, uid, fmtDate, fmtTime, addDays, rangeDates, weekday, isAssessmentOutdated } from "@/lib/dates";
 import { cohortSessionDates, computeRate, matchTutors, onApprovedLeave, tutorBusy, tutorFreeOn, tutorQualifies, approvedSlot, tutorWorksPlaygroupDate, slotOccupied, slotRequestable } from "@/lib/logic";
 import { HOURS, PLAYGROUP_SESSION_RATE, SUBJECTS } from "@/lib/constants";
 
@@ -91,8 +91,9 @@ export function createBusinessActions({ get, mutate, actorId }) {
   // ---------- Tutee flows ----------
   requestAssessment(tuteeId, modality, learningNeeds = "") {
       const d = get();
-      if (d.assessments.some((a) => a.tuteeId === tuteeId))
-          return { ok: false, error: "An initial reading assessment can only be requested once. Your existing request or assessment is already on record." };
+      const latest = [...d.assessments].reverse().find((a) => a.tuteeId === tuteeId);
+      if (latest && (["pending_admin_scheduling", "booked"].includes(latest.status) || latest.status === "completed" && !isAssessmentOutdated(latest)))
+          return { ok: false, error: "An initial reading assessment is already pending or still valid for this month." };
       const id = uid("as");
       mutate((n) => {
           n.assessments.push({ id, tuteeId, modality, learningNeeds: String(learningNeeds).slice(0, 2000), status: "pending_admin_scheduling", program: "reading" });
@@ -101,6 +102,25 @@ export function createBusinessActions({ get, mutate, actorId }) {
           logAct(n, tuteeId, "booking", "Requested a Reading Program initial assessment");
       });
       return { ok: true, id };
+  },
+  renewReadingAssessment(bookingId) {
+      const d = get();
+      const booking = d.bookings.find((entry) => entry.id === bookingId && entry.program === "reading");
+      const current = booking && d.assessments.find((entry) => entry.id === booking.assessmentId && entry.tuteeId === booking.tuteeId);
+      if (!booking || !current || !isAssessmentOutdated(current)) return { ok: false, error: "This Reading assessment is not outdated." };
+      if (!["pending_assessment", "assessment_scheduled", "ready_for_matching", "to_pay", "awaiting_payment_approval", "confirmed"].includes(booking.status)) return { ok: false, error: "Only an active Reading booking can request a new assessment." };
+      if (d.assessments.some((entry) => entry.tuteeId === booking.tuteeId && ["pending_admin_scheduling", "booked"].includes(entry.status))) return { ok: false, error: "An initial assessment is already waiting or scheduled." };
+      if (d.sessions.some((session) => session.bookingId === booking.id && session.status !== "cancelled" && session.tutorId)) return { ok: false, error: "This booking already has a tutor assignment. Create a new Reading booking for a fresh assessment." };
+      const assessmentId = uid("as");
+      mutate((n) => {
+          const target = n.bookings.find((entry) => entry.id === bookingId);
+          const nextAssessment = { id: assessmentId, tuteeId: target.tuteeId, modality: target.modality, learningNeeds: target.learningNeeds || "", status: "pending_admin_scheduling", program: "reading", bookingId: target.id, createdAt: nowISO() };
+          n.assessments.push(nextAssessment);
+          target.assessmentId = assessmentId;
+          pushNotif(n, target.tuteeId, "Your previous Reading assessment is over one month old. The admin will schedule a new initial assessment.", ["web", "email"]);
+          pushAdmins(n, `A new initial Reading assessment is needed for ${nameOf(n, target.tuteeId)}.`);
+      });
+      return { ok: true, assessmentId };
   },
   scheduleAssessment(id, date, time) {
       const validDate = typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T00:00:00Z`)) && new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date && date >= todayISO();
@@ -116,7 +136,13 @@ export function createBusinessActions({ get, mutate, actorId }) {
           const a = n.assessments.find((x) => x.id === id && x.status === "pending_admin_scheduling");
           if (!a) return;
           a.date = date; a.time = time; a.status = "booked";
-          n.bookings.filter((booking) => booking.program === "reading" && booking.assessmentId === a.id && booking.status === "pending_assessment").forEach((booking) => { booking.status = "assessment_scheduled"; });
+          n.bookings.filter((booking) => booking.program === "reading" && booking.assessmentId === a.id && ["pending_assessment", "assessment_scheduled"].includes(booking.status)).forEach((booking) => {
+              booking.status = "to_pay";
+              booking.paymentStatus = "to_pay";
+              booking.paymentDeadlineAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+              booking.expiresAt = booking.paymentDeadlineAt;
+              booking.paymentAmount = booking.totalFee;
+          });
           n.assessments.filter((x) => x.tuteeId === a.tuteeId && x.id !== a.id && x.status === "pending_admin_scheduling").forEach((x) => { x.status = "cancelled"; });
           logAct(n, actingAdminIdOf(n), "booking", `Scheduled an initial reading assessment for ${nameOf(n, a.tuteeId)}`);
           pushNotif(n, a.tuteeId, `Your initial assessment is scheduled for ${fmtDate(date)} at ${fmtTime(time)}.`, ["web", "email", "sms"]);
@@ -136,13 +162,14 @@ export function createBusinessActions({ get, mutate, actorId }) {
           const a = n.assessments.find((x) => x.id === id && x.status === "booked");
           if (!a) return;
           a.status = "completed";
+          a.completedAt = nowISO();
           a.results = results;
           a.learningNeeds = learningNeeds;
           a.readingLevel = readingLevel;
-          let waitingBookings = n.bookings.filter((booking) => booking.program === "reading" && booking.assessmentId === a.id && ["pending_assessment", "assessment_scheduled"].includes(booking.status));
+          let waitingBookings = n.bookings.filter((booking) => booking.program === "reading" && booking.assessmentId === a.id && ["pending_assessment", "assessment_scheduled", "to_pay", "awaiting_payment_approval", "confirmed"].includes(booking.status));
           if (!waitingBookings.length && !a.bookingId) {
               const legacyRequests = n.bookings.filter((booking) => {
-                  if (booking.program !== "reading" || booking.tuteeId !== a.tuteeId || !["pending_assessment", "assessment_scheduled"].includes(booking.status)) return false;
+                  if (booking.program !== "reading" || booking.tuteeId !== a.tuteeId || !["pending_assessment", "assessment_scheduled", "to_pay", "awaiting_payment_approval", "confirmed"].includes(booking.status)) return false;
                   const linkedAssessment = n.assessments.find((entry) => entry.id === booking.assessmentId);
                   return !linkedAssessment?.bookingId;
               });
@@ -314,7 +341,8 @@ export function createBusinessActions({ get, mutate, actorId }) {
           if (v.program === "reading") {
               assessment = [...n.assessments].reverse().find((entry) => entry.tuteeId === v.tuteeId && entry.id === v.assessmentId && ["pending_admin_scheduling", "booked", "completed"].includes(entry.status))
                   || [...n.assessments].reverse().find((entry) => entry.tuteeId === v.tuteeId && ["pending_admin_scheduling", "booked"].includes(entry.status));
-              if (!assessment && !v.assessmentId) assessment = [...n.assessments].reverse().find((entry) => entry.tuteeId === v.tuteeId && entry.status === "completed");
+              if (!assessment && !v.assessmentId) assessment = [...n.assessments].reverse().find((entry) => entry.tuteeId === v.tuteeId && entry.status === "completed" && !isAssessmentOutdated(entry));
+              if (assessment?.status === "completed" && isAssessmentOutdated(assessment)) assessment = undefined;
               if (!assessment) {
                   assessmentId = uid("as");
                   assessment = { id: assessmentId, tuteeId: v.tuteeId, modality: v.modality, learningNeeds: String(v.learningNeeds || "").slice(0, 2000), status: "pending_admin_scheduling", program: "reading" };
@@ -723,8 +751,8 @@ export function createBusinessActions({ get, mutate, actorId }) {
       if (!Array.isArray(bookingIds) || !bookingIds.length) return { ok: false, error: "Choose a Reading Program assignment." };
       const bookings = bookingIds.map((id) => d.bookings.find((entry) => entry.id === id));
       const first = bookings[0];
-      if (!first || first.program !== "reading" || bookings.some((booking) => !booking || booking.program !== "reading" || booking.status !== "ready_for_matching" || booking.tuteeId !== first.tuteeId || booking.assessmentId !== first.assessmentId || booking.scheduleProposal)) return { ok: false, error: "This Reading Program assignment is no longer ready for matching." };
-      if (!d.assessments.some((entry) => entry.id === first.assessmentId && entry.tuteeId === first.tuteeId && entry.status === "completed")) return { ok: false, error: "Complete the linked initial assessment before confirming a tutor." };
+      if (!first || first.program !== "reading" || bookings.some((booking) => !booking || booking.program !== "reading" || !["ready_for_matching", "to_pay", "awaiting_payment_approval", "confirmed"].includes(booking.status) || booking.tuteeId !== first.tuteeId || booking.assessmentId !== first.assessmentId || booking.scheduleProposal)) return { ok: false, error: "This Reading Program assignment is no longer ready for matching." };
+      if (!d.assessments.some((entry) => entry.id === first.assessmentId && entry.tuteeId === first.tuteeId && entry.status === "completed" && !isAssessmentOutdated(entry))) return { ok: false, error: "Complete a current initial assessment before confirming a tutor." };
       const tutor = d.tutors.find((entry) => entry.userId === tutorId);
       const slotMap = new Map();
       for (const booking of bookings) {
@@ -760,7 +788,7 @@ export function createBusinessActions({ get, mutate, actorId }) {
       if (!Array.isArray(bookingIds) || !bookingIds.length) return { ok: false, error: "Choose a Reading Program assignment." };
       const bookings = get().bookings.filter((entry) => bookingIds.includes(entry.id));
       const first = bookings[0];
-      if (!first || bookings.length !== bookingIds.length || bookings.some((booking) => booking.program !== "reading" || booking.status !== "ready_for_matching" || booking.tuteeId !== first.tuteeId || booking.assessmentId !== first.assessmentId)) return { ok: false, error: "This Reading Program assignment is no longer awaiting review." };
+      if (!first || bookings.length !== bookingIds.length || bookings.some((booking) => booking.program !== "reading" || !["ready_for_matching", "to_pay", "awaiting_payment_approval", "confirmed"].includes(booking.status) || booking.tuteeId !== first.tuteeId || booking.assessmentId !== first.assessmentId)) return { ok: false, error: "This Reading Program assignment is no longer awaiting review." };
       mutate((n) => {
           bookings.forEach((booking) => {
               const target = n.bookings.find((entry) => entry.id === booking.id);
@@ -840,7 +868,7 @@ export function createBusinessActions({ get, mutate, actorId }) {
   },
   cancelTutorialBooking(bookingId) {
       const booking = get().bookings.find((entry) => entry.id === bookingId);
-      if (!booking || !["pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin"].includes(booking.status)) return { ok: false, error: "Only pending requests can be cancelled." };
+      if (!booking || !["pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "to_pay"].includes(booking.status) || booking.paymentStatus === "paid") return { ok: false, error: "Only unpaid pending requests can be cancelled." };
       mutate((n) => {
           const target = n.bookings.find((entry) => entry.id === bookingId);
           target.status = "cancelled";

@@ -61,7 +61,7 @@ export default function Classes({ embedded = false } = {}) {
       };
     }, [s.db.bookings]);
     const nm = (id) => s.db.tutees.find((t) => t.userId === id)?.fullName || id;
-    const tutors = s.db.tutors.filter((t) => t.status === "active");
+    const tutors = useMemo(() => s.db.tutors.filter((t) => t.status === "active"), [s.db.tutors]);
     const assignedPlaygroupTutorIds = new Set((s.db.cohorts || []).flatMap((cohort) => [
       ...Object.values(cohort.weekdayTutorIds || {}),
       ...Object.values(cohort.dateTutorOverrides || {}),
@@ -83,7 +83,7 @@ export default function Classes({ embedded = false } = {}) {
         });
       });
       return [...rows.values()].map(({ tutor, counts }) => ({ tutor, counts, total: counts[1] + counts[3] + counts[5] }));
-    }, [s.db.cohorts, s.db.tutors, s.db.bookings]);
+    }, [s.db.cohorts, tutors, s.db.bookings]);
     const earliestStartWeek = nextAvailableStartWeek(s.db.cohorts, today);
     const draftDates = c.startDate && weekday(c.startDate) === 1
       ? cohortSessionDates({ ...c, weekdays: COHORT_WEEKDAYS, sessionsCount: 12 }).slice().sort()
@@ -197,7 +197,7 @@ export default function Classes({ embedded = false } = {}) {
           const belongsToCohort = (booking) => booking.cohortId === cohort.id
             || (cohort.enrolled || []).includes(booking.tuteeId)
             || (!booking.cohortId && Array.isArray(booking.dates) && booking.dates.length > 0 && booking.dates.every((date) => cohortDateSet.has(date)));
-          const enrolledBookings = s.db.bookings.filter((booking) => String(booking.program || "").toLowerCase() === "playgroup" && belongsToCohort(booking) && ["approved", "confirmed", "completed"].includes(bookingStatusOf(booking)));
+          const enrolledBookings = s.db.bookings.filter((booking) => String(booking.program || "").toLowerCase() === "playgroup" && belongsToCohort(booking) && ["approved", "to_pay", "awaiting_payment_approval", "confirmed", "completed"].includes(bookingStatusOf(booking)));
           const startDate = dates[0];
           const endDate = dates[dates.length - 1];
           const canChangeTutors = dates.some((date) => date >= today);
@@ -251,6 +251,16 @@ export default function Classes({ embedded = false } = {}) {
                   </div>;
                 })}
               </div>
+            </section>
+
+            <section className="space-y-2 rounded-2xl bg-neutral-100 p-4 sm:p-6" aria-label={`Enrolled students in ${cohort.label}`}>
+              <h3 className="text-sm font-extrabold text-slate-800">Enrolled Students ({enrolledBookings.length}/{cohort.capacity || 6}):</h3>
+              {enrolledBookings.length ? <ul className="space-y-1 text-sm font-semibold text-slate-700">
+                {enrolledBookings.map((booking) => {
+                  const student = s.db.tutees.find((tutee) => tutee.userId === booking.tuteeId);
+                  return <li key={booking.id}>{student?.fullName || booking.tuteeId}{student?.age != null ? ` · ${student.age} y/o` : ""}</li>;
+                })}
+              </ul> : <p className="text-sm text-slate-500">No students enrolled yet. Approved bookings will appear here.</p>}
             </section>
           </Card>;
         })}
