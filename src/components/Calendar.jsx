@@ -13,7 +13,7 @@ const tone = {
 export function Calendar({ selected = [], onSelect, onMonthChange, isDisabled, mark, initialMonth, highlight, allowPast = false, readOnly = false }) {
     const start = initialMonth ? parseISO(initialMonth) : new Date();
     const [manualCursor, setManualCursor] = useState(null);
-    const cursor = manualCursor?.initialMonth === initialMonth
+    const cursor = manualCursor && manualCursor.initialMonth === initialMonth
         ? manualCursor.cursor
         : { y: start.getFullYear(), m: start.getMonth() };
     const first = new Date(cursor.y, cursor.m, 1);
