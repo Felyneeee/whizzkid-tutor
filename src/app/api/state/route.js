@@ -18,13 +18,6 @@ function unpackPaymentMetadata(state) {
     if (!booking.status && booking.paymentStatus === "proof_rejected") booking.status = "to_pay";
     if (booking.expiresAt && booking.paymentStatus && !booking.paymentDeadlineAt) booking.paymentDeadlineAt = booking.expiresAt;
   }
-  for (const purchase of state.purchases || []) {
-    const index = (purchase.items || []).findIndex((item) => item?.__paymentMeta);
-    if (index >= 0) {
-      const [marker] = purchase.items.splice(index, 1);
-      Object.assign(purchase, marker.__paymentMeta);
-    }
-  }
   return state;
 }
 

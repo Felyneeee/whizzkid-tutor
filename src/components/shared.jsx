@@ -1,8 +1,10 @@
 "use client";
-import { Cake, Mail, MessageSquare, Smartphone, Send } from "lucide-react";
+import { Activity, BookOpen, Cake, CalendarDays, CreditCard, FileText, LogIn, MessageCircle, Send, Star, UserRoundCheck } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { firstName, fmtDateTime } from "@/lib/dates";
 import { useStore } from "@/lib/store";
+import Link from "next/link";
+import { NotificationIcon, notificationDestination, notificationDisplayText } from "./notifications";
 import { Badge, Button, Card, Empty, Input, PageHeader, cn } from "./ui";
 function hideOtherPartyFullNames(text, userId, db) {
     const role = db.users.find((user) => user.id === userId)?.role;
@@ -19,6 +21,7 @@ function hideOtherPartyFullNames(text, userId, db) {
 export function NotificationsView({ userId }) {
     const s = useStore();
     const list = s.db.notifications.filter((n) => n.userId === userId);
+    const role = s.db.users.find((user) => user.id === userId)?.role;
     useEffect(() => {
         if (list.some((n) => !n.read)) {
             const t = setTimeout(() => s.markNotificationsRead(userId), 1200);
@@ -29,17 +32,15 @@ export function NotificationsView({ userId }) {
     return (<>
       <PageHeader title="Notifications" subtitle="In-app notifications. Email and SMS channel labels are planned delivery metadata; external messages are not sent."/>
       {list.length === 0 ? (<Empty>You&apos;re all caught up.</Empty>) : (<div className="space-y-2">
-          {list.map((n) => (<Card key={n.id} className={cn("flex items-start gap-3 !p-4", !n.read && "border-brand-200 bg-brand-50/40")}>
+          {list.map((n) => (<Link key={n.id} href={notificationDestination(n, role)} className={cn("block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500", !n.read && "") }>
+            <Card className={cn("flex items-start gap-3 !p-4 transition hover:border-brand-200 hover:bg-brand-50/30", !n.read && "border-brand-200 bg-brand-50/40")}>
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-100 text-brand-600"><NotificationIcon notification={n} className="h-4 w-4"/></div>
               <div className="flex-1">
-                <p className="flex items-start gap-2 text-sm">{/^\s*(?:\u{1F382}\s*)?Happy Birthday\b/iu.test(n.text) && <Cake className="mt-0.5 h-4 w-4 shrink-0 text-sunny-600" aria-hidden="true"/>}<span>{hideOtherPartyFullNames(n.text.replace(/^\s*\u{1F382}\s*/u, ""), userId, s.db)}</span></p>
+                <p className="flex items-start gap-2 text-sm">{/^\s*(?:\u{1F382}\s*)?Happy Birthday\b/iu.test(n.text) && <Cake className="mt-0.5 h-4 w-4 shrink-0 text-sunny-600" aria-hidden="true"/>}<span>{notificationDisplayText(n, s.db).replace(/^\s*\u{1F382}\s*/u, "")}</span></p>
                 <p className="mt-1 text-xs text-slate-400">{fmtDateTime(n.at)}</p>
               </div>
-              <div className="flex gap-1 text-slate-400" title="Delivered via">
-                {n.channels.includes("web") && <MessageSquare className="h-4 w-4" aria-label="Web"/>}
-                {n.channels.includes("email") && <Mail className="h-4 w-4" aria-label="Email (mock)"/>}
-                {n.channels.includes("sms") && <Smartphone className="h-4 w-4" aria-label="SMS (mock)"/>}
-              </div>
-            </Card>))}
+            </Card>
+          </Link>))}
         </div>)}
     </>);
 }
@@ -124,25 +125,30 @@ export function ChatView({ meId, isAdmin }) {
     </>);
 }
 const HISTORY_ACTION_GROUPS = [
-    { role: "admin", label: "Admin Actions", actions: [["payments", "Payments"], ["schedule", "Schedule"], ["chats", "Chats"], ["matches", "Matches"], ["records", "Records"], ["applications", "Applications"], ["logins", "Logins"]] },
-    { role: "tutee", label: "Tutee Actions", actions: [["schedule", "Schedule"], ["payments", "Payments"], ["chats", "Chats"], ["logins", "Logins"]] },
-    { role: "tutor", label: "Tutor Actions", actions: [["leave", "Leave Requests"], ["schedule", "Schedule"], ["chats", "Chats"], ["logins", "Logins"], ["matches", "Matches"], ["records", "Records"]] },
+    { role: "admin", label: "Admin Actions", actions: [["payments", "Payments"], ["schedule", "Program Schedule"], ["tutor_schedule", "Tutor Schedule"], ["chats", "Chats"], ["matches", "Matches"], ["records", "Records"], ["applications", "Applications"], ["leave", "Leave Requests"], ["logins", "Logins"]] },
+    { role: "tutee", label: "Tutee Actions", actions: [["schedule", "Schedule"], ["payments", "Payments"], ["chats", "Chats"], ["records", "Ratings & Records"], ["logins", "Logins"]] },
+    { role: "tutor", label: "Tutor Actions", actions: [["leave", "Leave Requests"], ["chats", "Chats"], ["logins", "Logins"], ["matches", "Matches"], ["records", "Records"]] },
     { role: "applicant", label: "Applicant Actions", actions: [["applications", "Applications"], ["chats", "Chats"], ["logins", "Logins"]] },
 ];
 function historyAction(activity) {
     const kind = typeof activity.kind === "string" ? activity.kind : "";
     const text = String(activity.text ?? "").toLowerCase();
+    if (/purchase|order/.test(text)) return "retired_purchase";
+    if (/tutor pay|payroll|salary|hourly rate/.test(text)) return "retired_payroll";
+    if (/availability|weekly tutor schedule/.test(text)) return "tutor_schedule";
+    if (/payment|paid/.test(text)) return "payments";
+    if (/leave request|leave submitted/.test(text)) return "leave";
+    if (/message|chat/.test(text)) return "chats";
+    if (/log(?:ged)? in|login/.test(text)) return "logins";
+    if (/application|applicant|interview|registration|verification/.test(text)) return "applications";
     if (kind === "termination") return "termination";
     if (kind === "booking") return "schedule";
-    if (kind === "availability") return "schedule";
+    if (kind === "availability") return "tutor_schedule";
     if (kind === "match") return "matches";
     if (["upload", "attendance", "rating"].includes(kind)) return "records";
     if (kind === "other") {
-        if (/payment|paid|purchase|order/.test(text)) return "payments";
-        if (/leave request|leave submitted/.test(text)) return "leave";
-        if (/message|chat/.test(text)) return "chats";
-        if (/log(?:ged)? in|login/.test(text)) return "logins";
-        if (/application|applicant|interview/.test(text)) return "applications";
+        if (/assessment|record/.test(text)) return "records";
+        if (/schedule|reschedul/.test(text)) return "schedule";
     }
     return "other";
 }
@@ -153,6 +159,18 @@ const HISTORY_ROLES = [
     { id: "admin", label: "Admins" },
     { id: "applicant", label: "Applicants" },
 ];
+function historyIcon(action) {
+    const classes = "mt-0.5 h-4 w-4 shrink-0 text-brand-600";
+    if (action === "logins") return <LogIn className={classes} aria-hidden="true"/>;
+    if (["schedule", "tutor_schedule", "leave"].includes(action)) return <CalendarDays className={classes} aria-hidden="true"/>;
+    if (action === "payments") return <CreditCard className={classes} aria-hidden="true"/>;
+    if (action === "chats") return <MessageCircle className={classes} aria-hidden="true"/>;
+    if (action === "matches") return <UserRoundCheck className={classes} aria-hidden="true"/>;
+    if (action === "applications") return <FileText className={classes} aria-hidden="true"/>;
+    if (action === "records") return <Star className={classes} aria-hidden="true"/>;
+    if (action === "bookings") return <BookOpen className={classes} aria-hidden="true"/>;
+    return <Activity className={classes} aria-hidden="true"/>;
+}
 export function HistoryView({ userId, isAdmin }) {
     const s = useStore();
     const [role, setRole] = useState("all");
@@ -161,13 +179,14 @@ export function HistoryView({ userId, isAdmin }) {
     const roleForUser = (id, activity) => {
         const user = s.db.users.find((entry) => entry.id === id);
         const tutor = s.db.tutors.find((entry) => entry.userId === id);
-        if (historyAction(activity ?? {}) === "applications" || ["pending_review", "interview", "pending_verification"].includes(tutor?.status)) return "applicant";
+        if (user?.role === "admin") return "admin";
+        if (user?.role === "tutor" && (historyAction(activity ?? {}) === "applications" || ["pending_review", "interview", "pending_verification"].includes(tutor?.status))) return "applicant";
         return user?.role ?? "unknown";
     };
     let list = isAdmin ? s.db.activities : s.db.activities.filter((a) => a.userId === userId);
     if (isAdmin && role !== "all") list = list.filter((a) => roleForUser(a.userId, a) === role);
     // Termination is a retired event and should not appear in the admin history.
-    list = list.filter((activity) => historyAction(activity) !== "termination");
+    list = list.filter((activity) => !["termination", "retired_purchase", "retired_payroll"].includes(historyAction(activity)));
     const selectedGroup = HISTORY_ACTION_GROUPS.find((group) => group.role === role);
     list = [...list].sort((a, b) => sortOrder === "newest"
         ? new Date(b.at).getTime() - new Date(a.at).getTime()
@@ -191,11 +210,29 @@ export function HistoryView({ userId, isAdmin }) {
         </select>
       </Card>}
       {visibleList.length === 0 ? (<Empty>No activity yet.</Empty>) : (<ol className="space-y-2">
-          {visibleList.map((a) => { const action = historyAction(a); const label = action === "other" ? "Activity" : action.replace(/^./, (letter) => letter.toUpperCase()); return (<Card key={a.id} className="flex items-center gap-3 !p-3">
-              <Badge status={action === "rating" ? "approved" : "booked"}>{label}</Badge>
-              <span className="flex-1 text-sm">{isAdmin ? a.text : hideOtherPartyFullNames(a.text, userId, s.db)}</span>
-              <span className="text-xs text-slate-400">{fmtDateTime(a.at)}</span>
-            </Card>); })}
+          {visibleList.map((a) => {
+              const actor = s.db.users.find((entry) => entry.id === a.userId);
+              const actorRole = roleForUser(a.userId, a);
+              const tutor = s.db.tutors.find((entry) => entry.userId === a.userId);
+              const tutee = s.db.tutees.find((entry) => entry.userId === a.userId);
+              const actorName = tutor?.fullName || tutee?.fullName || (actorRole === "admin" ? "System Admin" : actor?.username || "Unknown User");
+              const photo = tutor?.photo || tutee?.photo || "";
+              const initials = actorName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+              const action = historyAction(a);
+              return (<Card key={a.id} className="grid grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-3 !p-3">
+                <div className="relative grid h-11 w-11 place-items-center overflow-hidden rounded-full border border-slate-200 bg-slate-50 text-xs font-extrabold text-brand-700" aria-hidden="true">
+                  {initials}{photo && <img src={photo} alt="" className="absolute inset-0 h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />}
+                </div>
+                <div className="min-w-0">
+                  <p className="flex flex-wrap items-center gap-2 text-sm font-extrabold text-slate-800">
+                    <span>{actorName}</span>
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-slate-600">{actorRole}</span>
+                  </p>
+                  <p className="mt-1 flex items-start gap-2 text-sm text-slate-700">{historyIcon(action)}<span>{isAdmin ? a.text : hideOtherPartyFullNames(a.text, userId, s.db)}</span></p>
+                </div>
+                <span className="whitespace-nowrap text-right text-xs text-slate-500">{fmtDateTime(a.at)}</span>
+              </Card>);
+          })}
         </ol>)}
     </>);
 }

@@ -55,11 +55,16 @@ export async function POST(request) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [id, applicantType, applicantType === "new" ? "pending_review" : "pending_verification",
             fullName, photo, age, contact, resumeName, resumeData, bio,
             JSON.stringify(subjects), JSON.stringify(gradeBands), birthday]);
+        const createdAtText = createdAt.toISOString().slice(0, 19).replace("T", " ");
+        const [admins] = await connection.query("SELECT id FROM users WHERE role = 'admin'");
+        const applicantEvent = applicantType === "new" ? "Submitted a tutor application" : "Submitted a tutor verification request";
+        await connection.execute(
+            "INSERT INTO activities (id, user_id, kind, activity_text, created_at) VALUES (?, ?, 'other', ?, ?)",
+            [randomUUID(), id, applicantEvent, createdAtText],
+        );
         const [appStateRows] = await connection.query("SELECT id FROM application_state WHERE id = 1 FOR UPDATE");
         if (appStateRows.length) {
-            const createdAtText = createdAt.toISOString().slice(0, 19).replace("T", " ");
             const adminText = `${applicantType === "new" ? "New tutor application" : "Existing tutor registration"} from ${fullName}`;
-            const [admins] = await connection.query("SELECT id FROM users WHERE role = 'admin'");
             const notificationRows = admins.map((admin) => [
                 randomUUID(), admin.id, adminText, createdAtText, JSON.stringify(["web"]),
             ]);

@@ -1,5 +1,5 @@
 "use client";
-import { Bell, CalendarCheck, CalendarDays, CalendarOff, FileLock2, History, Home, MessageCircle, UserRound, Users } from "lucide-react";
+import { CalendarDays, CalendarOff, FileLock2, History, Home, MessageCircle, UserRound, Users } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { DashboardShell } from "@/components/Shell";
 import { Alert, Badge, Card } from "@/components/ui";
@@ -11,7 +11,6 @@ export default function TutorLayout({ children }) {
     const path = usePathname();
     const id = s.me?.id;
     const t = s.db.tutors?.find((x) => x.userId === id);
-    const unread = s.db.notifications?.filter((n) => n.userId === id && !n.read).length ?? 0;
     const unreadMessages = s.db.notifications?.filter((n) => n.userId === id && !n.read && n.text.startsWith("New message")).length ?? 0;
     const active = t?.status === "active";
     const gated = !active && !OPEN.some((p) => path.startsWith(p));
@@ -23,13 +22,11 @@ export default function TutorLayout({ children }) {
         { href: "/tutor/materials", label: "Learning Materials", icon: <FileLock2 /> },
         { href: "/tutor/chat", label: "Chat with Admin", icon: <MessageCircle />, badge: unreadMessages },
         { href: "/tutor/history", label: "Activity History", icon: <History /> },
-        { href: "/tutor/notifications", label: "Notifications", icon: <Bell />, badge: unread },
         { href: "/tutor/profile", label: "My Profile", icon: <UserRound /> },
     ];
     const limited = [
         { href: "/tutor", label: "Dashboard", icon: <Home /> },
         { href: "/tutor/chat", label: "Chat with Admin", icon: <MessageCircle />, badge: unreadMessages },
-        { href: "/tutor/notifications", label: "Notifications", icon: <Bell />, badge: unread },
         { href: "/tutor/profile", label: "My Profile", icon: <UserRound /> },
     ];
     const gate = t ? (<div className="mx-auto max-w-xl space-y-4">

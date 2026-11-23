@@ -223,27 +223,16 @@ const tables = [
     }),
   },
   {
-    stateKey: "purchases", table: "purchases", primaryKey: "id", orderBy: "purchased_at DESC",
-    toRow: (p) => ({
-      id: p.id, tutee_id: p.tuteeId, items: jsonText(p.items, []), total: p.total ?? 0,
-      status: p.status, purchased_at: sqlDateTime(p.at),
-    }),
-    fromRow: (r) => ({
-      id: r.id, tuteeId: r.tutee_id, items: parseJson(r.items, []),
-      total: Number(r.total), status: r.status, at: isoDateTime(r.purchased_at),
-    }),
-  },
-  {
     stateKey: "materials", table: "materials", primaryKey: "id", orderBy: "uploaded_at DESC",
     toRow: (m) => ({
-      id: m.id, title: m.title, program: m.program, file_name: m.fileName,
+      id: m.id, title: m.title, program: m.program, subject: m.subject ?? "", file_name: m.fileName,
       mime: m.mime, size: m.size ?? 0, data: m.data ?? "", note: m.note ?? "",
       uploaded_at: sqlDateTime(m.uploadedAt), allow_tutors: Boolean(m.allowTutors),
       allow_tutees: Boolean(m.allowTutees), allowed_user_ids: jsonText(m.allowedUserIds, []),
       revoked: Boolean(m.revoked),
     }),
     fromRow: (r) => ({
-      id: r.id, title: r.title, program: r.program, fileName: r.file_name, mime: r.mime,
+      id: r.id, title: r.title, program: r.program, subject: r.subject ?? "", fileName: r.file_name, mime: r.mime,
       size: Number(r.size), data: r.data, note: r.note, uploadedAt: isoDateTime(r.uploaded_at),
       allowTutors: Boolean(r.allow_tutors), allowTutees: Boolean(r.allow_tutees),
       allowedUserIds: parseJson(r.allowed_user_ids, []), revoked: Boolean(r.revoked),

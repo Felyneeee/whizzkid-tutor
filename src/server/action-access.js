@@ -2,17 +2,17 @@ import "server-only";
 
 const ADMIN_ACTIONS = new Set([
   "notify", "completeAssessment", "scheduleAssessment", "scheduleInterview", "evaluateApplicant", "verifyExistingTutor",
-  "setTutorPay", "approveAvailability", "adminEditTutorAvailability", "setTutorWeeklySchedule", "rejectAvailability", "decideLeave",
+  "setTutorPay", "adminEditTutorAvailability", "setTutorWeeklySchedule", "decideLeave",
   "adminLeave", "proposeBookingSchedule", "confirmBooking", "confirmBookingSession", "confirmReadingAssignment", "rejectReadingAssignment", "rejectBooking", "terminateBooking",
   "completeSession", "reassignSession", "proposeSessionReschedule", "cancelSession", "updateCohort",
-  "addCohort", "deleteCohort", "removeFromCohort", "assignPlaygroupBooking", "assignPlaygroupWeekday", "approvePlaygroupBooking", "updatePurchase", "addMaterial", "updateMaterial", "deleteMaterial",
+  "addCohort", "deleteCohort", "removeFromCohort", "assignPlaygroupBooking", "assignPlaygroupWeekday", "approvePlaygroupBooking", "addMaterial", "updateMaterial", "deleteMaterial",
 ]);
 
 const TUTEE_ACTIONS = new Set([
-  "requestAssessment", "cancelAssessment", "cancelTutorialBooking", "bookPlaygroup", "cancelPlaygroupBooking", "submitTutorialBooking", "placeOrder",
+  "requestAssessment", "cancelAssessment", "cancelTutorialBooking", "bookPlaygroup", "cancelPlaygroupBooking", "submitTutorialBooking",
   "rateSession",
 ]);
-const TUTOR_ACTIONS = new Set(["submitAvailability", "submitLeave", "checkInSession"]);
+const TUTOR_ACTIONS = new Set(["submitLeave", "checkInSession"]);
 const SHARED_ACTIONS = new Set([
   "markNotificationsRead", "markMessageNotificationsRead", "sendMessage", "logMaterialAccess",
   "saveTuteeProfile", "saveTutorProfile", "decideBookingScheduleProposal",
@@ -60,12 +60,7 @@ export function authorizeBusinessAction(state, user, action, args) {
   }
   if (action === "bookPlaygroup" || action === "requestAssessment") safeArgs[0] = user.id;
   if (action === "submitTutorialBooking") safeArgs[0] = { ...(safeArgs[0] || {}), tuteeId: user.id };
-  if (action === "placeOrder") safeArgs[0] = user.id;
-  if (action === "placeOrder") {
-    if (!Array.isArray(safeArgs[1]) || safeArgs[1].length < 1 || safeArgs[1].length > 20) return deny("Choose between 1 and 20 order items.");
-    safeArgs[1] = safeArgs[1].map((item) => ({ sku: item?.sku, qty: item?.qty }));
-  }
-  if (action === "submitAvailability" || action === "submitLeave") safeArgs[0] = user.id;
+  if (action === "submitLeave") safeArgs[0] = user.id;
   if (action === "checkInSession") {
     const session = state.sessions.find((entry) => entry.id === safeArgs[0]);
     if (!session || session.tutorId !== user.id) return deny();

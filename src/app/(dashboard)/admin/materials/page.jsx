@@ -30,7 +30,8 @@ export default function AdminMaterials() {
     if (file?.size > 1500000) return setErr("Demo storage is limited to 1.5 MB per file.");
     const data = file ? await new Promise((res) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.readAsDataURL(file); }) : editing.data;
     const values = { title: f.title, program: f.program, subject: f.program === "academic" ? f.subject : "", fileName: file?.name || editing.fileName, mime: file?.type || editing.mime, size: file?.size ?? editing.size, data, note: f.note, allowTutors: true, allowTutees: false, allowedUserIds: [] };
-    if (editing) s.updateMaterial(editing.id, values); else s.addMaterial(values);
+    const result = editing ? await s.updateMaterial(editing.id, values) : await s.addMaterial(values);
+    if (result?.ok === false) return setErr(result.error || "Could not save the material. Please try again.");
     setOpen(false); setEditing(null); setFile(null); setF(emptyForm());
   };
   const closeUpload = () => { setOpen(false); setEditing(null); setFile(null); setF(emptyForm()); setErr(""); };

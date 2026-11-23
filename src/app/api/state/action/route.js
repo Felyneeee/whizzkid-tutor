@@ -25,13 +25,6 @@ function unpackExtendedState(state) {
     if (!booking.status && booking.paymentStatus === "proof_rejected") booking.status = "to_pay";
     if (booking.expiresAt && booking.paymentStatus && !booking.paymentDeadlineAt) booking.paymentDeadlineAt = booking.expiresAt;
   }
-  for (const purchase of state.purchases || []) {
-    const markerIndex = (purchase.items || []).findIndex((item) => item?.__paymentMeta);
-    if (markerIndex >= 0) {
-      const [marker] = purchase.items.splice(markerIndex, 1);
-      Object.assign(purchase, marker.__paymentMeta);
-    }
-  }
   return state;
 }
 
@@ -41,10 +34,6 @@ function packExtendedState(state) {
     const payment = Object.fromEntries(["paymentStatus", "paymentProof", "paymentAmount", "paymentInstructions", "paymentApprovedAt", "paymentReviewedAt", "paymentReviewNote", "paymentProofHistory", "rescheduleProposal", "scheduleHistory"].filter((key) => booking[key] !== undefined).map((key) => [key, booking[key]]));
     if (Object.keys(payment).length) booking.scheduleProposal = { ...(booking.scheduleProposal ? { proposal: booking.scheduleProposal } : {}), __payment: payment };
     else if (booking.scheduleProposal?.__payment) booking.scheduleProposal = booking.scheduleProposal.proposal;
-  }
-  for (const purchase of packed.purchases || []) {
-    const meta = Object.fromEntries(["pickupReminderAt", "releasedAt", "paymentProof", "paymentMethod", "paymentSubmittedAt", "paymentReviewedAt", "paymentReviewNote"].filter((key) => purchase[key] !== undefined).map((key) => [key, purchase[key]]));
-    if (Object.keys(meta).length) purchase.items = [...(purchase.items || []), { __paymentMeta: meta }];
   }
   return packed;
 }
@@ -84,10 +73,10 @@ export async function POST(request) {
     }
     const authorizationState = structuredClone(state);
     queueCompletedReadingBookings(authorizationState);
-    const paymentAction = ["submitBookingPaymentProof", "reviewBookingPayment", "submitPurchasePaymentProof", "reviewPurchasePayment", "processPaymentDeadlines"].includes(body.action);
+    const paymentAction = ["submitBookingPaymentProof", "reviewBookingPayment", "processPaymentDeadlines"].includes(body.action);
     const rescheduleAction = ["requestBookingReschedule", "reviewBookingReschedule"].includes(body.action);
     const specialAction = paymentAction || rescheduleAction;
-    const specialRole = ["submitBookingPaymentProof", "submitPurchasePaymentProof", "requestBookingReschedule"].includes(body.action) ? "tutee" : "admin";
+    const specialRole = ["submitBookingPaymentProof", "requestBookingReschedule"].includes(body.action) ? "tutee" : "admin";
     const permission = body.action === "processPaymentDeadlines"
       ? user.role === "admin" || user.role === "tutee" ? { ok: true, args: [] } : { ok: false, error: "You are not allowed to perform this action." }
       : specialAction
@@ -253,27 +242,6 @@ export async function POST(request) {
         return NextResponse.json({ error: "Enter a rejection reason of up to 500 characters." }, { status: 400 });
       }
     }
-    if (body.action === "submitPurchasePaymentProof") {
-      const [purchaseId, receiptData, reference, method] = permission.args;
-      const purchase = state.purchases.find((entry) => entry.id === purchaseId && entry.tuteeId === user.id);
-      const validReceipt = typeof receiptData === "string" && /^data:(image\/(png|jpeg|webp)|application\/pdf);base64,[A-Za-z0-9+/=]+$/.test(receiptData) && Buffer.from(receiptData.split(",")[1] || "", "base64").byteLength <= 5 * 1024 * 1024;
-      if (!purchase || purchase.status !== "pending" || !validReceipt || (reference != null && (typeof reference !== "string" || reference.length > 120)) || !["online", "in_person"].includes(method)) {
-        await connection.rollback();
-        return NextResponse.json({ error: "This purchase is not awaiting payment, or the receipt file is invalid (5 MB maximum)." }, { status: 400 });
-      }
-    }
-    if (body.action === "reviewPurchasePayment") {
-      const [purchaseId, approve, note] = permission.args;
-      const purchase = state.purchases.find((entry) => entry.id === purchaseId);
-      if (!purchase || purchase.status !== "awaiting_verification") {
-        await connection.rollback();
-        return NextResponse.json({ error: "This purchase payment is no longer awaiting review." }, { status: 409 });
-      }
-      if (typeof approve !== "boolean" || (note != null && (typeof note !== "string" || note.length > 500)) || (!approve && !String(note || "").trim())) {
-        await connection.rollback();
-        return NextResponse.json({ error: "Enter a rejection reason of up to 500 characters." }, { status: 400 });
-      }
-    }
     if (body.action === "requestBookingReschedule") {
       const [bookingId, requestedSessions, reason] = permission.args;
       const booking = state.bookings.find((entry) => entry.id === bookingId && entry.tuteeId === user.id);
@@ -346,17 +314,8 @@ export async function POST(request) {
         for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `Payment deadline for ${booking.subject} booking from ${booking.tuteeId} is approaching.`, at: nowISO(), read: false, channels: ["web"] });
       }
     }
-    for (const purchase of nextState.purchases) {
-      if (purchase.status === "pending" && Date.parse(purchase.at) + 48 * 60 * 60 * 1000 <= now) {
-        purchase.status = "expired";
-        nextState.notifications.unshift({ id: uid("n"), userId: purchase.tuteeId, text: "Your purchase order expired because payment was not recorded within 48 hours.", at: nowISO(), read: false, channels: ["web", "email"] });
-        for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `Purchase order from ${purchase.tuteeId} expired without payment.`, at: nowISO(), read: false, channels: ["web"] });
-      } else if (purchase.status === "paid" && purchase.pickupReminderAt && now - Date.parse(purchase.pickupReminderAt) >= 7 * 24 * 60 * 60 * 1000) {
-        purchase.pickupReminderAt = nowISO();
-        nextState.notifications.unshift({ id: uid("n"), userId: purchase.tuteeId, text: "Your paid purchase is ready for pickup at the center.", at: nowISO(), read: false, channels: ["web", "email"] });
-      }
-    }
     const actions = createBusinessActions({
+      actorId: user.id,
       get: () => nextState,
       mutate: (update) => {
       const draft = structuredClone(nextState);
@@ -405,6 +364,7 @@ export async function POST(request) {
         });
         if (proposedSessions.some((entry) => !entry)) return { ok: false, error: "A selected session is no longer available to reschedule." };
         booking.rescheduleProposal = { ...proposedSessions[0], sessions: proposedSessions, reason, requestedAt: nowISO() };
+        logActivity(nextState, user.id, `Requested a schedule change for ${booking.subject} program`);
         for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `${user.id} requested a reschedule for ${booking.subject} (${proposedSessions.map((item) => `${item.date} at ${item.time}`).join(", ")}). Reason: ${reason}`, at: nowISO(), read: false, channels: ["web", "email"] });
         return { ok: true };
       }
@@ -444,6 +404,7 @@ export async function POST(request) {
             nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, text: "Your reschedule request was declined. The original session time remains unchanged.", at: nowISO(), read: false, channels: ["web", "email"] });
             for (const tutorId of new Set(oldTutorIds)) nextState.notifications.unshift({ id: uid("n"), userId: tutorId, text: `The reschedule request for ${booking.subject} booking from ${booking.tuteeId} was declined; your original session remains scheduled.`, at: nowISO(), read: false, channels: ["web", "email"] });
           }
+          logActivity(nextState, user.id, `${approve ? "Approved" : "Declined"} ${booking.tuteeId}'s ${booking.subject} schedule change request: ${(approve ? proposals : []).map((item) => `${item.date} at ${item.time}`).join(", ") || "original schedule retained"}`);
           booking.rescheduleProposal = undefined;
           return { ok: true };
         }
@@ -456,49 +417,10 @@ export async function POST(request) {
         booking.status = "awaiting_payment_approval";
         booking.expirationWarningAt = undefined;
         logActivity(nextState, user.id, `Submitted payment receipt for ${booking.subject} program`);
-        for (const admin of nextState.users.filter((entry) => entry.role === "admin")) logActivity(nextState, admin.id, `Payment receipt submitted for ${booking.subject} program`);
         nextState.notifications.unshift({ id: uid("n"), userId: user.id, text: `Payment proof received for ${booking.subject}. Your reservation remains active while it is reviewed.`, at: nowISO(), read: false, channels: ["web", "email"] });
         for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `Payment proof for ${booking.subject} booking from ${user.id} is awaiting verification.`, at: nowISO(), read: false, channels: ["web", "email"] });
         return { ok: true };
       }
-      : body.action === "submitPurchasePaymentProof"
-      ? async (purchaseId, receiptData, reference, method) => {
-        const purchase = nextState.purchases.find((entry) => entry.id === purchaseId && entry.tuteeId === user.id);
-        if (!purchase || purchase.status !== "pending") return { ok: false, error: "This purchase is no longer awaiting payment." };
-        purchase.paymentProof = { receiptData, reference: reference || "", submittedAt: nowISO() };
-        purchase.paymentMethod = method;
-        purchase.paymentSubmittedAt = nowISO();
-        purchase.status = "awaiting_verification";
-        logActivity(nextState, user.id, "Submitted a payment receipt for a purchase");
-        for (const admin of nextState.users.filter((entry) => entry.role === "admin")) logActivity(nextState, admin.id, "Payment receipt submitted for a purchase");
-        nextState.notifications.unshift({ id: uid("n"), userId: user.id, text: "Your purchase payment proof was received and is awaiting verification.", at: nowISO(), read: false, channels: ["web", "email"] });
-        for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `Purchase payment from ${user.id} is awaiting verification.`, at: nowISO(), read: false, channels: ["web", "email"] });
-        return { ok: true };
-      }
-      : body.action === "reviewPurchasePayment"
-        ? async (purchaseId, approve, note) => {
-          const purchase = nextState.purchases.find((entry) => entry.id === purchaseId && entry.status === "awaiting_verification");
-          if (!purchase) return { ok: false, error: "This purchase payment is no longer awaiting review." };
-          purchase.paymentReviewedAt = nowISO();
-          purchase.paymentReviewNote = note || "";
-          if (approve) {
-            purchase.status = "paid";
-            purchase.pickupReminderAt = nowISO();
-            logActivity(nextState, user.id, `Approved payment receipt for ${purchase.tuteeId}'s purchase`);
-            logActivity(nextState, purchase.tuteeId, "Payment receipt approved; purchase paid");
-            nextState.notifications.unshift({ id: uid("n"), userId: purchase.tuteeId, text: "Your purchase payment was approved. Your items are ready for pickup at the center.", at: nowISO(), read: false, channels: ["web", "email"] });
-          } else {
-            logActivity(nextState, user.id, `Rejected payment receipt for ${purchase.tuteeId}'s purchase`);
-            logActivity(nextState, purchase.tuteeId, "Payment receipt rejected; please submit a new receipt");
-            purchase.status = "pending";
-            purchase.paymentProof = undefined;
-            purchase.paymentMethod = undefined;
-            purchase.paymentSubmittedAt = undefined;
-            purchase.at = nowISO();
-            nextState.notifications.unshift({ id: uid("n"), userId: purchase.tuteeId, text: `Your purchase payment proof could not be approved.${note ? ` ${note}` : " Please submit a new receipt."}`, at: nowISO(), read: false, channels: ["web", "email"] });
-          }
-          return { ok: true };
-        }
       : body.action === "reviewBookingPayment"
         ? async (bookingId, approve, note) => {
           const booking = nextState.bookings.find((entry) => entry.id === bookingId && entry.status === "awaiting_payment_approval");
@@ -509,14 +431,12 @@ export async function POST(request) {
             booking.status = "confirmed";
             booking.paymentStatus = "paid";
             booking.paymentApprovedAt = nowISO();
-            logActivity(nextState, user.id, `Approved payment receipt for ${booking.subject} program`);
-            logActivity(nextState, booking.tuteeId, `Payment receipt approved for ${booking.subject} program`);
+            logActivity(nextState, user.id, `Approved ${booking.subject} payment receipt from ${booking.tuteeId}`);
             for (const session of nextState.sessions.filter((entry) => entry.bookingId === booking.id && entry.status === "awaiting_payment")) session.status = "scheduled";
             nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, text: `Your payment was approved. ${booking.subject} booking is confirmed and now appears on your schedule.`, at: nowISO(), read: false, channels: ["web", "email"] });
             for (const tutorId of new Set(nextState.sessions.filter((entry) => entry.bookingId === booking.id).map((entry) => entry.tutorId))) nextState.notifications.unshift({ id: uid("n"), userId: tutorId, text: `Payment for ${booking.subject} booking from ${booking.tuteeId} was approved; the sessions are confirmed.`, at: nowISO(), read: false, channels: ["web", "email"] });
           } else {
-            logActivity(nextState, user.id, `Rejected payment receipt for ${booking.subject} program`);
-            logActivity(nextState, booking.tuteeId, `Payment receipt rejected for ${booking.subject} program`);
+            logActivity(nextState, user.id, `Rejected ${booking.subject} payment receipt from ${booking.tuteeId}${note ? `: ${note}` : ""}`);
             booking.status = "to_pay";
             booking.paymentStatus = "proof_rejected";
             booking.paymentProofHistory = [...(booking.paymentProofHistory || []), {
@@ -545,14 +465,6 @@ export async function POST(request) {
     if (result && result.ok === false) {
       await connection.rollback();
       return NextResponse.json({ error: result.error, result, db: stateVisibleToUser(nextState, user) }, { status: 409 });
-    }
-    if (body.action === "updatePurchase" && permission.args[1] === "paid") {
-      const purchase = nextState.purchases.find((entry) => entry.id === permission.args[0]);
-      if (purchase) purchase.pickupReminderAt = nowISO();
-    }
-    if (body.action === "updatePurchase" && permission.args[1] === "released") {
-      const purchase = nextState.purchases.find((entry) => entry.id === permission.args[0]);
-      if (purchase) purchase.releasedAt = nowISO();
     }
     const matchingActions = ["confirmBooking", "confirmBookingSession", "confirmReadingAssignment"];
     const autoPairedIds = body.action === "submitTutorialBooking" && result?.autoPaired ? [result.bookingId] : [];

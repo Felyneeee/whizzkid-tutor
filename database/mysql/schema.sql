@@ -138,15 +138,10 @@ CREATE TABLE IF NOT EXISTS notifications (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
-CREATE TABLE IF NOT EXISTS purchases (
-  id VARCHAR(64) PRIMARY KEY, tutee_id VARCHAR(64) NOT NULL, items JSON NOT NULL,
-  total DECIMAL(10,2) NOT NULL DEFAULT 0, status ENUM('pending','paid','released') NOT NULL,
-  purchased_at DATETIME NOT NULL, FOREIGN KEY (tutee_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB;
-
 CREATE TABLE IF NOT EXISTS materials (
   id VARCHAR(64) PRIMARY KEY, title VARCHAR(255) NOT NULL,
   program ENUM('reading','academic','playgroup','all') NOT NULL,
+  subject VARCHAR(120) NOT NULL DEFAULT '',
   file_name VARCHAR(255) NOT NULL, mime VARCHAR(150) NOT NULL,
   size BIGINT UNSIGNED NOT NULL DEFAULT 0, data LONGTEXT NOT NULL, note TEXT NOT NULL,
   uploaded_at DATETIME NOT NULL, allow_tutors BOOLEAN NOT NULL DEFAULT FALSE,

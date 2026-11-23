@@ -20,7 +20,6 @@ export function buildSeed() {
         cohorts: [],
         messages: [],
         notifications: [],
-        purchases: [],
         materials: [],
         materialLogs: [],
         activities: [],

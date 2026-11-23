@@ -2,9 +2,9 @@ import "server-only";
 import { ADMIN_ID } from "@/lib/seed";
 import { ageFromBirthday, firstName, nowISO, todayISO, uid, fmtDate, fmtTime, addDays, rangeDates, weekday } from "@/lib/dates";
 import { cohortSessionDates, computeRate, matchTutors, onApprovedLeave, tutorBusy, tutorFreeOn, tutorQualifies, approvedSlot, tutorWorksPlaygroupDate, slotOccupied, slotRequestable } from "@/lib/logic";
-import { HOURS, PLAYGROUP_SESSION_RATE, SHOP_ITEMS, SUBJECTS } from "@/lib/constants";
+import { HOURS, PLAYGROUP_SESSION_RATE, SUBJECTS } from "@/lib/constants";
 
-export function createBusinessActions({ get, mutate }) {
+export function createBusinessActions({ get, mutate, actorId }) {
   const nextBookingId = (state, program) => {
       const prefix = program === "academic" ? "bk_acd" : program === "playgroup" ? "bk_plg" : "bk_rd";
       const pattern = new RegExp(`^${prefix}(\\d+)$`);
@@ -20,6 +20,7 @@ export function createBusinessActions({ get, mutate }) {
   const pushAdmins = (d, text, channels = ["web"], threadId) => d.users.filter((u) => u.role === "admin").forEach((a) => pushNotif(d, a.id, text, channels, threadId));
   const logAct = (d, userId, kind, text) => d.activities.unshift({ id: uid("a"), userId, kind, text, at: nowISO() });
   const adminIdOf = (d) => d.users.find((u) => u.role === "admin")?.id || ADMIN_ID;
+  const actingAdminIdOf = (d) => d.users.some((u) => u.id === actorId && u.role === "admin") ? actorId : adminIdOf(d);
   const nameOf = (d, id) => d.tutees.find((t) => t.userId === id)?.fullName || d.tutors.find((t) => t.userId === id)?.fullName ||
     (d.users.find((u) => u.id === id)?.role === "admin" || id === ADMIN_ID ? "Admin" : id);
   const firstNameOf = (d, id) => firstName(nameOf(d, id), "User");
@@ -60,8 +61,7 @@ export function createBusinessActions({ get, mutate }) {
           n.messages.push({ id: uid("m"), threadId, fromId, text: messageText, at: nowISO() });
           const sender = n.users.find((u) => u.id === fromId);
           const recipientId = sender?.role === "admin" ? threadId : adminIdOf(n);
-          logAct(n, fromId, "other", "Sent a chat message");
-          if (recipientId !== fromId && n.users.some((u) => u.id === recipientId)) logAct(n, recipientId, "other", "Received a chat message");
+          if (recipientId !== fromId && n.users.some((u) => u.id === recipientId)) logAct(n, fromId, "other", `Sent a message to ${nameOf(n, recipientId)}`);
           if (recipientId !== fromId && n.users.some((u) => u.id === recipientId)) {
               pushNotif(n, recipientId, `New message from ${firstNameOf(n, fromId)}`, ["web"], threadId);
           }
@@ -95,7 +95,7 @@ export function createBusinessActions({ get, mutate }) {
           n.assessments.push({ id, tuteeId, modality, learningNeeds: String(learningNeeds).slice(0, 2000), status: "pending_admin_scheduling", program: "reading" });
           pushNotif(n, tuteeId, "Your reading program booking request was received. Status: Pending Admin Assessment Scheduling.", ["web", "email"]);
           pushAdmins(n, `New reading program booking request from ${nameOf(n, tuteeId)}. Initial assessment needs scheduling.`);
-          logAct(n, tuteeId, "booking", "Submitted a reading program booking request");
+          logAct(n, tuteeId, "booking", "Requested a Reading Program initial assessment");
       });
       return { ok: true, id };
   },
@@ -115,6 +115,7 @@ export function createBusinessActions({ get, mutate }) {
           a.date = date; a.time = time; a.status = "booked";
           n.bookings.filter((booking) => booking.program === "reading" && booking.assessmentId === a.id && booking.status === "pending_assessment").forEach((booking) => { booking.status = "assessment_scheduled"; });
           n.assessments.filter((x) => x.tuteeId === a.tuteeId && x.id !== a.id && x.status === "pending_admin_scheduling").forEach((x) => { x.status = "cancelled"; });
+          logAct(n, actingAdminIdOf(n), "booking", `Scheduled an initial reading assessment for ${nameOf(n, a.tuteeId)}`);
           pushNotif(n, a.tuteeId, `Your initial assessment is scheduled for ${fmtDate(date)} at ${fmtTime(time)}.`, ["web", "email", "sms"]);
       });
       return { ok: true };
@@ -158,15 +159,17 @@ export function createBusinessActions({ get, mutate }) {
               ? "Your reading assessment is complete. Your selected Reading Program schedule is now being matched with a tutor."
               : "Your reading assessment is complete. You can now select a schedule for your Reading Program.", ["web", "email", "sms"]);
           if (waitingBookings.length) pushAdmins(n, `Reading assessment completed for ${nameOf(n, a.tuteeId)}. Suggested tutors are ready for admin confirmation.`);
-          logAct(n, a.tuteeId, "match", `Assessment completed — level: ${readingLevel}`);
+          logAct(n, actingAdminIdOf(n), "other", `Completed reading assessment for ${nameOf(n, a.tuteeId)} — level: ${readingLevel}`);
       });
       return { ok: true };
   },
   cancelAssessment(id) {
       mutate((n) => {
           const a = n.assessments.find((x) => x.id === id);
-          if (a)
+          if (a) {
               a.status = "cancelled";
+              logAct(n, actingAdminIdOf(n), "other", `Cancelled reading assessment for ${nameOf(n, a.tuteeId)}`);
+          }
       });
   },
   bookPlaygroup(tuteeId, cohortId) {
@@ -229,7 +232,7 @@ export function createBusinessActions({ get, mutate }) {
           if (!allDatesAssigned) pushAdmins(n, `Playgroup booking from ${nameOf(n, tuteeId)} in ${cc.label} has one or more sessions without an available tutor and needs assignment.`);
           pushNotif(n, tuteeId, `Playgroup booking received: ${cc.label}, starting ${fmtDate(cc.startDate)}. Status: Pending; tutor assignment is ${allDatesAssigned ? "pending administrator approval" : "incomplete"}.`, ["web", "email", "sms"]);
           pushAdmins(n, `${nameOf(n, tuteeId)} reserved a slot in ${cc.label} (${cc.enrolled.length}/${cc.capacity})`);
-          logAct(n, tuteeId, "booking", `Reserved playgroup slot: ${cc.label}`);
+          logAct(n, tuteeId, "booking", `Requested a Playgroup booking for ${cc.label}, starting ${fmtDate(cc.startDate)} (${dates.length} sessions)`);
       });
       return { ok: true, bookingId };
   },
@@ -376,23 +379,12 @@ export function createBusinessActions({ get, mutate }) {
                   : "Booking request submitted. Your open slot is reserved while we wait for a matching tutor to become available.", ["web", "email"]);
           const sessionCount = v.sessionSlots?.length ?? v.dates.length;
           if ((v.program !== "reading" || !readingAssessmentComplete && assessmentComplete) && (!groupPairs.length || paired.length < groupPairs.length)) pushAdmins(n, `New booking request from ${nameOf(n, v.tuteeId)} — ${b.subject}, ${sessionCount} session(s). ${matches.length ? "Review recommendations." : "No tutor matches yet; review when an eligible tutor's availability is approved."}`);
-          logAct(n, v.tuteeId, "booking", `Requested ${b.subject} schedule (${sessionCount} session/s)`);
+          const programName = v.program === "reading" ? "Reading Program" : "Academic Tutorial";
+          const slotSummary = requestedSlots.slice(0, 4).map((slot) => `${slot.subject ?? b.subject} on ${fmtDate(slot.date)} at ${fmtTime(slot.time)}`).join("; ");
+          const remainingSlots = requestedSlots.length > 4 ? `; and ${requestedSlots.length - 4} more session(s)` : "";
+          logAct(n, v.tuteeId, "booking", `Requested ${programName} schedule for ${b.subject} (${sessionCount} session(s)): ${slotSummary}${remainingSlots}`);
       });
       return { ok: true, bookingId, autoPaired: groupPairs.length > 0 && groupPairs.every((entry) => !!entry.session) };
-  },
-  placeOrder(tuteeId, items) {
-      if (!Array.isArray(items) || !items.length || items.some((item) => !Number.isInteger(item.qty) || item.qty < 1 || item.qty > 99 || !SHOP_ITEMS.some((product) => product.sku === item.sku)))
-          return { ok: false, error: "Order items are invalid. Refresh the page and try again." };
-      items = items.map((item) => {
-          const product = SHOP_ITEMS.find((entry) => entry.sku === item.sku);
-          return { sku: product.sku, name: product.name, qty: item.qty, price: product.price };
-      });
-      const total = items.reduce((a, i) => a + i.qty * i.price, 0);
-      mutate((n) => {
-          n.purchases.unshift({ id: uid("p"), tuteeId, items, total, status: "pending", at: nowISO() });
-          pushAdmins(n, `New purchase order from ${nameOf(n, tuteeId)} — ₱${total.toLocaleString()}`);
-          pushNotif(n, tuteeId, `Order placed (₱${total.toLocaleString()}). Please settle payment at the center.`);
-      });
   },
   rateSession(sessionId, rating, feedback) {
       mutate((n) => {
@@ -403,42 +395,10 @@ export function createBusinessActions({ get, mutate }) {
               return;
           se.rating = rating;
           se.feedback = feedback;
-          logAct(n, se.tutorId, "rating", `Received ${rating}★ from ${firstNameOf(n, se.tuteeId)} (${fmtDate(se.date)})`);
-          logAct(n, se.tuteeId, "rating", `Rated session on ${fmtDate(se.date)} ${rating}★`);
-          logAct(n, adminIdOf(n), "rating", `${nameOf(n, se.tuteeId)} rated ${nameOf(n, se.tutorId)} ${rating}★`);
+          logAct(n, se.tuteeId, "rating", `Rated ${nameOf(n, se.tutorId)} ${rating}★ for the ${fmtDate(se.date)} session`);
       });
   },
   // ---------- Tutor ----------
-  submitAvailability(tutorId, entries, modalities, note) {
-      const d = get();
-      const conflicts = [];
-      entries.forEach((e) => {
-          d.sessions
-              .filter((s) => s.tutorId === tutorId && s.date === e.date && s.status === "scheduled" && !e.slots.includes(s.time))
-              .forEach((s) => conflicts.push(`${fmtDate(s.date)} ${fmtTime(s.time)}`));
-      });
-      const batchId = uid("batch");
-      mutate((n) => {
-          entries.forEach((e) => {
-              // replace earlier pending records for this date
-              n.availability = n.availability.filter((a) => !(a.tutorId === tutorId && a.date === e.date && a.status === "pending"));
-              n.availability.push({
-                  id: uid("av"),
-                  batchId,
-                  tutorId,
-                  date: e.date,
-                  slots: e.slots,
-                  modalities,
-                  status: "pending",
-                  submittedAt: nowISO(),
-                  note: note + (conflicts.length ? ` [Conflicts with confirmed sessions: ${conflicts.join(", ")}]` : ""),
-              });
-          });
-          pushAdmins(n, `${nameOf(n, tutorId)} submitted availability for ${entries.length} day(s)${conflicts.length ? " — conflicts with confirmed sessions!" : ""}`);
-          pushNotif(n, tutorId, "Availability submitted. Status: Pending Approval. Pending slots cannot be booked.", ["web"]);
-      });
-      return { ok: true, conflicts };
-  },
   submitLeave(tutorId, datesOrStart, endDateOrReason, reason, details = {}) {
       const dates = Array.isArray(datesOrStart) ? [...new Set(datesOrStart)].sort() : null;
       const startDate = dates ? dates[0] : datesOrStart;
@@ -446,7 +406,7 @@ export function createBusinessActions({ get, mutate }) {
       const leaveReason = dates ? endDateOrReason : reason;
       mutate((n) => {
           n.leaves.push({ id: uid("lv"), tutorId, startDate, endDate, ...(dates ? { dates } : {}), reason: leaveReason, leaveType: details.leaveType || leaveReason, otherReason: details.otherReason || "", note: details.note || "", signature: details.signature || "", status: "pending", submittedAt: nowISO() });
-          logAct(n, tutorId, "other", "Submitted a leave request");
+          logAct(n, tutorId, "other", `Submitted a ${details.leaveType || leaveReason} leave request for ${dates ? dates.map(fmtDate).join(", ") : `${fmtDate(startDate)} to ${fmtDate(endDate)}`}`);
           pushAdmins(n, `${nameOf(n, tutorId)} requested leave ${dates ? dates.map(fmtDate).join(", ") : `${fmtDate(startDate)} – ${fmtDate(endDate)}`}`);
           pushNotif(n, tutorId, "Leave request submitted. Status: Pending Approval.", ["web"]);
       });
@@ -460,7 +420,7 @@ export function createBusinessActions({ get, mutate }) {
           t.status = "interview";
           t.interviewAt = at;
           t.interviewNotes = notes;
-          logAct(n, tutorId, "other", `Interview scheduled: ${new Date(at).toLocaleString()}`);
+          logAct(n, actingAdminIdOf(n), "other", `Scheduled an interview for tutor applicant ${nameOf(n, tutorId)} at ${new Date(at).toLocaleString()}`);
           pushNotif(n, tutorId, `Interview scheduled: ${new Date(at).toLocaleString()}. ${notes}`, ["web", "email", "sms"]);
       });
   },
@@ -472,7 +432,7 @@ export function createBusinessActions({ get, mutate }) {
           t.status = accept ? "active" : "rejected";
           t.verifiedAt = accept ? nowISO() : undefined;
           t.rejectionReason = accept ? undefined : reason;
-          logAct(n, tutorId, "other", accept ? "Tutor application approved" : `Tutor application rejected${reason ? `: ${reason}` : ""}`);
+          logAct(n, actingAdminIdOf(n), "other", `${accept ? "Approved" : "Rejected"} tutor application for ${nameOf(n, tutorId)}${!accept && reason ? `: ${reason}` : ""}`);
           pushNotif(n, tutorId, accept ? "Congratulations! Your application is approved. Your account is now a Tutor account." : `Your application was not approved. ${reason || ""}`, ["web", "email", "sms"]);
       });
   },
@@ -484,6 +444,7 @@ export function createBusinessActions({ get, mutate }) {
           t.status = approve ? "active" : "rejected";
           t.verifiedAt = approve ? nowISO() : undefined;
           t.rejectionReason = approve ? undefined : reason;
+          logAct(n, actingAdminIdOf(n), "other", `${approve ? "Verified" : "Rejected"} existing tutor registration for ${nameOf(n, tutorId)}`);
           pushNotif(n, tutorId, approve ? "Your tutor account is verified and active." : `Verification not approved: ${reason || "Please contact the admin."}`, ["web", "email"]);
       });
   },
@@ -494,31 +455,6 @@ export function createBusinessActions({ get, mutate }) {
               t.hourlyRate = hourlyRate;
               t.fixedSalary = fixedSalary;
           }
-      });
-  },
-  approveAvailability(batchId) {
-      mutate((n) => {
-          const recs = n.availability.filter((a) => a.batchId === batchId && a.status === "pending");
-          if (!recs.length)
-              return;
-          const tutorId = recs[0].tutorId;
-          const flagged = [];
-          recs.forEach((r) => {
-              // supersede previously-approved record for the same day
-              n.availability = n.availability.filter((a) => !(a.tutorId === r.tutorId && a.date === r.date && a.status === "approved" && a.id !== r.id));
-              const rec = n.availability.find((a) => a.id === r.id);
-              rec.status = "approved";
-              // flag scheduled sessions that fall outside new slots
-              n.sessions.forEach((s) => {
-                  if (s.tutorId === r.tutorId && s.date === r.date && s.status === "scheduled" && (!rec.slots.includes(s.time) || !rec.modalities.includes(s.modality))) {
-                      s.status = "needs_reassignment";
-                      flagged.push(s.id);
-                  }
-              });
-          });
-          pushNotif(n, tutorId, "Your availability was approved. Approved slots are now bookable.", ["web", "email"]);
-          if (flagged.length)
-              pushAdmins(n, `${flagged.length} confirmed session(s) of ${nameOf(n, tutorId)} conflict with approved availability changes — reassign them.`);
       });
   },
   adminEditTutorAvailability(tutorId, date, slots, modalities) {
@@ -563,7 +499,7 @@ export function createBusinessActions({ get, mutate }) {
           pushNotif(n, tutorId, `The admin updated your availability for ${fmtDate(date)}.${conflicts.length ? ` ${conflicts.length} session(s) need reassignment because they no longer fit the edited schedule.` : ""}`, ["web", "email"]);
           if (conflicts.length)
               pushAdmins(n, `${conflicts.length} session(s) of ${nameOf(n, tutorId)} need reassignment after an admin schedule edit.`);
-          logAct(n, adminIdOf(n), "availability", `Edited ${nameOf(n, tutorId)}'s availability for ${fmtDate(date)}`);
+          logAct(n, actingAdminIdOf(n), "availability", `Edited ${nameOf(n, tutorId)}'s availability for ${fmtDate(date)}`);
       });
       return { ok: true, conflicts };
   },
@@ -594,20 +530,9 @@ export function createBusinessActions({ get, mutate }) {
           });
           pushNotif(n, tutorId, `The admin updated your weekly schedule. Day off: ${allowedDays.find((day) => !days[day])}.${conflicts.length ? ` ${conflicts.length} session(s) need reassignment.` : ""}`, ["web", "email"]);
           if (conflicts.length) pushAdmins(n, `${conflicts.length} session(s) of ${nameOf(n, tutorId)} need reassignment after a weekly schedule change.`);
-          logAct(n, adminIdOf(n), "availability", `Updated ${nameOf(n, tutorId)}'s weekly tutor schedule`);
+          logAct(n, actingAdminIdOf(n), "availability", `Updated ${nameOf(n, tutorId)}'s weekly tutor schedule`);
       });
       return { ok: true, conflicts };
-  },
-  rejectAvailability(batchId, reason) {
-      mutate((n) => {
-          const recs = n.availability.filter((a) => a.batchId === batchId && a.status === "pending");
-          recs.forEach((r) => {
-              r.status = "rejected";
-              r.note = (r.note || "") + ` Rejected: ${reason}`;
-          });
-          if (recs[0])
-              pushNotif(n, recs[0].tutorId, `Availability rejected. ${reason} You may revise and resubmit.`, ["web", "email"]);
-      });
   },
   decideLeave(leaveId, approve) {
       mutate((n) => {
@@ -617,12 +542,14 @@ export function createBusinessActions({ get, mutate }) {
           l.status = approve ? "approved" : "rejected";
           l.decidedAt = nowISO();
           if (!approve) {
+              logAct(n, actingAdminIdOf(n), "other", `Rejected ${nameOf(n, l.tutorId)}'s leave request`);
               pushNotif(n, l.tutorId, "Your leave request was not approved. Existing schedule remains unchanged.", ["web", "email"]);
               return;
           }
           const affected = n.sessions.filter((s) => s.tutorId === l.tutorId && s.status === "scheduled" && (l.dates ? l.dates.includes(s.date) : s.date >= l.startDate && s.date <= l.endDate));
           affected.forEach((s) => (s.status = "needs_reassignment"));
           l.affectedSessionIds = affected.map((s) => s.id);
+          logAct(n, actingAdminIdOf(n), "other", `Approved ${nameOf(n, l.tutorId)}'s leave request`);
           pushNotif(n, l.tutorId, "Your leave request was approved.", ["web", "email"]);
           if (affected.length)
               pushAdmins(n, `Approved leave of ${nameOf(n, l.tutorId)} affects ${affected.length} confirmed session(s). Arrange rescheduling or tutor reassignment.`);
@@ -660,7 +587,7 @@ export function createBusinessActions({ get, mutate }) {
           target.scheduleProposal = { sessions: sorted, proposedAt: nowISO() };
           pushNotif(n, target.tuteeId, "The admin proposed a schedule change for your booking. Review it in Pending Requests and approve or decline it.", ["web", "email"]);
           pushAdmins(n, `A schedule change for ${nameOf(n, target.tuteeId)}'s ${target.subject} booking is waiting for tutee approval.`);
-          logAct(n, adminIdOf(n), "booking", `Proposed a schedule change for ${nameOf(n, target.tuteeId)}'s ${target.subject} booking`);
+          logAct(n, actingAdminIdOf(n), "booking", `Proposed a schedule change for ${nameOf(n, target.tuteeId)}'s ${target.subject} booking: ${sorted.map((slot) => `${fmtDate(slot.date)} at ${fmtTime(slot.time)}`).join(", ")}`);
       });
       return { ok: true };
   },
@@ -710,12 +637,10 @@ export function createBusinessActions({ get, mutate }) {
                   pushNotif(n, target.tuteeId, `You approved the rescheduled session: ${fmtDate(proposed.date)} at ${fmtTime(proposed.time)}.`, ["web", "email", "sms"]);
                   pushNotif(n, session.tutorId, `Your session with ${firstNameOf(n, target.tuteeId)} was rescheduled to ${fmtDate(proposed.date)} at ${fmtTime(proposed.time)}.`, ["web", "email"]);
                   pushAdmins(n, `${nameOf(n, target.tuteeId)} approved a session reschedule for ${target.subject}.`);
-                  logAct(n, target.tuteeId, "booking", `Approved a session reschedule for ${target.subject}`);
               }
               else {
                   pushNotif(n, target.tuteeId, "You declined the proposed session time. The session remains on its current schedule while the admin follows up.", ["web", "email"]);
                   pushAdmins(n, `${nameOf(n, target.tuteeId)} declined a session reschedule for ${target.subject}.`);
-                  logAct(n, target.tuteeId, "booking", `Declined a session reschedule for ${target.subject}`);
               }
           }
           else if (approve) {
@@ -739,12 +664,10 @@ export function createBusinessActions({ get, mutate }) {
               target.recommendations = matches.slice(0, 3).map((match) => match.tutor.userId);
               pushNotif(n, target.tuteeId, "You approved the updated schedule. The admin will now review tutor matches for those dates and times.", ["web", "email"]);
               pushAdmins(n, `${nameOf(n, target.tuteeId)} approved the updated schedule for ${target.subject}. Tutor matching is ready for review.`);
-              logAct(n, target.tuteeId, "booking", `Approved the proposed schedule for ${target.subject}`);
           }
           else {
               pushNotif(n, target.tuteeId, "You declined the proposed schedule. Your original request remains in place while the admin follows up.", ["web", "email"]);
               pushAdmins(n, `${nameOf(n, target.tuteeId)} declined the proposed schedule for ${target.subject}. Follow up or submit another proposal.`);
-              logAct(n, target.tuteeId, "booking", `Declined the proposed schedule for ${target.subject}`);
           }
       });
       return { ok: true };
@@ -788,8 +711,7 @@ export function createBusinessActions({ get, mutate }) {
           const assignedDatesText = slots.map((slot) => `${fmtDate(slot.date)} at ${fmtTime(slot.time)}`).join(", ");
           pushNotif(n, tutorId, `New assignment: ${nameOf(n, target.tuteeId)} — ${subject}, ${assignedDatesText} (${target.modality}).`, ["web", "email"]);
           pushAdmins(n, `${nameOf(n, target.tuteeId)}'s ${subject} weekday series was assigned to ${tutorName}.${allAssigned ? " All sessions are now assigned." : " Other weekdays remain pending matching."}`);
-          logAct(n, adminIdOf(n), "match", `Assigned ${tutorName} to ${subject} weekday series`);
-          if (allAssigned) logAct(n, target.tuteeId, "match", `All sessions confirmed for ${target.subject}`);
+          logAct(n, actingAdminIdOf(n), "match", `Assigned ${tutorName} to ${nameOf(n, target.tuteeId)} for ${subject}: ${assignedDatesText}${allAssigned ? " (all sessions assigned)" : " (partial assignment)"}`);
       });
       return { ok: true };
   },
@@ -827,9 +749,7 @@ export function createBusinessActions({ get, mutate }) {
           const scheduleText = slots.map((slot) => `${fmtDate(slot.date)} at ${fmtTime(slot.time)}`).join(", ");
           pushNotif(n, first.tuteeId, `Your Reading Program assignment is confirmed with ${firstName(name, "Tutor")}. Sessions: ${scheduleText}.`, ["web", "email", "sms"]);
           pushNotif(n, tutorId, `New Reading Program assignment: ${nameOf(n, first.tuteeId)}. Sessions: ${scheduleText} (${first.modality}).`, ["web", "email"]);
-          logAct(n, adminIdOf(n), "match", `Assigned ${name} to ${nameOf(n, first.tuteeId)} for one Reading Program assignment (${slots.length} sessions)`);
-          logAct(n, first.tuteeId, "match", `Reading Program assignment confirmed with ${firstName(name, "Tutor")}`);
-          logAct(n, tutorId, "match", `Assigned to ${nameOf(n, first.tuteeId)} for a Reading Program assignment`);
+          logAct(n, actingAdminIdOf(n), "match", `Assigned ${name} to ${nameOf(n, first.tuteeId)} for the Reading Program: ${scheduleText}`);
       });
       return { ok: true, sessions: slots.length };
   },
@@ -845,7 +765,7 @@ export function createBusinessActions({ get, mutate }) {
               target.terminationReason = String(reason || "The requested schedule is not available.");
           });
           pushNotif(n, first.tuteeId, `We couldn't confirm your Reading Program assignment. ${reason} Please choose another schedule.`, ["web", "email", "sms"]);
-          logAct(n, adminIdOf(n), "match", `Rejected a Reading Program assignment for ${nameOf(n, first.tuteeId)}`);
+          logAct(n, actingAdminIdOf(n), "match", `Rejected the Reading Program assignment for ${nameOf(n, first.tuteeId)}: ${reason}`);
       });
       return { ok: true };
   },
@@ -899,9 +819,7 @@ export function createBusinessActions({ get, mutate }) {
           const scheduleText = okDates.map((date) => `${fmtDate(date)} at ${fmtTime(bb.sessionTimes?.[date] ?? bb.time)}`).join(", ");
           pushNotif(n, bb.tuteeId, `Booking confirmed! Tutor ${tutorFirstName} — ${bb.subject}: ${scheduleText}.${missing.length ? ` Dates removed (tutor unavailable): ${missing.map(fmtDate).join(", ")}.` : ""}`, ["web", "email", "sms"]);
           pushNotif(n, tutorId, `New assignment: ${tuteeFirstName} — ${bb.subject}: ${scheduleText} (${bb.modality}).`, ["web", "email"]);
-          logAct(n, bb.tuteeId, "match", `Matched with ${tutorFirstName} for ${bb.subject}`);
-          logAct(n, tutorId, "match", `Assigned to ${tuteeFirstName} for ${bb.subject}`);
-          logAct(n, adminIdOf(n), "match", `Confirmed ${tutorFullName} ↔ ${nameOf(n, bb.tuteeId)} (${bb.subject})`);
+          logAct(n, actingAdminIdOf(n), "match", `Assigned ${tutorFullName} to ${nameOf(n, bb.tuteeId)} for ${bb.subject}: ${scheduleText}`);
       });
       return { ok: true, missing };
   },
@@ -1015,7 +933,9 @@ export function createBusinessActions({ get, mutate }) {
           target.attended = true;
           pushNotif(n, target.tuteeId, `${firstNameOf(n, target.tutorId)} checked you in for today's session at ${fmtTime(target.time)}.`, ["web"]);
           pushAdmins(n, `${firstNameOf(n, target.tutorId)} checked in at ${fmtTime(target.time)} and marked ${firstNameOf(n, target.tuteeId)} present.`);
-          logAct(n, tutorId, "attendance", `Checked in for session with ${firstNameOf(n, target.tuteeId)} at ${fmtTime(target.time)}`);
+          const booking = n.bookings.find((entry) => entry.id === target.bookingId);
+          const subject = booking?.sessionSlots?.find((slot) => slot.date === target.date && slot.time === target.time)?.subject || booking?.sessionSubjects?.[target.date] || booking?.subject || "session";
+          logAct(n, tutorId, "attendance", `Checked in ${nameOf(n, target.tuteeId)} for ${subject} on ${fmtDate(target.date)} at ${fmtTime(target.time)}`);
       });
       return { ok: true, checkedInAt };
   },
@@ -1040,6 +960,7 @@ export function createBusinessActions({ get, mutate }) {
           pushNotif(n, ss.tuteeId, `Your session on ${fmtDate(ss.date)} now has a new tutor: ${firstNameOf(n, tutorId)}.`, ["web", "email", "sms"]);
           pushNotif(n, tutorId, `You were assigned a session on ${fmtDate(ss.date)} at ${fmtTime(ss.time)}.`, ["web", "email"]);
           pushNotif(n, old, `Your session on ${fmtDate(ss.date)} was reassigned.`, ["web"]);
+          logAct(n, actingAdminIdOf(n), "match", `Reassigned ${b?.subject || "session"} on ${fmtDate(ss.date)} at ${fmtTime(ss.time)} for ${nameOf(n, ss.tuteeId)} from ${nameOf(n, old)} to ${nameOf(n, tutorId)}`);
       });
       return { ok: true };
   },
@@ -1068,7 +989,7 @@ export function createBusinessActions({ get, mutate }) {
           target.scheduleProposal = { sessionId, sessions: [{ date, time }], proposedAt: nowISO() };
           pushNotif(n, target.tuteeId, `The admin proposed moving your session to ${fmtDate(date)} at ${fmtTime(time)}. Approve or decline it in Pending Requests.`, ["web", "email"]);
           pushAdmins(n, `A session reschedule for ${nameOf(n, target.tuteeId)} is waiting for tutee approval.`);
-          logAct(n, adminIdOf(n), "booking", `Proposed rescheduling a session for ${nameOf(n, target.tuteeId)} to ${fmtDate(date)} ${fmtTime(time)}`);
+          logAct(n, actingAdminIdOf(n), "booking", `Proposed rescheduling a session for ${nameOf(n, target.tuteeId)} to ${fmtDate(date)} ${fmtTime(time)}`);
       });
       return { ok: true };
   },
@@ -1078,6 +999,7 @@ export function createBusinessActions({ get, mutate }) {
           if (!s)
               return;
           s.status = "cancelled";
+          logAct(n, actingAdminIdOf(n), "booking", `Cancelled a scheduled session for ${nameOf(n, s.tuteeId)}`);
           const booking = n.bookings.find((x) => x.id === s.bookingId);
           if (booking?.scheduleProposal?.sessionId === s.id)
               booking.scheduleProposal = undefined;
@@ -1102,6 +1024,7 @@ export function createBusinessActions({ get, mutate }) {
       mutate((n) => {
           const target = n.cohorts.find((x) => x.id === id);
           Object.assign(target, p, { label, startDate, weekdays: [1, 3, 5], time: "10:00", sessionsCount: 12, capacity: 6, modality: "face-to-face" });
+          logAct(n, actingAdminIdOf(n), "booking", `Updated Playgroup schedule cycle: ${label}`);
           if (dateChanged) {
               n.bookings.filter((booking) => booking.program === "playgroup" && booking.cohortId === id && ["pending", "awaiting_admin"].includes(booking.status)).forEach((booking) => {
                   const priorAssignments = booking.tutorAssignments || {};
@@ -1140,6 +1063,7 @@ export function createBusinessActions({ get, mutate }) {
               [...new Set(Object.values(target.tutorAssignments || {}))].forEach((tutorId) => pushNotif(n, tutorId, `The Playgroup cycle ${cohort.label} was cancelled by the administrator.`, ["web", "email"]));
           });
           n.cohorts = n.cohorts.filter((item) => item.id !== id);
+          logAct(n, actingAdminIdOf(n), "booking", `Deleted Playgroup schedule cycle: ${cohort.label}`);
       });
       return { ok: true };
   },
@@ -1155,6 +1079,7 @@ export function createBusinessActions({ get, mutate }) {
           target.tutorId = tutorId;
           target.tutorAssignments = Object.fromEntries(target.dates.map((date) => [date, tutorId]));
           target.tutorAssignmentStatus = "Admin-Assigned";
+          logAct(n, actingAdminIdOf(n), "match", `Assigned ${nameOf(n, tutorId)} to ${nameOf(n, target.tuteeId)}'s ${target.cohortId ? n.cohorts.find((item) => item.id === target.cohortId)?.label || "Playgroup" : "Playgroup"} booking for ${(target.dates || []).map(fmtDate).join(", ")}`);
           pushNotif(n, target.tuteeId, `A tutor has been assigned to your Playgroup booking: ${firstNameOf(n, tutorId)}. Booking status remains ${target.status}.`, ["web", "email", "sms"]);
       });
       return { ok: true };
@@ -1172,6 +1097,9 @@ export function createBusinessActions({ get, mutate }) {
       mutate((n) => {
           const targetCohort = n.cohorts.find((item) => item.id === cohortId);
           targetCohort.weekdayTutorIds = { ...(targetCohort.weekdayTutorIds || {}), [weekdayNumber]: tutorId };
+          const affectedBookings = n.bookings.filter((booking) => booking.program === "playgroup" && booking.cohortId === cohortId && ["pending", "approved", "confirmed"].includes(booking.status));
+          const affectedTutees = [...new Set(affectedBookings.map((booking) => nameOf(n, booking.tuteeId)))];
+          logAct(n, actingAdminIdOf(n), "match", `Assigned ${nameOf(n, tutorId)} to ${targetCohort.label} ${["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][weekdayNumber]} sessions${affectedTutees.length ? ` for ${affectedTutees.join(", ")}` : ""}`);
           n.bookings.filter((booking) => booking.program === "playgroup" && booking.cohortId === cohortId && ["pending", "approved", "confirmed"].includes(booking.status)).forEach((booking) => {
               booking.tutorAssignments ||= {};
               booking.dates.filter((date) => date >= todayISO() && weekday(date) === Number(weekdayNumber)).forEach((date) => { booking.tutorAssignments[date] = tutorId; });
@@ -1191,6 +1119,8 @@ export function createBusinessActions({ get, mutate }) {
       mutate((n) => {
           const target = n.bookings.find((b) => b.id === bookingId);
           target.status = "to_pay"; target.bookingStatus = "to_pay"; target.paymentStatus = "unpaid"; target.paymentDeadlineAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(); target.expiresAt = target.paymentDeadlineAt; target.tutorAssignmentStatus = "Confirmed";
+          const assignedSummary = assignedTutorIds.map((tutorId) => `${nameOf(n, tutorId)} (${target.dates.filter((date) => target.tutorAssignments[date] === tutorId).length} sessions)`).join(", ");
+          logAct(n, actingAdminIdOf(n), "booking", `Approved ${nameOf(n, target.tuteeId)}'s Playgroup schedule booking for ${target.cohortId ? n.cohorts.find((cohort) => cohort.id === target.cohortId)?.label || "cohort" : "cohort"}; assigned ${assignedSummary}`);
           pushNotif(n, target.tuteeId, `Your Playgroup booking was approved. Please submit payment within 48 hours to confirm all 12 sessions.`, ["web", "email", "sms"]);
           assignedTutorIds.forEach((tutorId) => {
               const tutorDates = target.dates.filter((date) => target.tutorAssignments[date] === tutorId);
@@ -1210,6 +1140,7 @@ export function createBusinessActions({ get, mutate }) {
       if (d.cohorts.some((cohort) => cohortSessionDates(cohort).some((date) => dateSet.has(date)))) return { ok: false, error: "Those cycle dates overlap another Playgroup cohort. Choose different dates." };
       mutate((n) => {
           n.cohorts.push({ ...c, label, weekdays: [1, 3, 5], time: "10:00", capacity: 6, sessionsCount: 12, modality: "face-to-face", id: uid("pg"), enrolled: [] });
+          logAct(n, actingAdminIdOf(n), "booking", `Created Playgroup schedule cycle: ${label}`);
       });
       return { ok: true };
   },
@@ -1224,29 +1155,10 @@ export function createBusinessActions({ get, mutate }) {
           });
       });
   },
-  updatePurchase(id, status) {
-      if (!["paid", "released"].includes(status))
-          return { ok: false, error: "Choose a valid order status." };
-      const purchase = get().purchases.find((x) => x.id === id);
-      if (!purchase)
-          return { ok: false, error: "Order not found." };
-      if ((status === "paid" && purchase.status !== "pending") || (status === "released" && purchase.status !== "paid"))
-          return { ok: false, error: "Orders must be paid before release." };
-      mutate((n) => {
-          const p = n.purchases.find((x) => x.id === id);
-          p.status = status;
-          if (status === "paid") {
-              logAct(n, adminIdOf(n), "other", `Marked payment from ${nameOf(n, p.tuteeId)} as paid`);
-              logAct(n, p.tuteeId, "other", "Payment marked as paid");
-          }
-          pushNotif(n, p.tuteeId, `Your order is now marked "${status}".`, ["web", "email"]);
-      });
-      return { ok: true };
-  },
   addMaterial(m) {
       mutate((n) => {
           n.materials.unshift({ ...m, id: uid("mat"), uploadedAt: nowISO(), revoked: false });
-          logAct(n, adminIdOf(n), "upload", `Uploaded learning material: ${m.title}`);
+          logAct(n, actingAdminIdOf(n), "upload", `Uploaded learning material: ${m.title}`);
           if (m.allowTutees)
               n.tutees.forEach((t) => pushNotif(n, t.userId, `New learning material available: ${m.title}`, ["web"]));
           if (m.allowTutors)
@@ -1256,12 +1168,16 @@ export function createBusinessActions({ get, mutate }) {
   updateMaterial(id, p) {
       mutate((n) => {
           const m = n.materials.find((x) => x.id === id);
-          if (m)
+          if (m) {
               Object.assign(m, p);
+              logAct(n, actingAdminIdOf(n), "upload", `Updated learning material: ${m.title}`);
+          }
       });
   },
   deleteMaterial(id) {
       mutate((n) => {
+          const material = n.materials.find((m) => m.id === id);
+          if (material) logAct(n, actingAdminIdOf(n), "upload", `Removed learning material: ${material.title}`);
           n.materials = n.materials.filter((m) => m.id !== id);
       });
   },

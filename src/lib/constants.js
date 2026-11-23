@@ -70,12 +70,6 @@ export const PROGRAMS = {
         color: "bg-coral-100 text-coral-600",
     },
 };
-export const SHOP_ITEMS = [
-    { sku: "shirt", name: "Whizzkids Shirt (additional)", price: 350 },
-    { sku: "workbook", name: "Workbook", price: 450 },
-    { sku: "free-shirt", name: "Welcome Shirt (free for new enrollees)", price: 0 },
-    { sku: "reader", name: "Phonics Reader Set", price: 600 },
-];
 export const CENTER = {
     name: "Whizzkids Academic Center",
     address: "Dasmariñas, Cavite, Philippines",

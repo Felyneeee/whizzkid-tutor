@@ -65,6 +65,13 @@ export async function POST(request) {
     target.tutorAssignments = assignments;
     const assignedTutorIds = [...new Set(Object.values(assignments))];
     target.tutorId = assignedTutorIds.length === 1 ? assignedTutorIds[0] : undefined;
+    nextState.activities ??= [];
+    const assignedSummary = assignedTutorIds.map((tutorId) => {
+      const tutorDates = target.dates.filter((date) => assignments[date] === tutorId);
+      return `${state.tutors.find((tutor) => tutor.userId === tutorId)?.fullName || tutorId} (${tutorDates.length} session${tutorDates.length === 1 ? "" : "s"}, starting ${fmtDate(tutorDates[0])})`;
+    }).join(", ");
+    const tuteeName = state.tutees.find((tutee) => tutee.userId === target.tuteeId)?.fullName || target.tuteeId;
+    nextState.activities.unshift({ id: uid("a"), userId: user.id, kind: "booking", text: `Approved ${tuteeName}'s Playgroup schedule booking${cohort ? ` for ${cohort.label}` : ""}; assigned ${assignedSummary}`, at: nowISO() });
     if (cohort) {
       cohort.enrolled ||= [];
       if (!cohort.enrolled.includes(target.tuteeId)) cohort.enrolled.push(target.tuteeId);

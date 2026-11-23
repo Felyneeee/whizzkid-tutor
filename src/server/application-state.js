@@ -252,7 +252,8 @@ export async function initializeApplicationState(importedState, user) {
 }
 
 export function stateVisibleToUser(state, user) {
-  if (user.role === "admin") return state;
+  const visibleNotifications = (state.notifications ?? []).filter((item) => !/purchase|purchase order|order placed|your order is now marked|paid purchase/i.test(item.text || ""));
+  if (user.role === "admin") return { ...state, notifications: visibleNotifications };
   const visible = structuredClone(state);
   const ownSessions = state.sessions.filter((session) => session.tuteeId === user.id || session.tutorId === user.id);
   const ownBookingIds = new Set(ownSessions.map((session) => session.bookingId));
@@ -285,8 +286,7 @@ export function stateVisibleToUser(state, user) {
   }
   visible.leaves = user.role === "tutor" ? state.leaves.filter((item) => item.tutorId === user.id) : [];
   visible.messages = state.messages.filter((message) => message.threadId === user.id);
-  visible.notifications = state.notifications.filter((item) => item.userId === user.id);
-  visible.purchases = state.purchases.filter((item) => item.tuteeId === user.id);
+  visible.notifications = visibleNotifications.filter((item) => item.userId === user.id);
   visible.materials = state.materials.filter((item) => !item.revoked && (!Array.isArray(item.allowedUserIds) || item.allowedUserIds.length === 0 || item.allowedUserIds.includes(user.id)) && (user.role === "tutor" ? item.allowTutors : item.allowTutees));
   visible.materialLogs = state.materialLogs.filter((item) => item.userId === user.id);
   visible.activities = state.activities.filter((item) => item.userId === user.id && item.kind !== "rating");
