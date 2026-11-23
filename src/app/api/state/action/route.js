@@ -48,6 +48,12 @@ function logActivity(state, userId, text) {
   state.activities.unshift({ id: uid("a"), userId, kind: "other", text, at: nowISO() });
 }
 
+function personName(state, id) {
+  const profile = state.tutors.find((entry) => entry.userId === id) || state.tutees.find((entry) => entry.userId === id);
+  const account = state.users.find((entry) => entry.id === id);
+  return profile?.fullName || (account?.role === "admin" ? "System Admin" : account?.username) || "User";
+}
+
 export async function POST(request) {
   let connection;
   try {
@@ -292,7 +298,7 @@ export async function POST(request) {
           booking.expiresAt = booking.paymentDeadlineAt;
           booking.paymentAmount = booking.totalFee;
           nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, text: `A tutor was matched to your ${booking.subject} booking. Please submit payment proof within 48 hours to confirm your reservation.`, at: nowISO(), read: false, channels: ["web", "email", "sms"] });
-          for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `${booking.subject} booking from ${booking.tuteeId} was matched and is awaiting payment within 48 hours.`, at: nowISO(), read: false, channels: ["web"] });
+          for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `${booking.subject} booking from ${personName(nextState, booking.tuteeId)} was matched and is awaiting payment within 48 hours.`, at: nowISO(), read: false, channels: ["web"] });
         }
       }
       if (booking.status !== "to_pay" || !booking.paymentDeadlineAt) continue;
@@ -306,12 +312,12 @@ export async function POST(request) {
           if (cohort) cohort.enrolled = (cohort.enrolled || []).filter((tuteeId) => tuteeId !== booking.tuteeId);
         }
         for (const session of nextState.sessions.filter((entry) => entry.bookingId === booking.id && ["awaiting_payment", "scheduled"].includes(entry.status))) session.status = "cancelled";
-        const text = `Payment deadline expired for ${booking.subject} booking from ${booking.tuteeId}; its reserved capacity was released.`;
+        const text = `Payment deadline expired for ${booking.subject} booking from ${personName(nextState, booking.tuteeId)}; its reserved capacity was released.`;
         nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, text: "Your booking reservation expired because payment proof was not submitted before the 48-hour deadline.", at: nowISO(), read: false, channels: ["web", "email"] });
         for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text, at: nowISO(), read: false, channels: ["web"] });
       } else if (!booking.expirationWarningAt && expiresAt - now <= warningHours * 3600000) {
         booking.expirationWarningAt = nowISO();
-        for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `Payment deadline for ${booking.subject} booking from ${booking.tuteeId} is approaching.`, at: nowISO(), read: false, channels: ["web"] });
+        for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `Payment deadline for ${booking.subject} booking from ${personName(nextState, booking.tuteeId)} is approaching.`, at: nowISO(), read: false, channels: ["web"] });
       }
     }
     const actions = createBusinessActions({
@@ -339,7 +345,7 @@ export async function POST(request) {
         const cohort = nextState.cohorts.find((entry) => entry.id === booking.cohortId);
         if (cohort) cohort.enrolled = (cohort.enrolled || []).filter((tuteeId) => tuteeId !== booking.tuteeId);
         nextState.notifications.unshift({ id: uid("n"), userId: user.id, text: `Your Playgroup booking${cohort ? ` for ${cohort.label}` : ""} was cancelled and its slot released.`, at: nowISO(), read: false, channels: ["web", "email"] });
-        for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `${user.id} cancelled their Playgroup booking${cohort ? ` for ${cohort.label}` : ""} before payment.`, at: nowISO(), read: false, channels: ["web"] });
+        for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `${personName(nextState, user.id)} cancelled their Playgroup booking${cohort ? ` for ${cohort.label}` : ""} before payment.`, at: nowISO(), read: false, channels: ["web"] });
         return { ok: true };
       }
       : body.action === "cancelTutorialBooking" && permission.args[0]
@@ -351,7 +357,7 @@ export async function POST(request) {
         booking.paymentProof = undefined;
         nextState.sessions.filter((session) => session.bookingId === bookingId && session.status !== "completed").forEach((session) => { session.status = "cancelled"; });
         nextState.notifications.unshift({ id: uid("n"), userId: user.id, text: `Your ${booking.subject} booking was cancelled and its reservation was released.`, at: nowISO(), read: false, channels: ["web", "email"] });
-        for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `${user.id} cancelled a ${booking.subject} booking before completing payment.`, at: nowISO(), read: false, channels: ["web"] });
+        for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `${personName(nextState, user.id)} cancelled a ${booking.subject} booking before completing payment.`, at: nowISO(), read: false, channels: ["web"] });
         return { ok: true };
       }
       : body.action === "requestBookingReschedule"
@@ -365,7 +371,7 @@ export async function POST(request) {
         if (proposedSessions.some((entry) => !entry)) return { ok: false, error: "A selected session is no longer available to reschedule." };
         booking.rescheduleProposal = { ...proposedSessions[0], sessions: proposedSessions, reason, requestedAt: nowISO() };
         logActivity(nextState, user.id, `Requested a schedule change for ${booking.subject} program`);
-        for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `${user.id} requested a reschedule for ${booking.subject} (${proposedSessions.map((item) => `${item.date} at ${item.time}`).join(", ")}). Reason: ${reason}`, at: nowISO(), read: false, channels: ["web", "email"] });
+        for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `${personName(nextState, user.id)} requested a reschedule for ${booking.subject} (${proposedSessions.map((item) => `${item.date} at ${item.time}`).join(", ")}). Reason: ${reason}`, at: nowISO(), read: false, channels: ["web", "email"] });
         return { ok: true };
       }
       : body.action === "reviewBookingReschedule"
@@ -399,12 +405,13 @@ export async function POST(request) {
               booking.scheduleHistory = [...(booking.scheduleHistory || []), { old: oldSchedule, updated: { date: item.date, time: item.time, tutorId: item.tutorId }, changedAt: nowISO() }];
             }
             nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, text: `Your reschedule request was approved: ${proposals.map((item) => `${item.date} at ${item.time}`).join(", ")}.`, at: nowISO(), read: false, channels: ["web", "email"] });
-            for (const tutorId of new Set([...oldTutorIds, ...proposals.map((item) => item.tutorId)])) nextState.notifications.unshift({ id: uid("n"), userId: tutorId, text: `The reschedule for ${booking.subject} booking from ${booking.tuteeId} was approved.`, at: nowISO(), read: false, channels: ["web", "email"] });
+            for (const tutorId of new Set([...oldTutorIds, ...proposals.map((item) => item.tutorId)])) nextState.notifications.unshift({ id: uid("n"), userId: tutorId, text: `The reschedule for ${booking.subject} booking from ${personName(nextState, booking.tuteeId)} was approved.`, at: nowISO(), read: false, channels: ["web", "email"] });
           } else {
             nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, text: "Your reschedule request was declined. The original session time remains unchanged.", at: nowISO(), read: false, channels: ["web", "email"] });
-            for (const tutorId of new Set(oldTutorIds)) nextState.notifications.unshift({ id: uid("n"), userId: tutorId, text: `The reschedule request for ${booking.subject} booking from ${booking.tuteeId} was declined; your original session remains scheduled.`, at: nowISO(), read: false, channels: ["web", "email"] });
+            for (const tutorId of new Set(oldTutorIds)) nextState.notifications.unshift({ id: uid("n"), userId: tutorId, text: `The reschedule request for ${booking.subject} booking from ${personName(nextState, booking.tuteeId)} was declined; your original session remains scheduled.`, at: nowISO(), read: false, channels: ["web", "email"] });
           }
-          logActivity(nextState, user.id, `${approve ? "Approved" : "Declined"} ${booking.tuteeId}'s ${booking.subject} schedule change request: ${(approve ? proposals : []).map((item) => `${item.date} at ${item.time}`).join(", ") || "original schedule retained"}`);
+          const tuteeName = personName(nextState, booking.tuteeId);
+          logActivity(nextState, user.id, `${approve ? "Approved" : "Declined"} ${tuteeName}'s ${booking.subject} schedule change request: ${(approve ? proposals : []).map((item) => `${item.date} at ${item.time}`).join(", ") || "original schedule retained"}`);
           booking.rescheduleProposal = undefined;
           return { ok: true };
         }
@@ -418,7 +425,7 @@ export async function POST(request) {
         booking.expirationWarningAt = undefined;
         logActivity(nextState, user.id, `Submitted payment receipt for ${booking.subject} program`);
         nextState.notifications.unshift({ id: uid("n"), userId: user.id, text: `Payment proof received for ${booking.subject}. Your reservation remains active while it is reviewed.`, at: nowISO(), read: false, channels: ["web", "email"] });
-        for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `Payment proof for ${booking.subject} booking from ${user.id} is awaiting verification.`, at: nowISO(), read: false, channels: ["web", "email"] });
+        for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `Payment proof for ${booking.subject} booking from ${personName(nextState, user.id)} is awaiting verification.`, at: nowISO(), read: false, channels: ["web", "email"] });
         return { ok: true };
       }
       : body.action === "reviewBookingPayment"
@@ -431,12 +438,12 @@ export async function POST(request) {
             booking.status = "confirmed";
             booking.paymentStatus = "paid";
             booking.paymentApprovedAt = nowISO();
-            logActivity(nextState, user.id, `Approved ${booking.subject} payment receipt from ${booking.tuteeId}`);
+            logActivity(nextState, user.id, `Approved ${booking.subject} payment receipt from ${personName(nextState, booking.tuteeId)}`);
             for (const session of nextState.sessions.filter((entry) => entry.bookingId === booking.id && entry.status === "awaiting_payment")) session.status = "scheduled";
             nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, text: `Your payment was approved. ${booking.subject} booking is confirmed and now appears on your schedule.`, at: nowISO(), read: false, channels: ["web", "email"] });
-            for (const tutorId of new Set(nextState.sessions.filter((entry) => entry.bookingId === booking.id).map((entry) => entry.tutorId))) nextState.notifications.unshift({ id: uid("n"), userId: tutorId, text: `Payment for ${booking.subject} booking from ${booking.tuteeId} was approved; the sessions are confirmed.`, at: nowISO(), read: false, channels: ["web", "email"] });
+            for (const tutorId of new Set(nextState.sessions.filter((entry) => entry.bookingId === booking.id).map((entry) => entry.tutorId))) nextState.notifications.unshift({ id: uid("n"), userId: tutorId, text: `Payment for ${booking.subject} booking from ${personName(nextState, booking.tuteeId)} was approved; the sessions are confirmed.`, at: nowISO(), read: false, channels: ["web", "email"] });
           } else {
-            logActivity(nextState, user.id, `Rejected ${booking.subject} payment receipt from ${booking.tuteeId}${note ? `: ${note}` : ""}`);
+            logActivity(nextState, user.id, `Rejected ${booking.subject} payment receipt from ${personName(nextState, booking.tuteeId)}${note ? `: ${note}` : ""}`);
             booking.status = "to_pay";
             booking.paymentStatus = "proof_rejected";
             booking.paymentProofHistory = [...(booking.paymentProofHistory || []), {
@@ -486,7 +493,7 @@ export async function POST(request) {
         booking.paymentAmount = booking.totalFee;
         for (const session of sessions) session.status = "scheduled";
         nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, text: `A tutor was matched to your ${booking.subject} booking. Please submit payment proof within 48 hours to confirm your reservation.`, at: nowISO(), read: false, channels: ["web", "email", "sms"] });
-        for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `${booking.subject} booking from ${booking.tuteeId} was matched and is awaiting payment within 48 hours.`, at: nowISO(), read: false, channels: ["web"] });
+        for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `${booking.subject} booking from ${personName(nextState, booking.tuteeId)} was matched and is awaiting payment within 48 hours.`, at: nowISO(), read: false, channels: ["web"] });
       }
     }
     queueCompletedReadingBookings(nextState);

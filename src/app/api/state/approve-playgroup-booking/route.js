@@ -68,9 +68,13 @@ export async function POST(request) {
     nextState.activities ??= [];
     const assignedSummary = assignedTutorIds.map((tutorId) => {
       const tutorDates = target.dates.filter((date) => assignments[date] === tutorId);
-      return `${state.tutors.find((tutor) => tutor.userId === tutorId)?.fullName || tutorId} (${tutorDates.length} session${tutorDates.length === 1 ? "" : "s"}, starting ${fmtDate(tutorDates[0])})`;
+      const tutor = state.tutors.find((entry) => entry.userId === tutorId);
+      const account = state.users.find((entry) => entry.id === tutorId);
+      return `${tutor?.fullName || account?.username || "Tutor"} (${tutorDates.length} session${tutorDates.length === 1 ? "" : "s"}, starting ${fmtDate(tutorDates[0])})`;
     }).join(", ");
-    const tuteeName = state.tutees.find((tutee) => tutee.userId === target.tuteeId)?.fullName || target.tuteeId;
+    const tutee = state.tutees.find((entry) => entry.userId === target.tuteeId);
+    const tuteeAccount = state.users.find((entry) => entry.id === target.tuteeId);
+    const tuteeName = tutee?.fullName || tuteeAccount?.username || "Tutee";
     nextState.activities.unshift({ id: uid("a"), userId: user.id, kind: "booking", text: `Approved ${tuteeName}'s Playgroup schedule booking${cohort ? ` for ${cohort.label}` : ""}; assigned ${assignedSummary}`, at: nowISO() });
     if (cohort) {
       cohort.enrolled ||= [];

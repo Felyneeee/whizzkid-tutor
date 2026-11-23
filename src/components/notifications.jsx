@@ -22,13 +22,13 @@ export function notificationDisplayText(notification, db) {
       : user.role === "tutee"
         ? db.tutees?.find((entry) => entry.userId === user.id)
         : null;
-    names.set(user.id, profile?.fullName || user.username || user.id);
+    names.set(user.id, profile?.fullName || user.username || (user.role === "admin" ? "System Admin" : user.role === "tutor" ? "Tutor" : "Tutee"));
   }
   for (const [id, name] of [...names.entries()].sort(([a], [b]) => b.length - a.length)) {
     const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     text = text.replace(new RegExp(`(^|[^\\w-])${escapedId}(?=$|[^\\w-])`, "g"), (_match, prefix) => `${prefix}${name}`);
   }
-  return text;
+  return text.replace(/\b[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\b/gi, "a user");
 }
 
 export function NotificationIcon({ notification, className = "" }) {

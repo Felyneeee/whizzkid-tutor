@@ -21,8 +21,11 @@ export function createBusinessActions({ get, mutate, actorId }) {
   const logAct = (d, userId, kind, text) => d.activities.unshift({ id: uid("a"), userId, kind, text, at: nowISO() });
   const adminIdOf = (d) => d.users.find((u) => u.role === "admin")?.id || ADMIN_ID;
   const actingAdminIdOf = (d) => d.users.some((u) => u.id === actorId && u.role === "admin") ? actorId : adminIdOf(d);
-  const nameOf = (d, id) => d.tutees.find((t) => t.userId === id)?.fullName || d.tutors.find((t) => t.userId === id)?.fullName ||
-    (d.users.find((u) => u.id === id)?.role === "admin" || id === ADMIN_ID ? "Admin" : id);
+  const nameOf = (d, id) => {
+    const profile = d.tutees.find((t) => t.userId === id) || d.tutors.find((t) => t.userId === id);
+    const account = d.users.find((u) => u.id === id);
+    return profile?.fullName || (account?.role === "admin" || id === ADMIN_ID ? "System Admin" : account?.username) || (account?.role === "tutor" ? "Tutor" : account?.role === "tutee" ? "Tutee" : "User");
+  };
   const firstNameOf = (d, id) => firstName(nameOf(d, id), "User");
   const playgroupTutorFree = (d, tutorId, dates, ignoreBookingId, ignoreCohortId) => dates.every((date) => {
     const overlappingSession = d.sessions.some((session) => {

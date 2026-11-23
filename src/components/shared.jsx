@@ -1,7 +1,8 @@
 "use client";
+import Image from "next/image";
 import { Activity, BookOpen, Cake, CalendarDays, CreditCard, FileText, LogIn, MessageCircle, Send, Star, UserRoundCheck } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { firstName, fmtDateTime } from "@/lib/dates";
+import { DAY_NAMES, firstName, fmtDateTime, fmtTime, MONTH_NAMES } from "@/lib/dates";
 import { useStore } from "@/lib/store";
 import Link from "next/link";
 import { NotificationIcon, notificationDestination, notificationDisplayText } from "./notifications";
@@ -48,7 +49,7 @@ function Thread({ threadId, meId, title }) {
     const s = useStore();
     const [text, setText] = useState("");
     const box = useRef(null);
-    const msgs = s.db.messages.filter((m) => m.threadId === threadId);
+    const msgs = s.db.messages.filter((m) => m.threadId === threadId).slice().sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
     useEffect(() => {
         s.markMessageNotificationsRead(meId, threadId);
         // The store API object changes when the DB changes; only re-run when the
@@ -90,42 +91,75 @@ function Thread({ threadId, meId, title }) {
       </form>
     </Card>);
 }
+function conversationTime(value) {
+    const date = new Date(value);
+    const age = Math.max(0, Date.now() - date.getTime());
+    if (age < 24 * 60 * 60 * 1000) return fmtTime(`${date.getHours()}:${String(date.getMinutes()).padStart(2, "0")}`);
+    if (age < 7 * 24 * 60 * 60 * 1000) return DAY_NAMES[date.getDay()];
+    return `${MONTH_NAMES[date.getMonth()].slice(0, 3)} ${date.getDate()}`;
+}
 export function ChatView({ meId, isAdmin }) {
     const s = useStore();
-    const people = useMemo(() => [
-        ...s.db.tutees.map((t) => ({ id: t.userId, name: t.fullName || s.db.users.find((u) => u.id === t.userId)?.username || "Tutee", role: "Tutee" })),
-        ...s.db.tutors.map((t) => ({ id: t.userId, name: t.fullName, role: "Tutor" })),
-    ], [s.db.tutees, s.db.tutors, s.db.users]);
+    const people = useMemo(() => {
+        const applicants = s.db.tutors.filter((tutor) => ["pending_review", "interview", "pending_verification"].includes(tutor.status));
+        const activeTutors = s.db.tutors.filter((tutor) => !["pending_review", "interview", "pending_verification"].includes(tutor.status));
+        const contacts = [
+            ...activeTutors.map((profile) => ({ id: profile.userId, name: profile.fullName, role: "Tutor" })),
+            ...s.db.tutees.map((profile) => ({ id: profile.userId, name: profile.fullName, role: "Tutee" })),
+            ...applicants.map((profile) => ({ id: profile.userId, name: profile.fullName, role: "Applicant" })),
+        ];
+        return contacts.map((person) => {
+            const latestMessage = s.db.messages.reduce((latest, message) => message.threadId === person.id && (!latest || new Date(message.at) > new Date(latest.at)) ? message : latest, null);
+            const unreadCount = s.db.notifications.filter((notification) => notification.userId === meId && !notification.read && notification.text.startsWith("New message") && notification.threadId === person.id).length;
+            const account = s.db.users.find((user) => user.id === person.id);
+            return { ...person, name: person.name || account?.username || person.role, latestMessage, unreadCount };
+        }).sort((a, b) => (new Date(b.latestMessage?.at || 0) - new Date(a.latestMessage?.at || 0)) || a.name.localeCompare(b.name));
+    }, [s.db.tutees, s.db.tutors, s.db.users, s.db.messages, s.db.notifications, meId]);
     const [sel, setSel] = useState(null);
+    const [roleTab, setRoleTab] = useState("All");
     if (!isAdmin) {
         return (<>
         <PageHeader title="Chat with Admin" subtitle="Messages are delivered instantly to the admin team."/>
         <Thread threadId={meId} meId={meId} title="Whizzkids Admin"/>
       </>);
     }
-    const withMsgs = people.filter((p) => s.db.messages.some((m) => m.threadId === p.id));
-    const activeId = sel ?? withMsgs[0]?.id ?? people[0]?.id;
+    const roleTabs = ["All", "Unread"];
+    const filteredPeople = people.filter((person) => roleTab === "All" || person.unreadCount > 0);
+    const selectedPerson = people.find((person) => person.id === sel);
+    const activeId = selectedPerson?.id || null;
     return (<>
-      <PageHeader title="Messages" subtitle="Chat with tutees/parents and tutors."/>
-      <div className="grid gap-4 md:grid-cols-[260px_1fr]">
-        <Card className="max-h-[70vh] space-y-1 overflow-y-auto !p-2">
-          {people.map((p) => {
-            const last = [...s.db.messages].reverse().find((m) => m.threadId === p.id);
-            return (<button key={p.id} onClick={() => setSel(p.id)} className={cn("w-full rounded-xl px-3 py-2 text-left text-sm", activeId === p.id ? "bg-brand-50" : "hover:bg-slate-50")}>
-                <div className="flex items-center justify-between font-bold">
-                  <span className="truncate">{p.name || "(unnamed)"}</span>
-                  <Badge status={p.role === "Tutor" ? "online" : "face-to-face"}>{p.role}</Badge>
+      <PageHeader title="Messages" subtitle="Conversations are ordered by latest activity. Each name shows the person’s role."/>
+      <div className="grid gap-4 md:grid-cols-[300px_1fr]">
+        <Card className="flex max-h-[70vh] min-h-[420px] flex-col !p-2">
+          <div className="grid grid-cols-2 gap-1 border-b border-slate-100 p-1">
+            {roleTabs.map((tab) => {
+              const count = tab === "All" ? people.length : people.filter((person) => person.unreadCount > 0).length;
+              return <button key={tab} type="button" onClick={() => { setRoleTab(tab); setSel(null); }} aria-pressed={roleTab === tab} className={cn("flex min-w-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg px-2 py-2 text-xs font-bold transition", roleTab === tab ? "bg-brand-100 text-brand-800" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800")}>
+                <span>{tab}</span><span className={cn("text-[10px]", tab === "Unread" && count > 0 ? "text-brand-700" : "opacity-70")}>{count}</span>
+              </button>;
+            })}
+          </div>
+          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pt-1">
+          {filteredPeople.length ? filteredPeople.map((p) => {
+            const last = p.latestMessage;
+            return (<button key={p.id} onClick={() => setSel(p.id)} className={cn("w-full rounded-xl border px-3 py-2 text-left text-sm", p.unreadCount ? "border-brand-200 bg-brand-50 hover:bg-brand-100" : activeId === p.id ? "border-brand-100 bg-brand-50" : "border-transparent hover:bg-slate-50")}>
+                <div className="flex min-w-0 items-center justify-between gap-2 font-bold">
+                  <span className="flex min-w-0 items-center gap-2 truncate"><span className={cn("h-2 w-2 shrink-0 rounded-full", p.unreadCount ? "bg-brand-600" : "bg-transparent")}/><span className={p.unreadCount ? "truncate font-extrabold text-slate-900" : "truncate"}>{p.name || "(unnamed)"}</span><span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-semibold text-slate-600">{p.role}</span></span>
+                  {last && <time dateTime={last.at} className="ml-2 shrink-0 text-[10px] font-medium text-slate-500">{conversationTime(last.at)}</time>}
                 </div>
-                <div className="mt-0.5 truncate text-xs text-slate-400">{last?.text || "No messages"}</div>
+                <div className="mt-1 flex min-w-0 items-center justify-between gap-2 text-xs text-slate-600">
+                  <span className="truncate">{last ? `${last.fromId === meId ? "You: " : ""}${last.text}` : "No messages yet"}</span>
+                </div>
               </button>);
-        })}
+          }) : <p className="px-3 py-6 text-center text-sm text-slate-400">{roleTab === "Unread" ? "No unread conversations yet." : "No conversations yet."}</p>}
+          </div>
         </Card>
-        {activeId ? <Thread threadId={activeId} meId={meId} title={people.find((p) => p.id === activeId)?.name || "Chat"}/> : <Empty>No users yet.</Empty>}
+        {activeId ? <Thread key={activeId} threadId={activeId} meId={meId} title={selectedPerson.name || "Chat"}/> : <Card className="grid min-h-[420px] place-items-center"><Empty>Select a conversation to begin.</Empty></Card>}
       </div>
     </>);
 }
 const HISTORY_ACTION_GROUPS = [
-    { role: "admin", label: "Admin Actions", actions: [["payments", "Payments"], ["schedule", "Program Schedule"], ["tutor_schedule", "Tutor Schedule"], ["chats", "Chats"], ["matches", "Matches"], ["records", "Records"], ["applications", "Applications"], ["leave", "Leave Requests"], ["logins", "Logins"]] },
+    { role: "admin", label: "Admin Actions", actions: [["payments", "Payments"], ["schedule", "Program Schedule"], ["tutor_schedule", "Tutor Schedule"], ["chats", "Chats"], ["matches", "Matches"], ["records", "Learning Materials"], ["applications", "Applications"], ["leave", "Leave Requests"], ["logins", "Logins"]] },
     { role: "tutee", label: "Tutee Actions", actions: [["schedule", "Schedule"], ["payments", "Payments"], ["chats", "Chats"], ["records", "Ratings & Records"], ["logins", "Logins"]] },
     { role: "tutor", label: "Tutor Actions", actions: [["leave", "Leave Requests"], ["chats", "Chats"], ["logins", "Logins"], ["matches", "Matches"], ["records", "Records"]] },
     { role: "applicant", label: "Applicant Actions", actions: [["applications", "Applications"], ["chats", "Chats"], ["logins", "Logins"]] },
@@ -170,6 +204,26 @@ function historyIcon(action) {
     if (action === "records") return <Star className={classes} aria-hidden="true"/>;
     if (action === "bookings") return <BookOpen className={classes} aria-hidden="true"/>;
     return <Activity className={classes} aria-hidden="true"/>;
+}
+function readableHistoryText(value, db) {
+    const namesById = new Map();
+    for (const profile of [...(db.tutors || []), ...(db.tutees || [])]) {
+        if (profile.userId && profile.fullName) namesById.set(profile.userId, profile.fullName);
+    }
+    for (const user of db.users || []) {
+        if (!namesById.has(user.id)) namesById.set(user.id, user.role === "admin" ? "System Admin" : user.username || (user.role === "tutor" ? "Tutor" : user.role === "tutee" ? "Tutee" : "User"));
+    }
+    const readable = [...namesById.entries()].sort(([a], [b]) => b.length - a.length)
+        .reduce((text, [id, name]) => text.split(id).join(name), String(value ?? ""));
+    return readable.replace(/\b[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\b/gi, "a user");
+}
+function HistoryAvatar({ name, photo }) {
+    const [imageFailed, setImageFailed] = useState(false);
+    const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+    return <div className="relative grid h-11 w-11 place-items-center overflow-hidden rounded-full border border-slate-200 bg-slate-50 text-xs font-extrabold text-brand-700" aria-hidden="true">
+      {(!photo || imageFailed) && initials}
+      {photo && !imageFailed && <Image src={photo} alt="" fill sizes="44px" unoptimized className="object-cover" onError={() => setImageFailed(true)} />}
+    </div>;
 }
 export function HistoryView({ userId, isAdmin }) {
     const s = useStore();
@@ -217,18 +271,15 @@ export function HistoryView({ userId, isAdmin }) {
               const tutee = s.db.tutees.find((entry) => entry.userId === a.userId);
               const actorName = tutor?.fullName || tutee?.fullName || (actorRole === "admin" ? "System Admin" : actor?.username || "Unknown User");
               const photo = tutor?.photo || tutee?.photo || "";
-              const initials = actorName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
               const action = historyAction(a);
               return (<Card key={a.id} className="grid grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-3 !p-3">
-                <div className="relative grid h-11 w-11 place-items-center overflow-hidden rounded-full border border-slate-200 bg-slate-50 text-xs font-extrabold text-brand-700" aria-hidden="true">
-                  {initials}{photo && <img src={photo} alt="" className="absolute inset-0 h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />}
-                </div>
+                <HistoryAvatar name={actorName} photo={photo}/>
                 <div className="min-w-0">
                   <p className="flex flex-wrap items-center gap-2 text-sm font-extrabold text-slate-800">
                     <span>{actorName}</span>
                     <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-slate-600">{actorRole}</span>
                   </p>
-                  <p className="mt-1 flex items-start gap-2 text-sm text-slate-700">{historyIcon(action)}<span>{isAdmin ? a.text : hideOtherPartyFullNames(a.text, userId, s.db)}</span></p>
+                  <p className="mt-1 flex items-start gap-2 text-sm text-slate-700">{historyIcon(action)}<span>{isAdmin ? readableHistoryText(a.text, s.db) : hideOtherPartyFullNames(a.text, userId, s.db)}</span></p>
                 </div>
                 <span className="whitespace-nowrap text-right text-xs text-slate-500">{fmtDateTime(a.at)}</span>
               </Card>);
