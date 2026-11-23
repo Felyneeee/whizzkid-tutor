@@ -18,8 +18,8 @@ function sessionSubject(session, booking) {
   const subject = booking?.sessionSlots?.find((slot) => slot.date === session.date && slot.time === session.time)?.subject
     || booking?.sessionSubjects?.[session.date]
     || booking?.subject
-    || "Araling Panipunan";
-  if (subject === "Tutoring") return "Araling Panipunan";
+    || "Araling Panlipunan";
+  if (subject === "Tutoring") return "Araling Panlipunan";
   if (subject === "Mathematics") return "Math";
   if (subject === "Araling Panipunan (AP)" || subject === "AP") return "Araling Panipunan";
   return subject;
