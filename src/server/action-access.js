@@ -4,7 +4,7 @@ const ADMIN_ACTIONS = new Set([
   "notify", "completeAssessment", "scheduleAssessment", "renewReadingAssessment", "scheduleInterview", "evaluateApplicant", "verifyExistingTutor",
   "setTutorPay", "adminEditTutorAvailability", "setTutorWeeklySchedule", "decideLeave",
   "adminLeave", "proposeBookingSchedule", "confirmBooking", "confirmBookingSession", "confirmReadingAssignment", "rejectReadingAssignment", "rejectBooking", "terminateBooking",
-  "completeSession", "reassignSession", "proposeSessionReschedule", "cancelSession", "updateCohort",
+  "reassignSession", "proposeSessionReschedule", "cancelSession", "updateCohort",
   "addCohort", "deleteCohort", "removeFromCohort", "assignPlaygroupBooking", "assignPlaygroupWeekday", "approvePlaygroupBooking", "addMaterial", "updateMaterial", "deleteMaterial",
 ]);
 
@@ -12,7 +12,7 @@ const TUTEE_ACTIONS = new Set([
   "requestAssessment", "cancelAssessment", "cancelTutorialBooking", "bookPlaygroup", "cancelPlaygroupBooking", "submitTutorialBooking",
   "rateSession",
 ]);
-const TUTOR_ACTIONS = new Set(["submitLeave", "checkInSession"]);
+const TUTOR_ACTIONS = new Set(["submitLeave", "checkInSession", "completeSession"]);
 const SHARED_ACTIONS = new Set([
   "markNotificationsRead", "markMessageNotificationsRead", "sendMessage", "logMaterialAccess",
   "saveTuteeProfile", "saveTutorProfile", "decideBookingScheduleProposal",
@@ -23,6 +23,10 @@ function deny(message = "You are not allowed to perform this action.") {
 }
 
 export function authorizeBusinessAction(state, user, action, args) {
+  // Admins retain the existing ability to correct session records. Tutors may
+  // only record attendance for their own scheduled sessions after they end.
+  if (action === "completeSession" && user.role === "admin") return { ok: true, args };
+
   if (ADMIN_ACTIONS.has(action)) {
     if (user.role !== "admin") return deny();
     return { ok: true, args };
@@ -65,6 +69,17 @@ export function authorizeBusinessAction(state, user, action, args) {
     const session = state.sessions.find((entry) => entry.id === safeArgs[0]);
     if (!session || session.tutorId !== user.id) return deny();
     safeArgs[1] = user.id;
+  }
+  if (action === "completeSession") {
+    const session = state.sessions.find((entry) => entry.id === safeArgs[0]);
+    if (!session || session.tutorId !== user.id) return deny();
+    if (session.status !== "scheduled") return deny("Only scheduled sessions can be marked complete or no-show.");
+    if (typeof safeArgs[1] !== "boolean") return deny("Choose whether the student attended the session.");
+    const [hour, minute] = String(session.time).split(":").map(Number);
+    const end = new Date(`${session.date}T00:00:00`);
+    end.setHours(hour, minute + (Number(session.durationMinutes) || 45), 0, 0);
+    if (end > new Date()) return deny("You can record attendance after the session ends.");
+    safeArgs[0] = session.id;
   }
   if (action === "rateSession") {
     const session = state.sessions.find((entry) => entry.id === safeArgs[0]);
