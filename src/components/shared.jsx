@@ -159,7 +159,7 @@ export function ChatView({ meId, isAdmin }) {
     </>);
 }
 const HISTORY_ACTION_GROUPS = [
-    { role: "admin", label: "Admin Actions", actions: [["payments", "Payments"], ["schedule", "Program Schedule"], ["tutor_schedule", "Tutor Schedule"], ["chats", "Chats"], ["matches", "Matches"], ["records", "Learning Materials"], ["applications", "Applications"], ["leave", "Leave Requests"], ["logins", "Logins"]] },
+    { role: "admin", label: "Admin Actions", actions: [["payments", "Payments"], ["schedule", "Program Schedule"], ["tutor_schedule", "Tutor Schedule"], ["profile", "Profile Updates"], ["chats", "Chats"], ["matches", "Matches"], ["records", "Learning Materials"], ["applications", "Applications"], ["leave", "Leave Requests"], ["logins", "Logins"]] },
     { role: "tutee", label: "Tutee Actions", actions: [["schedule", "Schedule"], ["payments", "Payments"], ["chats", "Chats"], ["records", "Ratings & Records"], ["logins", "Logins"]] },
     { role: "tutor", label: "Tutor Actions", actions: [["leave", "Leave Requests"], ["chats", "Chats"], ["logins", "Logins"], ["matches", "Matches"], ["records", "Records"]] },
     { role: "applicant", label: "Applicant Actions", actions: [["applications", "Applications"], ["chats", "Chats"], ["logins", "Logins"]] },
@@ -167,6 +167,7 @@ const HISTORY_ACTION_GROUPS = [
 function historyAction(activity) {
     const kind = typeof activity.kind === "string" ? activity.kind : "";
     const text = String(activity.text ?? "").toLowerCase();
+    if (kind === "profile" || /updated admin profile/.test(text)) return "profile";
     if (/purchase|order/.test(text)) return "retired_purchase";
     if (/tutor pay|payroll|salary|hourly rate/.test(text)) return "retired_payroll";
     if (/availability|weekly tutor schedule/.test(text)) return "tutor_schedule";
@@ -210,6 +211,7 @@ function readableHistoryText(value, db) {
     for (const profile of [...(db.tutors || []), ...(db.tutees || [])]) {
         if (profile.userId && profile.fullName) namesById.set(profile.userId, profile.fullName);
     }
+    for (const profile of db.adminProfiles || []) if (profile.id && profile.fullName) namesById.set(profile.id, profile.fullName);
     for (const user of db.users || []) {
         if (!namesById.has(user.id)) namesById.set(user.id, user.role === "admin" ? "System Admin" : user.username || (user.role === "tutor" ? "Tutor" : user.role === "tutee" ? "Tutee" : "User"));
     }
@@ -269,8 +271,9 @@ export function HistoryView({ userId, isAdmin }) {
               const actorRole = roleForUser(a.userId, a);
               const tutor = s.db.tutors.find((entry) => entry.userId === a.userId);
               const tutee = s.db.tutees.find((entry) => entry.userId === a.userId);
-              const actorName = tutor?.fullName || tutee?.fullName || (actorRole === "admin" ? "System Admin" : actor?.username || "Unknown User");
-              const photo = tutor?.photo || tutee?.photo || "";
+              const adminProfile = s.db.adminProfiles?.find((entry) => entry.id === a.userId);
+              const actorName = tutor?.fullName || tutee?.fullName || adminProfile?.fullName || (actorRole === "admin" ? "System Admin" : actor?.username || "Unknown User");
+              const photo = tutor?.photo || tutee?.photo || adminProfile?.photo || "";
               const action = historyAction(a);
               return (<Card key={a.id} className="grid grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-3 !p-3">
                 <HistoryAvatar name={actorName} photo={photo}/>

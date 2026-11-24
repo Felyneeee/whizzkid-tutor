@@ -96,10 +96,14 @@ export function createBusinessActions({ get, mutate, actorId }) {
       mutate((n) => {
           n.adminProfiles ??= [];
           const profile = n.adminProfiles.find((entry) => entry.id === userId);
+          const before = profile ? { ...profile } : {};
           if (profile) Object.assign(profile, p);
           else n.adminProfiles.push({ id: userId, ...p });
           const saved = n.adminProfiles.find((entry) => entry.id === userId);
           if (saved.birthday) saved.age = ageFromBirthday(saved.birthday);
+          const fieldLabels = { fullName: "name", age: "age", contact: "contact number", birthday: "birthday", photo: "profile photo" };
+          const changedFields = Object.keys(p || {}).filter((key) => fieldLabels[key] && (!profile || before[key] !== p[key]));
+          if (changedFields.length) logAct(n, userId, "profile", `Updated admin profile: ${[...new Set(changedFields)].map((key) => fieldLabels[key]).join(", ")}`);
       });
       return { ok: true };
   },
