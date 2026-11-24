@@ -69,12 +69,15 @@ export default function TuteeSchedule() {
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(320px,0.85fr)_minmax(0,1.4fr)]">
         <Card className="p-3 sm:p-5">
           <Calendar selected={[selectedDate]} onSelect={setSelectedDate} allowPast initialMonth={selectedDate} mark={(date) => {
-              if (date < today) return null;
-              const sessionCount = (sessionsByDate[date] || []).filter((session) => !["completed", "cancelled"].includes(session.status)).length;
-              const assessmentCount = (assessmentsByDate[date] || []).filter((assessment) => assessment.status === "booked").length;
-              const playgroupCount = (playgroupsByDate[date] || []).filter((booking) => !sessions.some((session) => session.bookingId === booking.id && session.date === date && session.status === "completed")).length;
-              const count = sessionCount + assessmentCount + playgroupCount;
-              return count ? { count } : null;
+              const sessionCount = sessionsByDate[date]?.length ?? 0;
+              const assessmentCount = assessmentsByDate[date]?.length ?? 0;
+              const playgroupCount = playgroupsByDate[date]?.length ?? 0;
+              if (!sessionCount && !assessmentCount && !playgroupCount) return null;
+              return {
+                text: playgroupCount ? `${playgroupCount} Playgroup` : sessionCount ? `${sessionCount} session${sessionCount === 1 ? "" : "s"}` : `${assessmentCount} assessment${assessmentCount === 1 ? "" : "s"}`,
+                tone: playgroupCount ? "mint" : sessionCount ? "brand" : "sunny",
+                ...((sessionCount || assessmentCount) && playgroupCount ? { subtext: `${sessionCount + assessmentCount} other item${sessionCount + assessmentCount === 1 ? "" : "s"}`, subtone: sessionCount ? "brand" : "sunny" } : {}),
+              };
           }}/>
           <div className="mt-4 flex items-center justify-between gap-2">
             <Button size="sm" variant="secondary" onClick={() => setSelectedDate(addDays(selectedDate, -1))}>Previous day</Button>

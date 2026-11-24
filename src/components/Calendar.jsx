@@ -52,7 +52,7 @@ export function Calendar({ selected = [], onSelect, onMonthChange, isDisabled, m
             const sel = selected.includes(date);
             const m = mark?.(date);
             return (<button type="button" key={date} disabled={disabled} onClick={() => canSelect && onSelect(date)} className={cn("flex min-h-[52px] flex-col items-center rounded-xl border p-1 text-sm font-bold transition", sel ? "border-brand-600 bg-brand-600 text-white" : "border-transparent", canSelect && !sel && !disabled && "hover:border-brand-300 hover:bg-brand-50", !sel && highlight?.(date) && "bg-brand-50", disabled && !sel && "cursor-not-allowed text-slate-300", readOnly && "cursor-default", date === today && !sel && "ring-2 ring-sunny-300")}>
-              <span className="relative block w-full leading-5">{Number(date.slice(8))}{m?.count > 0 && <span className="absolute -right-0.5 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[9px] font-extrabold leading-none text-white" aria-label={`${m.count} scheduled item${m.count === 1 ? "" : "s"}`}>{m.count}</span>}</span>
+              <span>{Number(date.slice(8))}</span>
               {m?.text && <span className={cn("mt-0.5 rounded px-1 text-[9px] font-bold leading-4", sel ? "bg-white/25 text-white" : tone[m.tone || "brand"])}>{m.text}</span>}
               {m?.subtext && <span className={cn("max-w-full truncate rounded px-1 text-[8px] font-bold leading-3", sel ? "text-white" : tone[m.subtone || "brand"])}>{m.subtext}</span>}
             </button>);
