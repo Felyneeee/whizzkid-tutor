@@ -40,6 +40,10 @@ export async function POST(request) {
 
     const nextState = structuredClone(state);
     const target = nextState.bookings.find((entry) => entry.id === bookingId);
+    target.approvedAt ||= nowISO();
+    const storedProposal = target.scheduleProposal;
+    const proposal = storedProposal?.__payment ? storedProposal.proposal : storedProposal;
+    target.scheduleProposal = { ...(proposal ? { proposal } : {}), __payment: { ...(storedProposal?.__payment || {}), approvedAt: target.approvedAt } };
     const cohort = nextState.cohorts.find((entry) => entry.id === target.cohortId);
     const assignments = { ...(target.tutorAssignments || {}) };
     if (cohort) {
@@ -54,7 +58,8 @@ export async function POST(request) {
       return NextResponse.json({ error: "Assign an available tutor for every Playgroup date before approving this booking." }, { status: 409 });
     }
 
-    const paymentDeadlineAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+    const deadlineHours = state.paymentSettings?.paymentDeadlineHours || 48;
+    const paymentDeadlineAt = new Date(Date.now() + deadlineHours * 60 * 60 * 1000).toISOString();
     target.status = "to_pay";
     target.bookingStatus = "to_pay";
     target.paymentStatus = "to_pay";
@@ -82,7 +87,7 @@ export async function POST(request) {
     }
 
     const notices = [
-      { userId: target.tuteeId, text: "Your Playgroup booking is approved and your tutors are confirmed for all sessions. Please submit payment proof within 48 hours to secure your place.", channels: ["web", "email", "sms"] },
+      { userId: target.tuteeId, text: `Your Playgroup booking is approved and your tutors are confirmed for all sessions. Please submit payment proof within ${deadlineHours} hours to secure your place.`, channels: ["web", "email", "sms"] },
       ...assignedTutorIds.map((tutorId) => {
         const tutorDates = target.dates.filter((date) => assignments[date] === tutorId);
         return { userId: tutorId, text: `Your Playgroup assignment is confirmed for ${tutorDates.length} sessions, starting ${fmtDate(tutorDates[0])}.`, channels: ["web", "email"] };

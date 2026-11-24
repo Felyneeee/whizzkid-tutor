@@ -10,7 +10,7 @@ const tone = {
     sunny: "bg-sunny-100 text-sunny-500",
     slate: "bg-slate-100 text-slate-500",
 };
-export function Calendar({ selected = [], onSelect, onMonthChange, isDisabled, mark, initialMonth, highlight, allowPast = false, readOnly = false }) {
+export function Calendar({ selected = [], onSelect, onMonthChange, isDisabled, mark, initialMonth, highlight, allowPast = false, readOnly = false, minMonth }) {
     const start = initialMonth ? parseISO(initialMonth) : new Date();
     const [manualCursor, setManualCursor] = useState(null);
     const cursor = manualCursor && manualCursor.initialMonth === initialMonth
@@ -30,7 +30,7 @@ export function Calendar({ selected = [], onSelect, onMonthChange, isDisabled, m
     };
     return (<div className="w-full rounded-2xl border border-slate-100 bg-white p-3">
       <div className="mb-2 flex items-center justify-between">
-        <button type="button" onClick={() => go(-1)} className="rounded-lg p-1.5 hover:bg-slate-100" aria-label="Previous month">
+        <button type="button" disabled={!!minMonth && `${cursor.y}-${pad(cursor.m + 1)}` <= minMonth} onClick={() => go(-1)} className="rounded-lg p-1.5 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30" aria-label="Previous month">
           <ChevronLeft className="h-4 w-4"/>
         </button>
         <div className="text-sm font-extrabold">

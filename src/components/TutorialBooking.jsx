@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { Calendar } from "@/components/Calendar";
 import { Alert, Badge, Button, Card, Field, Input, cn, peso } from "@/components/ui";
-import { addDays, fmtDate, fmtTime, todayISO, weekday } from "@/lib/dates";
+import { addDays, addMonths, fmtDate, fmtTime, todayISO, weekday } from "@/lib/dates";
 import { HOURS } from "@/lib/constants";
 import { computeRate, expandBookingDates, slotRequestable } from "@/lib/logic";
 import { useStore } from "@/lib/store";
@@ -29,6 +29,7 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
   const days = selectedDays;
   const start = firstWeekStart;
   const end = start && weeks ? addDays(start, weeks * 7 - 1) : "";
+  const bookingDeadline = addMonths(todayISO(), 1);
   const cycleReady = weeks !== null && !!start;
   const dates = useMemo(() => cycleReady ? expandBookingDates({ type: "recurring", days, start, end }) : [], [days, start, end, cycleReady]);
   const orderedDates = [...dates].sort();
@@ -222,7 +223,7 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
         <Calendar selected={dates} onSelect={toggleDay} isDisabled={(date) => {
           const day = weekday(date);
           const selected = selectedDays.includes(day);
-          return weeks === null || date < todayISO() || day === 0 || (start && (date < start || date > end)) || (!selected && !calendarDateAvailable(date));
+          return weeks === null || date < todayISO() || date > bookingDeadline || day === 0 || (start && (date < start || date > end)) || (!selected && !calendarDateAvailable(date));
         }} mark={(date) => weeks !== null && weekday(date) !== 0 && (!start || (date >= start && date <= end)) && calendarDateAvailable(date) ? { text: "open", tone: "mint" } : null}/>
         <div className="space-y-4">
           <Field label="First day"><Input type="date" value={firstDate} readOnly/>{weeks !== null && !firstDate && <p className="mt-1 text-xs text-red-600">Select a weekday on the calendar to set the first day.</p>}</Field>

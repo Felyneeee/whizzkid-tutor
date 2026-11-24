@@ -76,7 +76,7 @@ async function mergeAccountTables(connection, state) {
         userId: row.user_id, fullName: row.full_name, age: row.age,
         birthday: row.birthday ? String(row.birthday).slice(0, 10) : "",
         gradeLevel: row.grade_level, contact: row.contact,
-        guardianName: row.guardian_name, complete: Boolean(row.complete),
+        guardianName: row.guardian_name, photo: row.photo ?? "", complete: Boolean(row.complete),
         lastGreetingYear: row.last_greeting_year ?? undefined,
       });
     }
@@ -127,7 +127,8 @@ export async function readApplicationState(connection, { lock = false, create = 
   if (initialized && hasLegacyRelationalData(legacyState)) {
     await persistRelationalState(connection, state, loaded.persistedState);
     await connection.execute(
-      "UPDATE application_state SET state_json = '{}', revision = revision + 1 WHERE id = 1",
+      "UPDATE application_state SET state_json = ?, revision = revision + 1 WHERE id = 1",
+      [JSON.stringify(normalized.paymentSettings ? { paymentSettings: normalized.paymentSettings } : {})],
     );
   }
 
@@ -255,6 +256,14 @@ export function stateVisibleToUser(state, user) {
   const visibleNotifications = (state.notifications ?? []).filter((item) => !/purchase|purchase order|order placed|your order is now marked|paid purchase/i.test(item.text || ""));
   if (user.role === "admin") return { ...state, notifications: visibleNotifications };
   const visible = structuredClone(state);
+  const paymentSettings = state.paymentSettings || { onlineAccounts: [], onlineEnabled: true, inPersonEnabled: true, addresses: [], paymentDeadlineHours: 48 };
+  visible.paymentSettings = user.role === "tutee" ? {
+    onlineAccounts: paymentSettings.onlineEnabled ? (paymentSettings.onlineAccounts || []).filter((account) => account.active) : [],
+    onlineEnabled: Boolean(paymentSettings.onlineEnabled),
+    inPersonEnabled: Boolean(paymentSettings.inPersonEnabled),
+    addresses: paymentSettings.inPersonEnabled ? (paymentSettings.addresses || []).filter((address) => address.active) : [],
+    paymentDeadlineHours: paymentSettings.paymentDeadlineHours || 48,
+  } : { onlineAccounts: [], onlineEnabled: false, inPersonEnabled: false, addresses: [], paymentDeadlineHours: 48 };
   const ownSessions = state.sessions.filter((session) => session.tuteeId === user.id || session.tutorId === user.id);
   const ownBookingIds = new Set(ownSessions.map((session) => session.bookingId));
   const ownBookings = state.bookings.filter((booking) => booking.tuteeId === user.id || booking.tutorId === user.id || Object.values(booking.tutorAssignments || {}).includes(user.id) || ownBookingIds.has(booking.id));

@@ -31,7 +31,7 @@ function unpackExtendedState(state) {
 function packExtendedState(state) {
   const packed = structuredClone(state);
   for (const booking of packed.bookings || []) {
-    const payment = Object.fromEntries(["paymentStatus", "paymentProof", "paymentAmount", "paymentInstructions", "paymentApprovedAt", "paymentReviewedAt", "paymentReviewNote", "paymentProofHistory", "rescheduleProposal", "scheduleHistory"].filter((key) => booking[key] !== undefined).map((key) => [key, booking[key]]));
+    const payment = Object.fromEntries(["paymentStatus", "paymentProof", "paymentAmount", "paymentInstructions", "paymentApprovedAt", "paymentReviewedAt", "paymentReviewNote", "paymentProofHistory", "approvedAt", "completedAt", "cancelledAt", "rescheduleProposal", "scheduleHistory", "rescheduleUsed"].filter((key) => booking[key] !== undefined).map((key) => [key, booking[key]]));
     if (Object.keys(payment).length) booking.scheduleProposal = { ...(booking.scheduleProposal ? { proposal: booking.scheduleProposal } : {}), __payment: payment };
     else if (booking.scheduleProposal?.__payment) booking.scheduleProposal = booking.scheduleProposal.proposal;
   }
@@ -79,7 +79,7 @@ export async function POST(request) {
     }
     const authorizationState = structuredClone(state);
     queueCompletedReadingBookings(authorizationState);
-    const paymentAction = ["submitBookingPaymentProof", "reviewBookingPayment", "processPaymentDeadlines"].includes(body.action);
+    const paymentAction = ["submitBookingPaymentProof", "reviewBookingPayment", "processPaymentDeadlines", "managePaymentSettings"].includes(body.action);
     const rescheduleAction = ["requestBookingReschedule", "reviewBookingReschedule"].includes(body.action);
     const specialAction = paymentAction || rescheduleAction;
     const specialRole = ["submitBookingPaymentProof", "requestBookingReschedule"].includes(body.action) ? "tutee" : "admin";
@@ -99,6 +99,13 @@ export async function POST(request) {
       if (resumeData && !isValidPdfDataUrl(resumeData)) {
         await connection.rollback();
         return NextResponse.json({ error: "Upload a valid PDF resume no larger than 1.5 MB." }, { status: 400 });
+      }
+    }
+    if (body.action === "saveAdminProfile") {
+      const photo = permission.args[1]?.photo;
+      if (photo && (typeof photo !== "string" || !photo.startsWith("data:image/") || photo.length > 7 * 1024 * 1024)) {
+        await connection.rollback();
+        return NextResponse.json({ error: "Upload a valid image no larger than 5 MB." }, { status: 400 });
       }
     }
     if (body.action === "submitTutorialBooking") {
@@ -231,9 +238,13 @@ export async function POST(request) {
       const assignedSessions = state.sessions.filter((entry) => entry.bookingId === bookingId && entry.status !== "cancelled");
       const isPayable = booking && (booking.status === "to_pay" || (booking.program === "reading" && booking.paymentStatus === "to_pay" && ["ready_for_matching", "confirmed"].includes(booking.status)) || (["awaiting_admin", "ready_for_matching", "confirmed", "approved"].includes(booking.status) && booking.program !== "playgroup" && booking.paymentStatus !== "paid" && bookingSlotsFullyAssigned(booking, assignedSessions)));
       const validReceipt = typeof receiptData === "string" && /^data:(image\/(png|jpeg|webp)|application\/pdf);base64,[A-Za-z0-9+/=]+$/.test(receiptData) && Buffer.from(receiptData.split(",")[1] || "", "base64").byteLength <= 5 * 1024 * 1024;
-      if (!isPayable || !validReceipt || (reference != null && (typeof reference !== "string" || reference.length > 120)) || !["online", "in_person"].includes(method)) {
+      const paymentSettings = state.paymentSettings || {};
+      const methodAvailable = method === "online"
+        ? paymentSettings.onlineEnabled !== false && (paymentSettings.onlineAccounts || []).some((account) => account.active)
+        : method === "in_person" && paymentSettings.inPersonEnabled !== false && (paymentSettings.addresses || []).some((address) => address.active);
+      if (!isPayable || !validReceipt || (reference != null && (typeof reference !== "string" || reference.length > 120)) || !methodAvailable) {
         await connection.rollback();
-        return NextResponse.json({ error: "This booking is not awaiting payment, or the receipt file is invalid (5 MB maximum)." }, { status: 400 });
+        return NextResponse.json({ error: "This booking is not awaiting payment, the payment method is unavailable, or the receipt file is invalid (5 MB maximum)." }, { status: 400 });
       }
     }
     if (body.action === "reviewBookingPayment") {
@@ -251,6 +262,10 @@ export async function POST(request) {
     if (body.action === "requestBookingReschedule") {
       const [bookingId, requestedSessions, reason] = permission.args;
       const booking = state.bookings.find((entry) => entry.id === bookingId && entry.tuteeId === user.id);
+      if (booking?.rescheduleUsed || (booking?.scheduleHistory || []).length > 0) {
+        await connection.rollback();
+        return NextResponse.json({ error: "This booking has already used its one reschedule." }, { status: 409 });
+      }
       const validRequestList = Array.isArray(requestedSessions) && requestedSessions.length > 0 && requestedSessions.length <= 30 && new Set(requestedSessions.map((entry) => entry.sessionId)).size === requestedSessions.length;
       const matchedRequests = [];
       const available = booking && booking.status === "confirmed" && booking.paymentStatus === "paid" && validRequestList && typeof reason === "string" && reason.trim().length > 0 && reason.length <= 1000 && requestedSessions.every((request) => {
@@ -260,6 +275,8 @@ export async function POST(request) {
         const allowedDay = day === 2 || day === 4 || day === 6 || ((day === 1 || day === 3 || day === 5) && !["10:00", "10:45"].includes(time));
         const subject = booking.sessionSlots?.find((slot) => slot.date === session?.date && slot.time === session?.time)?.subject || booking.sessionSubjects?.[session?.date] || booking.subject;
         const options = { program: booking.program, subject, gradeLevel: booking.gradeLevel, modality: booking.modality, sessionType: booking.sessionType || "one-on-one" };
+        // A pending proposal holds its requested slots. Ignore this booking's
+        // own hold so the tutee can edit the request before admin review.
         const competingProposal = state.bookings.some((entry) => entry.id !== bookingId && (entry.rescheduleProposal?.date === date && entry.rescheduleProposal?.time === time || entry.rescheduleProposal?.sessions?.some((item) => item.date === date && item.time === time)));
         if (!session || session.status !== "scheduled" || session.date < todayISO() || date < todayISO() || !HOURS.includes(time) || !allowedDay || (date === session.date && time === session.time) || competingProposal || !slotRequestable(state, date, time, options, bookingId)) return false;
         const candidates = matchTutors(state, { ...options, learningNeeds: booking.learningNeeds, dates: [date], times: { [date]: time }, time, ignoreBookingId: bookingId }).filter((match) => match.full);
@@ -294,7 +311,7 @@ export async function POST(request) {
         if (fullyAssigned) {
           booking.status = "to_pay";
           booking.paymentStatus = "to_pay";
-          booking.paymentDeadlineAt = new Date(now + 48 * 60 * 60 * 1000).toISOString();
+          booking.paymentDeadlineAt = new Date(now + (nextState.paymentSettings?.paymentDeadlineHours || 48) * 60 * 60 * 1000).toISOString();
           booking.expiresAt = booking.paymentDeadlineAt;
           booking.paymentAmount = booking.totalFee;
           nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, text: `A tutor was matched to your ${booking.subject} booking. Please submit payment proof within 48 hours to confirm your reservation.`, at: nowISO(), read: false, channels: ["web", "email", "sms"] });
@@ -330,13 +347,54 @@ export async function POST(request) {
         return result;
       },
     });
-    const handler = body.action === "processPaymentDeadlines"
+    const handler = body.action === "managePaymentSettings"
+      ? async (change) => {
+        const settings = nextState.paymentSettings ??= { onlineAccounts: [], onlineEnabled: true, inPersonEnabled: true, addresses: [], paymentDeadlineHours: 48 };
+        const validText = (value, max = 160) => typeof value === "string" && value.trim().length > 0 && value.length <= max;
+        if (!change || typeof change.op !== "string") return { ok: false, error: "Invalid payment settings update." };
+        if (change.op === "account-add" || change.op === "account-update") {
+          const entry = change.entry;
+          if (!entry || !validText(entry.provider) || !validText(entry.accountName) || !validText(entry.accountNumber, 80)) return { ok: false, error: "Enter a provider, account name, and account number." };
+          if (change.op === "account-add") settings.onlineAccounts.push({ id: uid("pay"), provider: entry.provider.trim(), accountName: entry.accountName.trim(), accountNumber: entry.accountNumber.trim(), active: true });
+          else {
+            const account = settings.onlineAccounts.find((item) => item.id === change.id);
+            if (!account) return { ok: false, error: "Payment account not found." };
+            Object.assign(account, { provider: entry.provider.trim(), accountName: entry.accountName.trim(), accountNumber: entry.accountNumber.trim() });
+          }
+        } else if (change.op === "account-toggle" || change.op === "account-delete") {
+          const account = settings.onlineAccounts.find((item) => item.id === change.id);
+          if (!account) return { ok: false, error: "Payment account not found." };
+          if (change.op === "account-delete") settings.onlineAccounts = settings.onlineAccounts.filter((item) => item.id !== change.id);
+          else account.active = !account.active;
+        } else if (change.op === "address-add" || change.op === "address-update") {
+          const entry = change.entry;
+          if (!entry || !validText(entry.buildingName) || !validText(entry.address, 500) || !validText(entry.workingHours, 200)) return { ok: false, error: "Enter a building name, address, and working hours." };
+          if (change.op === "address-add") settings.addresses.push({ id: uid("addr"), buildingName: entry.buildingName.trim(), address: entry.address.trim(), workingHours: entry.workingHours.trim(), active: true });
+          else {
+            const address = settings.addresses.find((item) => item.id === change.id);
+            if (!address) return { ok: false, error: "Payment address not found." };
+            Object.assign(address, { buildingName: entry.buildingName.trim(), address: entry.address.trim(), workingHours: entry.workingHours.trim() });
+          }
+        } else if (change.op === "address-delete") {
+          if (!settings.addresses.some((item) => item.id === change.id)) return { ok: false, error: "Payment address not found." };
+          settings.addresses = settings.addresses.filter((item) => item.id !== change.id);
+        } else if (change.op === "toggle-online" || change.op === "toggle-in-person") {
+          const key = change.op === "toggle-online" ? "onlineEnabled" : "inPersonEnabled";
+          settings[key] = !settings[key];
+        } else if (change.op === "deadline") {
+          if (![24, 48, 72, 96].includes(change.hours)) return { ok: false, error: "Choose a valid payment deadline." };
+          settings.paymentDeadlineHours = change.hours;
+        } else return { ok: false, error: "Unknown payment settings update." };
+        return { ok: true };
+      }
+      : body.action === "processPaymentDeadlines"
       ? async () => ({ ok: true })
       : body.action === "cancelPlaygroupBooking" && permission.args[0]
       ? async (bookingId) => {
         const booking = nextState.bookings.find((entry) => entry.id === bookingId && entry.tuteeId === user.id && entry.program === "playgroup");
         if (!booking || booking.status !== "to_pay") return actions.cancelPlaygroupBooking(bookingId);
         booking.status = "cancelled";
+        booking.cancelledAt = nowISO();
         booking.bookingStatus = "cancelled";
         booking.paymentStatus = "cancelled";
         booking.tutorAssignmentStatus = "cancelled";
@@ -353,6 +411,7 @@ export async function POST(request) {
         const booking = nextState.bookings.find((entry) => entry.id === bookingId && entry.tuteeId === user.id);
         if (!booking || !["to_pay", "awaiting_payment_approval"].includes(booking.status)) return actions.cancelTutorialBooking(bookingId);
         booking.status = "cancelled";
+        booking.cancelledAt = nowISO();
         booking.paymentStatus = "cancelled";
         booking.paymentProof = undefined;
         nextState.sessions.filter((session) => session.bookingId === bookingId && session.status !== "completed").forEach((session) => { session.status = "cancelled"; });
@@ -378,6 +437,7 @@ export async function POST(request) {
         ? async (bookingId, approve, tutorChoices = {}) => {
           const booking = nextState.bookings.find((entry) => entry.id === bookingId && entry.rescheduleProposal);
           if (!booking) return { ok: false, error: "This reschedule request is no longer pending." };
+          booking.rescheduleUsed = true;
           const proposal = booking.rescheduleProposal;
           const proposals = (proposal.sessions || [proposal]).map((item) => ({ ...item, tutorId: tutorChoices?.[item.sessionId] || item.tutorId }));
           const targets = proposals.map((item) => ({ proposal: item, session: nextState.sessions.find((entry) => entry.id === item.sessionId && entry.bookingId === booking.id && entry.status === "scheduled") }));
@@ -455,7 +515,7 @@ export async function POST(request) {
               status: "rejected",
             }];
             booking.paymentProof = undefined;
-            booking.paymentDeadlineAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+            booking.paymentDeadlineAt = new Date(Date.now() + (nextState.paymentSettings?.paymentDeadlineHours || 48) * 60 * 60 * 1000).toISOString();
             booking.expiresAt = booking.paymentDeadlineAt;
             nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, text: `Your payment proof for ${booking.subject} could not be approved.${note ? ` ${note}` : " Please submit a new receipt."}`, at: nowISO(), read: false, channels: ["web", "email"] });
           }
@@ -488,19 +548,27 @@ export async function POST(request) {
         }
         booking.status = "to_pay";
         booking.paymentStatus = "to_pay";
-        booking.paymentDeadlineAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+        booking.approvedAt ||= nowISO();
+        booking.paymentDeadlineAt = new Date(Date.now() + (nextState.paymentSettings?.paymentDeadlineHours || 48) * 60 * 60 * 1000).toISOString();
         booking.expiresAt = booking.paymentDeadlineAt;
         booking.paymentAmount = booking.totalFee;
         for (const session of sessions) session.status = "scheduled";
-        nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, text: `A tutor was matched to your ${booking.subject} booking. Please submit payment proof within 48 hours to confirm your reservation.`, at: nowISO(), read: false, channels: ["web", "email", "sms"] });
+        nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, text: `A tutor was matched to your ${booking.subject} booking. Please submit payment proof within ${nextState.paymentSettings?.paymentDeadlineHours || 48} hours to confirm your reservation.`, at: nowISO(), read: false, channels: ["web", "email", "sms"] });
         for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `${booking.subject} booking from ${personName(nextState, booking.tuteeId)} was matched and is awaiting payment within 48 hours.`, at: nowISO(), read: false, channels: ["web"] });
       }
     }
     queueCompletedReadingBookings(nextState);
     await persistRelationalState(connection, packExtendedState(nextState), packExtendedState(state));
-    await connection.execute(
-      "UPDATE application_state SET revision = revision + 1 WHERE id = 1",
-    );
+    if (body.action === "managePaymentSettings") {
+      await connection.execute(
+        "UPDATE application_state SET state_json = ?, revision = revision + 1 WHERE id = 1",
+        [JSON.stringify({ paymentSettings: nextState.paymentSettings })],
+      );
+    } else {
+      await connection.execute(
+        "UPDATE application_state SET revision = revision + 1 WHERE id = 1",
+      );
+    }
     await connection.commit();
     return NextResponse.json({ result: result ?? { ok: true }, db: stateVisibleToUser(nextState, user) });
   } catch (error) {

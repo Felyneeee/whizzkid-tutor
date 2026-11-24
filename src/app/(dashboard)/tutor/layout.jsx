@@ -22,12 +22,12 @@ export default function TutorLayout({ children }) {
         { href: "/tutor/materials", label: "Learning Materials", icon: <FileLock2 /> },
         { href: "/tutor/chat", label: "Chat with Admin", icon: <MessageCircle />, badge: unreadMessages },
         { href: "/tutor/history", label: "Activity History", icon: <History /> },
-        { href: "/tutor/profile", label: "My Profile", icon: <UserRound /> },
+        { href: "/tutor/profile", label: "Profile", icon: <UserRound /> },
     ];
     const limited = [
         { href: "/tutor", label: "Dashboard", icon: <Home /> },
         { href: "/tutor/chat", label: "Chat with Admin", icon: <MessageCircle />, badge: unreadMessages },
-        { href: "/tutor/profile", label: "My Profile", icon: <UserRound /> },
+        { href: "/tutor/profile", label: "Profile", icon: <UserRound /> },
     ];
     const gate = t ? (<div className="mx-auto max-w-xl space-y-4">
       <h1 className="text-2xl font-extrabold">Application status</h1>

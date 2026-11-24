@@ -7,7 +7,7 @@ import { Calendar } from "@/components/Calendar";
 import { TutorialBooking } from "@/components/TutorialBooking";
 import { Alert, Badge, Button, Card, Chips, Field, PageHeader, ProgramIcon, Select, Textarea, cn, peso } from "@/components/ui";
 import { PLAYGROUP_SESSION_RATE, PROGRAMS, READING_SKILLS, SUBJECTS } from "@/lib/constants";
-import { fmtDate, fmtTime, parseISO, todayISO } from "@/lib/dates";
+import { addMonths, assessmentExpiresAt, fmtDate, fmtTime, isAssessmentOutdated, parseISO, todayISO } from "@/lib/dates";
 import { cohortSessionDates } from "@/lib/logic";
 import { useStore } from "@/lib/store";
 const GRADE_CHOICES = ["Nursery", "Preschool", "Kinder", ...Array.from({ length: 10 }, (_, index) => `Grade ${index + 1}`)];
@@ -123,6 +123,8 @@ function ReadingFlow() {
     const id = s.me.id;
     const profile = s.db.tutees.find((t) => t.userId === id);
     const mine = s.db.assessments.filter((a) => a.tuteeId === id);
+    const latestCompletedAssessment = [...mine].reverse().find((assessment) => assessment.status === "completed");
+    const assessmentOutdated = isAssessmentOutdated(latestCompletedAssessment);
     const booking = [...s.db.bookings].reverse().find((b) => b.tuteeId === id && b.program === "reading" && ["pending", "pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "to_pay", "awaiting_payment_approval", "confirmed"].includes(b.status));
       const awaitingAssessment = booking && ["pending", "pending_assessment", "assessment_scheduled", "to_pay", "awaiting_payment_approval"].includes(booking.status) && s.db.assessments.find((assessment) => assessment.id === booking.assessmentId)?.status !== "completed";
     const [params, setParams] = useState(null);
@@ -141,6 +143,7 @@ function ReadingFlow() {
       <Card>
         <h2 className="text-lg font-extrabold">Reading Programs</h2>
         {ageWarn && <div className="mt-3"><Alert kind="warn">Reading Programs are for ages 3–15; your child is {age}. You can still book — the admin will review.</Alert></div>}
+        {latestCompletedAssessment && <div className="mt-3"><Alert kind={assessmentOutdated ? "warn" : "success"}>{assessmentOutdated ? "Your initial assessment is outdated. A new assessment will be scheduled with this booking and must be completed before tutor matching." : `Your initial assessment is current through ${assessmentExpiresAt(latestCompletedAssessment) ? fmtDate(assessmentExpiresAt(latestCompletedAssessment).toISOString().slice(0, 10)) : "—"}. You can book without retaking it.`}</Alert></div>}
       </Card>
       <Card className="max-w-xl space-y-4">
         <Field label="Modality"><ModalityPicker value={modality} onChange={setModality}/></Field>
@@ -160,6 +163,7 @@ function PlaygroupFlow() {
     const months = ageMonths(profile.birthday);
     const eligible = months !== null && months >= 34 && months < 60; // 2.8 – 4.x yrs
     const today = todayISO();
+    const bookingDeadline = addMonths(today, 1);
     const myPlaygroupBookings = s.db.bookings
       .filter((booking) => booking.tuteeId === id && String(booking.program || "").toLowerCase() === "playgroup" && ["pending", "awaiting_admin", "approved", "confirmed", "to_pay", "awaiting_payment_approval"].includes(String(booking.status || booking.bookingStatus || "").toLowerCase()))
       .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
@@ -193,7 +197,7 @@ function PlaygroupFlow() {
     }, [id, s.db.bookings]);
     const cohorts = s.db.cohorts
         .map((c) => ({ c, dates: cohortSessionDates(c).slice().sort() }))
-        .filter(({ dates }) => dates[0] >= today)
+        .filter(({ dates }) => dates[0] >= today && dates.every((date) => date <= bookingDeadline))
         .filter(({ c }) => c.modality !== "online" || c.enrolled.includes(id))
         .map((c) => {
           const active = s.db.bookings.filter((b) => b.program === "playgroup" && b.cohortId === c.c.id && ["pending", "approved", "confirmed", "awaiting_admin", "to_pay", "awaiting_payment_approval"].includes(b.status));

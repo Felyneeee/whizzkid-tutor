@@ -14,7 +14,7 @@ export default function RegisterTutor({ initialType = "new" }) {
     const s = useStore();
     const router = useRouter();
     const type = initialType;
-    const [f, setF] = useState({ email: "", username: "", password: "", fullName: "", contact: "", birthday: "", bio: "" });
+    const [f, setF] = useState({ email: "", username: "", password: "", fullName: "", contact: "", birthday: "" });
     const [subjects, setSubjects] = useState([]);
     const [bands, setBands] = useState([]);
     const [resume, setResume] = useState({ name: "", data: "" });
@@ -72,7 +72,6 @@ export default function RegisterTutor({ initialType = "new" }) {
                 resumeData: resume.data,
                 subjects,
                 gradeBands: [...new Set(bands.map(gradeBandForChoice))],
-                bio: f.bio,
                 birthday: f.birthday || undefined,
             });
             if (!r.ok) {

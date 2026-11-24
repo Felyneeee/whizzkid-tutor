@@ -19,8 +19,18 @@ create table if not exists public.tutee_profiles (
   grade_level text not null default '',
   contact text not null default '',
   guardian_name text not null default '',
+  photo text not null default '',
   complete boolean not null default false,
   last_greeting_year integer
+);
+
+create table if not exists public.admin_profiles (
+  user_id text primary key references public.users(id) on delete cascade,
+  full_name text not null default '',
+  photo text not null default '',
+  age integer,
+  birthday date,
+  contact text not null default ''
 );
 
 create table if not exists public.tutor_profiles (
@@ -228,6 +238,7 @@ create index if not exists availability_tutor_date_idx on public.availability (t
 
 alter table public.users enable row level security;
 alter table public.tutee_profiles enable row level security;
+alter table public.admin_profiles enable row level security;
 alter table public.tutor_profiles enable row level security;
 alter table public.rooms enable row level security;
 alter table public.cohorts enable row level security;

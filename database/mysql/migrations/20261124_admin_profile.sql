@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS admin_profiles (
+  user_id VARCHAR(64) PRIMARY KEY,
+  full_name VARCHAR(200) NOT NULL DEFAULT '',
+  photo LONGTEXT NOT NULL,
+  age SMALLINT UNSIGNED NULL,
+  birthday DATE NULL,
+  contact VARCHAR(40) NOT NULL DEFAULT '',
+  CONSTRAINT fk_admin_profiles_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;

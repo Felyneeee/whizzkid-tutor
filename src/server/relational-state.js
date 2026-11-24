@@ -36,19 +36,26 @@ function jsonText(value, fallback) {
 
 const tables = [
   {
+    stateKey: "adminProfiles",
+    table: "admin_profiles",
+    primaryKey: "user_id",
+    toRow: (p) => ({ user_id: p.id, full_name: p.fullName ?? "", photo: p.photo ?? "", age: p.age ?? null, birthday: p.birthday || null, contact: p.contact ?? "" }),
+    fromRow: (r) => ({ id: r.user_id, fullName: r.full_name, photo: r.photo ?? "", age: r.age == null ? null : Number(r.age), birthday: dateOnly(r.birthday) ?? "", contact: r.contact ?? "" }),
+  },
+  {
     stateKey: "tutees",
     table: "tutee_profiles",
     primaryKey: "user_id",
     toRow: (p) => ({
       user_id: p.userId, full_name: p.fullName ?? "", age: p.age ?? null,
       birthday: p.birthday || null, grade_level: p.gradeLevel ?? "", contact: p.contact ?? "",
-      guardian_name: p.guardianName ?? "", complete: Boolean(p.complete),
+      guardian_name: p.guardianName ?? "", photo: p.photo ?? "", complete: Boolean(p.complete),
       last_greeting_year: p.lastGreetingYear ?? null,
     }),
     fromRow: (r) => ({
       userId: r.user_id, fullName: r.full_name, age: r.age == null ? null : Number(r.age),
       birthday: dateOnly(r.birthday) ?? "", gradeLevel: r.grade_level, contact: r.contact,
-      guardianName: r.guardian_name, complete: Boolean(r.complete),
+      guardianName: r.guardian_name, photo: r.photo ?? "", complete: Boolean(r.complete),
       ...(r.last_greeting_year == null ? {} : { lastGreetingYear: Number(r.last_greeting_year) }),
     }),
   },
@@ -346,6 +353,7 @@ export async function persistRelationalState(connection, state, previousState) {
     const currentRecords = recordsFor(descriptor, state);
     const roleRequired = descriptor.stateKey === "tutees" ? "tutee"
       : descriptor.stateKey === "tutors" ? "tutor"
+      : descriptor.stateKey === "adminProfiles" ? "admin"
       : null;
     const previousRecords = previousState ? recordsFor(descriptor, previousState) : [];
     const previousById = new Map(previousRecords.map((record) => [idFor(descriptor, record), record]));

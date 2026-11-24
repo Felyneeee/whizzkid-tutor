@@ -1,6 +1,6 @@
 import "server-only";
 import { ADMIN_ID } from "@/lib/seed";
-import { ageFromBirthday, firstName, nowISO, todayISO, uid, fmtDate, fmtTime, addDays, rangeDates, weekday, isAssessmentOutdated } from "@/lib/dates";
+import { ageFromBirthday, firstName, nowISO, todayISO, uid, fmtDate, fmtTime, addDays, addMonths, rangeDates, weekday, isAssessmentOutdated } from "@/lib/dates";
 import { cohortSessionDates, computeRate, matchTutors, onApprovedLeave, tutorBusy, tutorFreeOn, tutorQualifies, approvedSlot, tutorWorksPlaygroupDate, slotOccupied, slotRequestable } from "@/lib/logic";
 import { HOURS, PLAYGROUP_SESSION_RATE, SUBJECTS } from "@/lib/constants";
 
@@ -88,6 +88,17 @@ export function createBusinessActions({ get, mutate, actorId }) {
               Object.assign(t, p);
       });
   },
+  saveAdminProfile(userId, p) {
+      mutate((n) => {
+          n.adminProfiles ??= [];
+          const profile = n.adminProfiles.find((entry) => entry.id === userId);
+          if (profile) Object.assign(profile, p);
+          else n.adminProfiles.push({ id: userId, ...p });
+          const saved = n.adminProfiles.find((entry) => entry.id === userId);
+          if (saved.birthday) saved.age = ageFromBirthday(saved.birthday);
+      });
+      return { ok: true };
+  },
   // ---------- Tutee flows ----------
   requestAssessment(tuteeId, modality, learningNeeds = "") {
       const d = get();
@@ -139,7 +150,7 @@ export function createBusinessActions({ get, mutate, actorId }) {
           n.bookings.filter((booking) => booking.program === "reading" && booking.assessmentId === a.id && ["pending_assessment", "assessment_scheduled"].includes(booking.status)).forEach((booking) => {
               booking.status = "to_pay";
               booking.paymentStatus = "to_pay";
-              booking.paymentDeadlineAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+              booking.paymentDeadlineAt = new Date(Date.now() + (n.paymentSettings?.paymentDeadlineHours || 48) * 60 * 60 * 1000).toISOString();
               booking.expiresAt = booking.paymentDeadlineAt;
               booking.paymentAmount = booking.totalFee;
           });
@@ -217,6 +228,8 @@ export function createBusinessActions({ get, mutate, actorId }) {
       const bookingId = nextBookingId(d, "playgroup");
       const tutee = d.tutees.find((t) => t.userId === tuteeId);
       const dates = cohortSessionDates(c);
+      if (!dates.length || dates.some((date) => date < todayISO() || date > addMonths(todayISO(), 1)))
+          return { ok: false, error: "Playgroup sessions must be within the next month." };
       const activeTuteeStatuses = ["pending", "approved", "pending_assessment", "assessment_scheduled", "ready_for_matching", "confirmed", "awaiting_admin", "to_pay", "awaiting_payment_approval"];
       const dateConflict = dates.some((date) => d.bookings.some((booking) => booking.tuteeId === tuteeId && activeTuteeStatuses.includes(booking.status) && (booking.sessionSlots || (booking.dates || []).map((bookingDate) => ({ date: bookingDate, time: booking.sessionTimes?.[bookingDate] ?? booking.time }))).some((slot) => slot.date === date && slot.time === (c.time || "10:00"))) || d.sessions.some((session) => session.tuteeId === tuteeId && ["scheduled", "needs_reassignment"].includes(session.status) && session.date === date && session.time === (c.time || "10:00")));
       if (dateConflict) return { ok: false, error: "You already have a booking or request at one or more Playgroup dates and times." };
@@ -276,6 +289,8 @@ export function createBusinessActions({ get, mutate, actorId }) {
       if (v.program === "reading") v.sessionType = "one-on-one";
       if (v.dates.some((date) => date < todayISO()))
           return { ok: false, error: "Past dates cannot be booked. Please choose a future date." };
+      if (v.dates.some((date) => date > addMonths(todayISO(), 1)))
+          return { ok: false, error: "Sessions can only be booked within the next month." };
       const requestedSlots = v.sessionSlots || v.dates.map((date) => ({ date, time: v.sessionTimes?.[date] ?? v.time }));
       const activeStatuses = ["pending", "approved", "pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin", "to_pay", "awaiting_payment_approval", "confirmed"];
       const overlapsBooking = d.bookings.some((booking) => booking.tuteeId === v.tuteeId && activeStatuses.includes(booking.status) && (booking.sessionSlots || booking.dates.map((date) => ({ date, time: booking.sessionTimes?.[date] ?? booking.time }))).some((existing) => requestedSlots.some((requested) => existing.date === requested.date && existing.time === requested.time)));
@@ -565,13 +580,14 @@ export function createBusinessActions({ get, mutate, actorId }) {
       });
       return { ok: true, conflicts };
   },
-  decideLeave(leaveId, approve) {
+  decideLeave(leaveId, approve, adminNote = "") {
       mutate((n) => {
           const l = n.leaves.find((x) => x.id === leaveId);
           if (!l)
               return;
           l.status = approve ? "approved" : "rejected";
           l.decidedAt = nowISO();
+          l.note = String(adminNote || "").trim().slice(0, 2000);
           if (!approve) {
               logAct(n, actingAdminIdOf(n), "other", `Rejected ${nameOf(n, l.tutorId)}'s leave request`);
               pushNotif(n, l.tutorId, "Your leave request was not approved. Existing schedule remains unchanged.", ["web", "email"]);
@@ -872,6 +888,7 @@ export function createBusinessActions({ get, mutate, actorId }) {
       mutate((n) => {
           const target = n.bookings.find((entry) => entry.id === bookingId);
           target.status = "cancelled";
+          target.cancelledAt = nowISO();
           target.scheduleProposal = undefined;
           n.sessions.filter((session) => session.bookingId === bookingId && session.status !== "completed").forEach((session) => { session.status = "cancelled"; });
           pushNotif(n, target.tuteeId, `Your ${target.subject} request was cancelled and its reserved capacity released.`, ["web"]);
@@ -886,6 +903,7 @@ export function createBusinessActions({ get, mutate, actorId }) {
       mutate((n) => {
           const target = n.bookings.find((entry) => entry.id === bookingId);
           target.status = "cancelled";
+          target.cancelledAt = nowISO();
           target.bookingStatus = "cancelled";
           target.tutorAssignmentStatus = "cancelled";
           target.tutorAssignments = {};
@@ -933,8 +951,10 @@ export function createBusinessActions({ get, mutate, actorId }) {
           const open = n.sessions.some((x) => x.bookingId === s.bookingId && x.status !== "completed" && x.status !== "cancelled");
           if (!open) {
               const b = n.bookings.find((x) => x.id === s.bookingId);
-              if (b && b.status === "confirmed")
+              if (b && b.status === "confirmed") {
                   b.status = "completed";
+                  b.completedAt = nowISO();
+              }
           }
           const booking = n.bookings.find((x) => x.id === s.bookingId);
           if (booking?.scheduleProposal?.sessionId === s.id) {
@@ -1149,10 +1169,10 @@ export function createBusinessActions({ get, mutate, actorId }) {
       const assignedTutorIds = [...new Set(Object.values(booking.tutorAssignments))];
       mutate((n) => {
           const target = n.bookings.find((b) => b.id === bookingId);
-          target.status = "to_pay"; target.bookingStatus = "to_pay"; target.paymentStatus = "unpaid"; target.paymentDeadlineAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(); target.expiresAt = target.paymentDeadlineAt; target.tutorAssignmentStatus = "Confirmed";
+          target.status = "to_pay"; target.bookingStatus = "to_pay"; target.paymentStatus = "unpaid"; target.paymentDeadlineAt = new Date(Date.now() + (n.paymentSettings?.paymentDeadlineHours || 48) * 60 * 60 * 1000).toISOString(); target.expiresAt = target.paymentDeadlineAt; target.tutorAssignmentStatus = "Confirmed";
           const assignedSummary = assignedTutorIds.map((tutorId) => `${nameOf(n, tutorId)} (${target.dates.filter((date) => target.tutorAssignments[date] === tutorId).length} sessions)`).join(", ");
           logAct(n, actingAdminIdOf(n), "booking", `Approved ${nameOf(n, target.tuteeId)}'s Playgroup schedule booking for ${target.cohortId ? n.cohorts.find((cohort) => cohort.id === target.cohortId)?.label || "cohort" : "cohort"}; assigned ${assignedSummary}`);
-          pushNotif(n, target.tuteeId, `Your Playgroup booking was approved. Please submit payment within 48 hours to confirm all 12 sessions.`, ["web", "email", "sms"]);
+          pushNotif(n, target.tuteeId, `Your Playgroup booking was approved. Please submit payment within ${n.paymentSettings?.paymentDeadlineHours || 48} hours to confirm all 12 sessions.`, ["web", "email", "sms"]);
           assignedTutorIds.forEach((tutorId) => {
               const tutorDates = target.dates.filter((date) => target.tutorAssignments[date] === tutorId);
               pushNotif(n, tutorId, `Your Playgroup assignment is confirmed for ${tutorDates.length} sessions, starting ${fmtDate(tutorDates[0])}.`, ["web", "email"]);

@@ -1,10 +1,11 @@
 "use client";
-import { Bell, CheckCheck, LoaderCircle, LogOut, Menu, X } from "lucide-react";
+import { Bell, CheckCheck, ChevronDown, GraduationCap, LoaderCircle, LogOut, Menu, UserRound, X } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
-import { Logo, cn } from "./ui";
+import { cn } from "./ui";
 import { NotificationIcon, notificationDestination, notificationDisplayText } from "./notifications";
 import { fmtDateTime } from "@/lib/dates";
 export function homeFor(role) {
@@ -17,6 +18,7 @@ export function DashboardShell({ role, nav, children, gate }) {
     const [menuState, setMenuState] = useState({ path, open: false });
     const open = menuState.path === path && menuState.open;
     const [notificationsOpen, setNotificationsOpen] = useState(false);
+    const [profileMenuOpen, setProfileMenuOpen] = useState(false);
     useEffect(() => {
         if (!s.ready)
             return;
@@ -30,57 +32,52 @@ export function DashboardShell({ role, nav, children, gate }) {
     }
     const unread = s.db.notifications.filter((n) => n.userId === s.me.id && !n.read).length;
     const notifications = s.db.notifications.filter((n) => n.userId === s.me.id).slice(0, 8);
-    const name = role === "admin" ? "Administrator" : role === "tutor" ? s.db.tutors.find((t) => t.userId === s.me.id)?.fullName || s.me.username : s.db.tutees.find((t) => t.userId === s.me.id)?.fullName || s.me.username;
+    const name = role === "admin" ? s.db.adminProfiles?.find((profile) => profile.id === s.me.id)?.fullName || "Administrator" : role === "tutor" ? s.db.tutors.find((t) => t.userId === s.me.id)?.fullName || s.me.username : s.db.tutees.find((t) => t.userId === s.me.id)?.fullName || s.me.username;
     const roleLabel = role === "tutee" ? "Parent / Tutee" : role === "tutor" ? "Tutor" : "Admin";
+    const accountLabel = role === "admin" ? "Admin" : name;
     const base = homeFor(role);
+    const profilePhoto = role === "admin" ? s.db.adminProfiles?.find((profile) => profile.id === s.me.id)?.photo : role === "tutor" ? s.db.tutors.find((profile) => profile.userId === s.me.id)?.photo : s.db.tutees.find((profile) => profile.userId === s.me.id)?.photo;
+    const closeMenu = () => setMenuState({ path, open: false });
     const sidebar = (<div className="flex h-full flex-col">
-      <div className="px-5 py-5">
-        <Link href="/">
-          <Logo className="text-xl"/>
-        </Link>
-      </div>
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
+      <nav className="space-y-1 overflow-y-auto">
         {nav.map((n) => {
             const active = n.href === base ? path === base : path.startsWith(n.href);
-            const className = cn("flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-colors duration-150", active ? "bg-brand-600 text-white shadow-sm" : "text-slate-600 hover:bg-brand-50 hover:text-brand-700");
+            const className = cn("flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors duration-150", active ? "bg-brand-600 text-white shadow-sm" : "text-slate-600 hover:bg-brand-50 hover:text-brand-700");
             const content = <>
               <span className="h-4 w-4 shrink-0 [&>svg]:h-4 [&>svg]:w-4">{n.icon}</span>
               <span className="flex-1">{n.label}</span>
               {!!n.badge && <span className="rounded-full bg-coral-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{n.badge}</span>}
             </>;
-            if (n.href === "/tutee/requests") return <a key={n.href} href={n.href} className={className}>{content}</a>;
-            return <Link key={n.href} href={n.href} prefetch className={className}>{content}</Link>;
+            if (n.href === "/tutee/requests") return <a key={n.href} href={n.href} onClick={closeMenu} className={className}>{content}</a>;
+            return <Link key={n.href} href={n.href} prefetch onClick={closeMenu} className={className}>{content}</Link>;
         })}
       </nav>
-      <div className="border-t border-slate-100 p-4">
-        <div className="mb-2 truncate text-sm font-bold">{name}</div>
-        <div className="mb-3 text-xs text-slate-400">{roleLabel}</div>
-        <button onClick={() => {
-            s.logout();
-            router.replace("/login");
-        }} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-100">
-          <LogOut className="h-4 w-4"/> Log out
-        </button>
-      </div>
     </div>);
-    return (<div className="min-h-screen lg:flex">
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-slate-100 bg-white lg:block">{sidebar}</aside>
-      {open && (<div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 bg-slate-900/40" onClick={() => setMenuState({ path, open: false })}/>
-          <div className="absolute left-0 top-0 h-full w-64 bg-white shadow-xl">{sidebar}</div>
-        </div>)}
-      <div className="min-w-0 flex-1">
-        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-100 bg-white px-4 py-3 lg:px-8">
-          <button className="rounded-lg p-2 hover:bg-slate-100 lg:hidden" onClick={() => setMenuState({ path, open: !open })} aria-label="Menu">
-            {open ? <X className="h-5 w-5"/> : <Menu className="h-5 w-5"/>}
-          </button>
-          <div className="flex-1"/>
-          {s.actionFeedback !== "idle" && <div role="status" aria-live="polite" className="mr-3 flex items-center gap-2 text-xs font-medium text-slate-500">
-            <LoaderCircle className="h-4 w-4 animate-spin text-brand-600" aria-hidden="true"/>
-            {s.actionFeedback === "slow" ? "Saving changes…" : <span className="sr-only">Saving changes</span>}
-          </div>}
+    return (<div className="min-h-screen">
+      <div className="mx-auto max-w-[1440px] px-3 py-3 sm:px-6 lg:px-8">
+      <header className="sticky top-3 z-40 flex h-14 w-full items-center justify-between gap-3 rounded-2xl bg-brand-600 px-4 text-white shadow-lg sm:px-6">
+        <div className="flex shrink-0 items-center gap-2">
+          <button className="rounded-lg p-2 hover:bg-white/15 lg:hidden" onClick={() => setMenuState({ path, open: !open })} aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open}>{open ? <X className="h-5 w-5"/> : <Menu className="h-5 w-5"/>}</button>
+          <Link href="/" className="flex items-center gap-2 text-lg font-extrabold tracking-tight sm:text-xl"><span className="grid h-8 w-8 place-items-center rounded-lg bg-sunny-400"><GraduationCap className="h-5 w-5 text-slate-900" aria-hidden="true"/></span><span>Whizzkids</span></Link>
+        </div>
+        <nav className="hidden flex-1 items-center justify-evenly text-sm font-semibold md:flex" aria-label="Main navigation">
+          <Link href="/" className="hover:text-blue-100">Home</Link><Link href="/#about" className="hover:text-blue-100">About</Link><Link href="/#faqs" className="hover:text-blue-100">FAQs</Link><Link href="/#contact" className="hover:text-blue-100">Contacts</Link>
+        </nav>
+        <div className="flex shrink-0 items-center gap-1 sm:gap-3">
+          {s.actionFeedback !== "idle" && <div role="status" aria-live="polite" className="hidden items-center gap-2 text-xs font-medium text-white/80 sm:flex"><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true"/>{s.actionFeedback === "slow" ? "Saving…" : <span className="sr-only">Saving changes</span>}</div>}
           <div className="relative">
-            <button type="button" onClick={() => setNotificationsOpen((value) => !value)} className="relative rounded-xl p-2 hover:bg-slate-100" aria-label="Notifications" aria-expanded={notificationsOpen}>
+            <button type="button" onClick={() => { setProfileMenuOpen((value) => !value); setNotificationsOpen(false); }} className="flex items-center gap-2 rounded-xl px-1.5 py-1 hover:bg-white/15 sm:gap-3 sm:px-2" aria-label="Account menu" aria-expanded={profileMenuOpen}>
+              <span className="relative grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full bg-slate-200 text-slate-400">{profilePhoto ? <Image src={profilePhoto} alt="" fill unoptimized className="object-cover"/> : <UserRound className="h-6 w-6 fill-slate-400 stroke-slate-400"/>}</span>
+              <span className="hidden max-w-28 truncate text-sm font-bold sm:block">{accountLabel}</span><ChevronDown className="hidden h-4 w-4 sm:block"/>
+            </button>
+            {profileMenuOpen && <div className="absolute right-0 top-12 z-50 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-slate-700 shadow-xl">
+              <div className="border-b border-slate-100 px-4 py-2"><div className="truncate text-sm font-bold">{name}</div><div className="text-xs text-slate-400">{roleLabel}</div></div>
+              <Link href={`${base}/profile`} onClick={() => setProfileMenuOpen(false)} className="block px-4 py-2.5 text-sm font-semibold hover:bg-brand-50">Profile</Link>
+              <button type="button" onClick={() => { setProfileMenuOpen(false); s.logout(); router.replace("/login"); }} className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold text-slate-600 hover:bg-slate-50"><LogOut className="h-4 w-4"/>Log out</button>
+            </div>}
+          </div>
+          <div className="relative">
+            <button type="button" onClick={() => { setNotificationsOpen((value) => !value); setProfileMenuOpen(false); }} className="relative rounded-xl p-2 hover:bg-white/15" aria-label="Notifications" aria-expanded={notificationsOpen}>
               <Bell className="h-5 w-5"/>
               {unread > 0 && <span className="absolute -right-0.5 -top-0.5 rounded-full bg-coral-500 px-1.5 text-[10px] font-bold text-white">{unread}</span>}
             </button>
@@ -99,11 +96,16 @@ export function DashboardShell({ role, nav, children, gate }) {
               <Link href={`${base}/notifications`} onClick={() => setNotificationsOpen(false)} className="block border-t border-slate-100 px-4 py-3 text-center text-sm font-bold text-brand-600 hover:bg-slate-50">View all notifications</Link>
             </div>}
           </div>
-        </header>
-        {s.actionFeedback !== "idle" && <div className="fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden bg-brand-100" aria-hidden="true"><div className="h-full w-1/3 animate-pulse bg-brand-600"/></div>}
-        <main className="mx-auto max-w-6xl space-y-4 p-4 lg:p-8">
+        </div>
+      </header>
+      {open && <div className="fixed inset-0 z-30 bg-slate-900/40 pt-20 lg:hidden" onClick={closeMenu}><aside className="m-4 max-h-[calc(100vh-7rem)] overflow-y-auto rounded-2xl bg-white p-4 shadow-xl" onClick={(event) => event.stopPropagation()}>{sidebar}</aside></div>}
+      {s.actionFeedback !== "idle" && <div className="fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden bg-brand-100" aria-hidden="true"><div className="h-full w-1/3 animate-pulse bg-brand-600"/></div>}
+      <div className="flex items-start gap-6 py-5 lg:gap-8">
+        <aside className="sticky top-24 hidden max-h-[calc(100vh-7rem)] w-64 shrink-0 overflow-y-auto rounded-2xl bg-white p-4 shadow-sm lg:block">{sidebar}</aside>
+        <main className="min-w-0 flex-1 space-y-4 py-1 sm:py-3">
           {gate ?? children}
         </main>
+      </div>
       </div>
     </div>);
 }

@@ -22,6 +22,14 @@ export const addDays = (iso, n) => {
     d.setDate(d.getDate() + n);
     return toISO(d);
 };
+export function addMonths(iso, count) {
+    const d = parseISO(iso);
+    const day = d.getDate();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + count);
+    d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+    return toISO(d);
+}
 export const weekday = (iso) => parseISO(iso).getDay();
 export const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export const MONTH_NAMES = [

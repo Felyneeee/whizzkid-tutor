@@ -62,21 +62,31 @@ async function prepareReceipt(file) {
   throw new Error("Could not reduce this photo enough. Try a smaller or clearer screenshot.");
 }
 
-function TransferAccounts() {
+function TransferAccounts({ accounts = [] }) {
+  if (!accounts.length) return <p className="rounded-xl bg-slate-100 p-4 text-sm font-semibold text-slate-600">Online transfer is not currently available.</p>;
   return <div className="grid gap-3 sm:grid-cols-2">
-    {[ ["GCash Account", "Whizzkids", "09XX-XXX-1234"], ["BDO Bank", "Whizzkids", "09XX-XXX-1234"] ].map(([title, accountName, number]) => <div key={title} className="rounded-2xl border-2 border-brand-500 bg-white p-4 text-slate-700"><h4 className="font-extrabold">{title}</h4><p className="mt-2 font-semibold">Account Name: {accountName}</p><p className="text-sm font-semibold">Account Number: {number}</p></div>)}
+    {accounts.map((account) => <div key={account.id} className="rounded-2xl border-2 border-brand-500 bg-white p-4 text-slate-700"><h4 className="font-extrabold">{account.provider}</h4><p className="mt-2 font-semibold">Account Name: {account.accountName}</p><p className="text-sm font-semibold">Account Number: {account.accountNumber}</p></div>)}
   </div>;
 }
 
 export default function TuteeRequests() {
   const s = useStore();
   const id = s.me.id;
+  const bookingRecords = s.db.bookings;
+  const sessionRecords = s.db.sessions;
+  const paymentSettings = s.db.paymentSettings || { onlineAccounts: [], onlineEnabled: true, inPersonEnabled: true, addresses: [] };
+  const availablePaymentMethods = [
+    ...(paymentSettings.onlineEnabled && paymentSettings.onlineAccounts?.length ? [{ id: "online", title: "Online Transfer", caption: "View available payment accounts." }] : []),
+    ...(paymentSettings.inPersonEnabled && paymentSettings.addresses?.length ? [{ id: "in_person", title: "In-person Payment", caption: "Pay directly at the tutoring center." }] : []),
+  ];
+  const refreshSlotAvailability = s.refreshSlotAvailability;
   const [tab, setTab] = useState("pending");
   const [program, setProgram] = useState("academic");
   const [bookingModal, setBookingModal] = useState(null);
   const [reschedule, setReschedule] = useState(null);
   const [rescheduleError, setRescheduleError] = useState("");
   const [rescheduleBusy, setRescheduleBusy] = useState(false);
+  const [rescheduleAvailability, setRescheduleAvailability] = useState({ key: "", available: {}, loading: false });
   useEffect(() => {
     if (!s.ready || !s.me) return;
     let active = true;
@@ -96,6 +106,7 @@ export default function TuteeRequests() {
     return () => { active = false; };
   }, [s.ready, s.me, s.db.bookings]);
   const [paymentDetails, setPaymentDetails] = useState({});
+  const [bookingDetailsOpen, setBookingDetailsOpen] = useState({});
   const [receiptPreview, setReceiptPreview] = useState("");
   const [paymentMethod, setPaymentMethod] = useState({});
   const [receiptNames, setReceiptNames] = useState({});
@@ -109,10 +120,33 @@ export default function TuteeRequests() {
   const isMyBooking = (booking) => booking.tuteeId === id || ownBookingIds.has(booking.id);
 
   useEffect(() => {
-    const signatureOf = (db) => JSON.stringify((db?.bookings || [])
-      .filter((booking) => booking.tuteeId === id || (db.sessions || []).some((session) => session.tuteeId === id && session.bookingId === booking.id))
-      .map((booking) => [booking.id, statusOf(booking), booking.paymentStatus || "", !!booking.rescheduleProposal])
-      .sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+    if (!reschedule) { setRescheduleAvailability({ key: "", available: {}, loading: false }); return; }
+    const booking = bookingRecords.find((entry) => entry.id === reschedule.bookingId);
+    if (!booking) return;
+    const selected = sessionRecords.filter((session) => session.bookingId === booking.id && reschedule.sessionIds.includes(session.id));
+    const dates = [...new Set(selected.map((session) => reschedule.schedules[session.id]?.date).filter(Boolean))];
+    const subjects = [...new Set(selected.map((session) => booking.sessionSlots?.find((slot) => slot.date === session.date && slot.time === session.time)?.subject || booking.sessionSubjects?.[session.date] || booking.subject || "English"))];
+    if (!dates.length || !subjects.length) { setRescheduleAvailability({ key: "", available: {}, loading: false }); return; }
+    const key = JSON.stringify([booking.id, dates, subjects, booking.program, booking.gradeLevel, booking.modality, booking.sessionType || "one-on-one"]);
+    let stopped = false;
+    const refresh = async () => {
+      setRescheduleAvailability((current) => ({ ...current, key, loading: true }));
+      const result = await refreshSlotAvailability({ bookingId: booking.id, dates, times: HOURS, subjects, program: booking.program, gradeLevel: booking.gradeLevel, modality: booking.modality, sessionType: booking.sessionType || "one-on-one" });
+      if (!stopped) setRescheduleAvailability({ key, available: result.ok ? result.available : {}, loading: false });
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 5000);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [reschedule, bookingRecords, sessionRecords, refreshSlotAvailability]);
+
+  useEffect(() => {
+    const signatureOf = (db) => JSON.stringify({
+      paymentSettings: db?.paymentSettings,
+      bookings: (db?.bookings || [])
+        .filter((booking) => booking.tuteeId === id || (db.sessions || []).some((session) => session.tuteeId === id && session.bookingId === booking.id))
+        .map((booking) => [booking.id, statusOf(booking), booking.paymentStatus || "", !!booking.rescheduleProposal])
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+    });
     const signature = signatureOf(s.db);
     const refreshIfChanged = async () => {
       if (document.visibilityState !== "visible") return;
@@ -149,10 +183,9 @@ export default function TuteeRequests() {
   };
   const categoryOf = (booking) => {
     const status = statusOf(booking);
-    const sessions = sessionsFor(booking);
     if (["cancelled", "rejected", "expired", "declined", "terminated"].includes(status)) return "cancelled";
     if (paymentDueFor(booking) || ["awaiting_payment_approval", "awaiting_approval"].includes(status)) return "pending";
-    if (status === "completed" || (sessions.length > 0 && sessions.every((session) => session.status === "completed"))) return "completed";
+    if (status === "completed") return "completed";
     if (booking.paymentStatus === "paid" && !["cancelled", "rejected", "expired", "declined", "terminated"].includes(status)) return "approved";
     if (status === "approved" && isPlaygroup(booking)) return "approved";
     return "pending";
@@ -237,13 +270,24 @@ export default function TuteeRequests() {
             const paidAt = booking.paymentProof?.submittedAt || booking.paymentApprovedAt;
             const dueAt = category === "cancelled" && !paidAt ? null : booking.paymentDeadlineAt || (booking.paymentStatus && booking.expiresAt);
             const paymentDue = paymentDueFor(booking);
+            const detailsExpanded = bookingDetailsOpen[booking.id] ?? (status === "to_pay" || booking.paymentStatus === "to_pay");
+            const selectedPaymentMethod = availablePaymentMethods.some((method) => method.id === paymentMethod[booking.id]) ? paymentMethod[booking.id] : availablePaymentMethods[0]?.id;
             const paymentReviewPending = ["awaiting_payment_approval", "awaiting_approval"].includes(status);
             const canCancel = !paymentReviewPending && (paymentDue || ["pending", "pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin"].includes(status));
-            const canReschedule = category === "approved" && sessionsFor(booking).some((session) => session.status === "scheduled" && session.date >= todayISO());
+            const canReschedule = category === "approved" && !booking.rescheduleUsed && !(booking.scheduleHistory?.length > 0) && sessionsFor(booking).some((session) => session.status === "scheduled" && session.date >= todayISO());
             const hasPaymentRecord = paymentReviewPending || booking.paymentStatus === "paid" || !!booking.paymentApprovedAt;
             const title = isPlaygroup(booking) ? `Playgroup · ${s.db.cohorts.find((cohort) => cohort.id === booking.cohortId)?.label || "Cohort"}` : booking.program === "reading" ? "Reading" : `${booking.program === "academic" ? "Academic Program" : booking.program || "Program"} Booking`;
             const detailSubjects = booking.subjects?.length ? booking.subjects.join(" · ") : booking.subject || "—";
             const cycle = booking.cycleType === "1-month" ? "1 month" : booking.cycleType ? `${booking.cycleType} cycle` : "One-time";
+            const assessment = booking.program === "reading" ? s.db.assessments.find((entry) => entry.id === booking.assessmentId) : null;
+            const initialAssessmentText = assessment?.status === "booked" && assessment.date
+              ? dateTime(`${assessment.date}T${assessment.time || "00:00"}:00`)
+              : assessment?.status === "completed"
+                ? isAssessmentOutdated(assessment) ? "Outdated · retake required" : "Completed"
+                : "No schedule yet";
+            const bookedAt = booking.createdAt || booking.at;
+            const approvedAt = booking.paymentApprovedAt || booking.approvedAt;
+            const cancelledAt = booking.cancelledAt || booking.terminatedAt || (status === "expired" ? booking.paymentDeadlineAt || booking.expiresAt : null);
             const bookingDetails = [
               ["Booking ID", booking.id],
               ["Requested cycle", cycle],
@@ -266,7 +310,10 @@ export default function TuteeRequests() {
                 </div>
               </header>
 
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
+              {booking.program === "reading" && <p className="mt-3 text-sm font-semibold text-slate-700"><b>Initial Assessment:</b> <span className="text-slate-500">{initialAssessmentText}</span></p>}
+              {paymentReviewPending && <p className="mt-3 flex items-start gap-2 text-xs font-semibold text-slate-500"><Info className="h-4 w-4 shrink-0 text-brand-600"/>Your confirmed schedule will appear in My Schedule once your payment is approved.</p>}
+
+              {detailsExpanded ? <div className="mt-5 space-y-4"><div className="grid gap-4 md:grid-cols-2">
                 <div className="overflow-hidden rounded-2xl bg-slate-100 text-sm text-slate-600 shadow-sm">
                   <h3 className="border-b-4 border-white px-5 py-3 text-base font-extrabold text-slate-800">Booking details</h3>
                   <dl className="space-y-2 px-5 py-4">{bookingDetails.map(([label, value]) => <div key={label} className="flex items-start justify-between gap-3"><dt className="font-semibold">{label}</dt><dd className="text-right">{value}</dd></div>)}</dl>
@@ -284,10 +331,12 @@ export default function TuteeRequests() {
               {paymentDue && <div className="mt-4 space-y-4">
                 {booking.paymentStatus === "proof_rejected" && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800"><b>Payment receipt rejected.</b><p className="mt-1">Reason: {booking.paymentReviewNote || "Please contact the admin for details."}</p><p className="mt-1 font-semibold">Submit a new receipt within the updated payment deadline.</p></div>}
                 <h3 className="text-lg font-extrabold">Choose Payment Method</h3>
+                {availablePaymentMethods.length === 0 ? <p className="rounded-xl bg-amber-50 p-4 text-sm font-semibold text-amber-800">No payment methods are currently available. Please contact the tutoring center.</p> : <>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {[{ id: "online", title: "Online Transfer", caption: "View payment details." }, { id: "in_person", title: "In-person Payment", caption: "Pay directly at the tutoring center." }].map((method) => <button key={method.id} type="button" onClick={() => setPaymentMethod((current) => ({ ...current, [booking.id]: method.id }))} className={`rounded-2xl bg-slate-100 p-4 text-left ${ (paymentMethod[booking.id] || "online") === method.id ? "ring-2 ring-brand-500" : "ring-1 ring-slate-200"}`}><span className="font-extrabold">{(paymentMethod[booking.id] || "online") === method.id ? "◉" : "○"}　{method.title}</span><span className="mt-1 block pl-7 text-xs font-semibold text-slate-500">{method.caption}</span></button>)}
+                  {availablePaymentMethods.map((method) => <button key={method.id} type="button" onClick={() => setPaymentMethod((current) => ({ ...current, [booking.id]: method.id }))} className={`rounded-2xl bg-slate-100 p-4 text-left ${ selectedPaymentMethod === method.id ? "ring-2 ring-brand-500" : "ring-1 ring-slate-200"}`}><span className="font-extrabold">{selectedPaymentMethod === method.id ? "◉" : "○"}　{method.title}</span><span className="mt-1 block pl-7 text-xs font-semibold text-slate-500">{method.caption}</span></button>)}
                 </div>
-                {(paymentMethod[booking.id] || "online") === "online" ? <div className="space-y-3"><TransferAccounts/><p className="text-sm font-semibold text-slate-500">Transfer the exact amount shown above, then upload your payment receipt or screenshot.</p></div> : <div className="rounded-2xl border-2 border-brand-500 p-4 text-sm text-slate-600"><p className="font-bold text-slate-800">{booking.paymentInstructions || "Pay directly at the tutoring center."}</p><p className="mt-2">After payment, upload your receipt or payment record for admin verification.</p></div>}
+                {selectedPaymentMethod === "online" ? <div className="space-y-3"><TransferAccounts accounts={paymentSettings.onlineAccounts}/><p className="text-sm font-semibold text-slate-500">Transfer the exact amount shown above, then upload your payment receipt or screenshot.</p></div> : <div className="space-y-3 rounded-2xl border-2 border-brand-500 p-4 text-sm text-slate-600"><p className="font-bold text-slate-800">Pay directly at one of these locations:</p>{paymentSettings.addresses.map((address) => <div key={address.id} className="rounded-xl bg-slate-50 p-3"><b>{address.buildingName}</b><p>{address.address}</p><p>Working hours: {address.workingHours}</p></div>)}<p>After payment, upload your receipt or payment record for admin verification.</p></div>}
+                </>}
                 <div className="space-y-3 rounded-2xl border border-dashed border-slate-400 p-4">
                   <div className="flex items-center gap-2 font-extrabold"><UploadCloud className="h-5 w-5 text-brand-600"/> Upload Payment Proof</div>
                   <label htmlFor={`receipt-${booking.id}`} className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 px-4 py-7 text-center hover:border-brand-400 hover:bg-brand-50/40">
@@ -296,7 +345,7 @@ export default function TuteeRequests() {
                   <Input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" id={`receipt-${booking.id}`} aria-label="Upload payment receipt" onChange={(event) => setReceiptNames((current) => ({ ...current, [booking.id]: event.target.files?.[0]?.name || "" }))}/>
                   <Field label="Payment reference (optional)"><Input id={`reference-${booking.id}`} maxLength={120}/></Field>
                   {proofMessage[booking.id] && <Alert kind="error">{proofMessage[booking.id]}</Alert>}
-                  <Button className="w-full" disabled={!!proofBusy[booking.id]} onClick={() => submitProof(booking.id, document.getElementById(`receipt-${booking.id}`)?.files?.[0], document.getElementById(`reference-${booking.id}`)?.value, paymentMethod[booking.id] || "online")}>{proofBusy[booking.id] ? "Submitting…" : "Submit payment proof"}</Button>
+                  <Button className="w-full" disabled={!!proofBusy[booking.id] || !selectedPaymentMethod} onClick={() => submitProof(booking.id, document.getElementById(`receipt-${booking.id}`)?.files?.[0], document.getElementById(`reference-${booking.id}`)?.value, selectedPaymentMethod)}>{proofBusy[booking.id] ? "Submitting…" : "Submit payment proof"}</Button>
                 </div>
                 <p className="flex items-start gap-2 text-xs font-semibold text-slate-500"><Info className="h-4 w-4 shrink-0 text-brand-600"/>Your schedule appears in My Schedule after payment approval.</p>
               </div>}
@@ -304,7 +353,7 @@ export default function TuteeRequests() {
               {paymentReviewPending && <div className="mt-4 space-y-3">
                 <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm font-semibold text-blue-800">Payment proof submitted. Your booking is waiting for admin approval.</div>
                 <Button variant="secondary" className="w-full bg-slate-200" onClick={() => setPaymentDetails((current) => ({ ...current, [booking.id]: !current[booking.id] }))}>{paymentDetails[booking.id] ? "Hide payment details" : "Show payment details"}</Button>
-                {paymentDetails[booking.id] && <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600"><p>Payment method: <span className="font-bold">{booking.paymentProof?.method === "in_person" ? "In-person Payment" : "Online Transfer"}</span></p>{booking.paymentProof?.method === "in_person" ? <p>{booking.paymentInstructions || "Payment proof was submitted for an in-person payment."}</p> : <><TransferAccounts/><p>Transfer the exact amount shown above. Your submitted receipt is awaiting admin verification.</p></>}{booking.paymentProof?.reference && <p>Reference: {booking.paymentProof.reference}</p>}{booking.paymentProof?.submittedAt && <p>Submitted: {dateTime(booking.paymentProof.submittedAt)}</p>}{booking.paymentProof?.receiptData && <button type="button" className="inline-block font-bold text-brand-700 underline" onClick={() => setReceiptPreview(booking.paymentProof.receiptData)}>View payment receipt</button>}</div>}
+                {paymentDetails[booking.id] && <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600"><p>Payment method: <span className="font-bold">{booking.paymentProof?.method === "in_person" ? "In-person Payment" : "Online Transfer"}</span></p>{booking.paymentProof?.method === "in_person" ? <div className="space-y-2">{paymentSettings.addresses.map((address) => <div key={address.id} className="rounded-xl bg-white p-3"><b>{address.buildingName}</b><p>{address.address}</p><p>Working hours: {address.workingHours}</p></div>)}</div> : <><TransferAccounts accounts={paymentSettings.onlineAccounts}/><p>Transfer the exact amount shown above. Your submitted receipt is awaiting admin verification.</p></>}{booking.paymentProof?.reference && <p>Reference: {booking.paymentProof.reference}</p>}{booking.paymentProof?.submittedAt && <p>Submitted: {dateTime(booking.paymentProof.submittedAt)}</p>}{booking.paymentProof?.receiptData && <button type="button" className="inline-block font-bold text-brand-700 underline" onClick={() => setReceiptPreview(booking.paymentProof.receiptData)}>View payment receipt</button>}</div>}
                 <p className="flex items-start gap-2 text-xs font-semibold text-slate-500"><Info className="h-4 w-4 shrink-0 text-brand-600"/>Your reservation stays active while the admin reviews your payment proof.</p>
               </div>}
 
@@ -313,13 +362,21 @@ export default function TuteeRequests() {
                 {paymentDetails[booking.id] && <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600"><p>Payment status: <span className="font-bold capitalize">{String(booking.paymentStatus || "paid").replace(/_/g, " ")}</span></p><p className="mt-1">Amount paid: {peso(booking.paymentAmount ?? booking.totalFee ?? 0)}</p>{booking.paymentProof?.method && <p className="mt-1">Payment method: {booking.paymentProof.method === "in_person" ? "In-person Payment" : "Online Transfer"}</p>}{booking.paymentInstructions && <p className="mt-1">{booking.paymentInstructions}</p>}{booking.paymentProof?.reference && <p className="mt-1">Reference: {booking.paymentProof.reference}</p>}{booking.paymentProof?.receiptData && <button type="button" className="mt-2 inline-block font-bold text-brand-700 underline" onClick={() => setReceiptPreview(booking.paymentProof.receiptData)}>View payment receipt</button>}</div>}
               </div>}
 
-              {(booking.rescheduleProposal || booking.scheduleHistory?.length > 0) && <section className="mt-4 space-y-3"><h3 className="font-extrabold">Reschedule Request</h3>{booking.rescheduleProposal && <div className="rounded-xl border border-slate-300 p-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><b>{booking.subject || "Session"}</b><Badge status="pending">Pending Request</Badge></div><div className="mt-2 grid gap-2 sm:grid-cols-2"><div><span className="block text-xs font-bold text-slate-500">Current schedule</span>{fmtDate(booking.rescheduleProposal.original.date)} · {fmtTime(booking.rescheduleProposal.original.time)}<div className="text-xs text-slate-500">Tutor: {s.db.tutors.find((tutor) => tutor.userId === booking.rescheduleProposal.original.tutorId)?.fullName || "Assigned tutor"}</div></div><div className="font-semibold text-brand-700"><span className="block text-xs font-bold text-slate-500">Requested schedule</span>{fmtDate(booking.rescheduleProposal.date)} · {fmtTime(booking.rescheduleProposal.time)}<div className="text-xs">Tutor: {s.db.tutors.find((tutor) => tutor.userId === booking.rescheduleProposal.tutorId)?.fullName || "Being matched"}</div></div></div><p className="mt-2 text-xs text-slate-500">The original schedule remains active until the admin approves this request.</p></div>}{(booking.scheduleHistory || []).map((entry, index) => <div key={`${booking.id}-history-${index}`} className="rounded-xl border border-slate-300 p-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><b>{booking.subject || "Session"}</b><Badge status="approved">Approved</Badge></div><div className="mt-2 grid gap-2 sm:grid-cols-2"><div><span className="block text-xs font-bold text-slate-500">Previous schedule</span>{fmtDate(entry.old.date)} · {fmtTime(entry.old.time)}</div><div className="font-semibold text-brand-700"><span className="block text-xs font-bold text-slate-500">Updated schedule</span>{fmtDate(entry.updated.date)} · {fmtTime(entry.updated.time)}</div></div></div>)}</section>}
+              {(booking.rescheduleProposal || booking.scheduleHistory?.length > 0) && <section className="mt-4 space-y-3"><h3 className="font-extrabold">Reschedule Request</h3>{booking.rescheduleProposal && <div className="rounded-xl border border-slate-300 p-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><b>{booking.subject || "Session"}</b><Badge status="pending">Pending Request</Badge></div><div className="mt-2 grid gap-2 sm:grid-cols-2"><div><span className="block text-xs font-bold text-slate-500">Current schedule</span>{fmtDate(booking.rescheduleProposal.original.date)} · {fmtTime(booking.rescheduleProposal.original.time)}<div className="text-xs text-slate-500">Tutor: {s.db.tutors.find((tutor) => tutor.userId === booking.rescheduleProposal.original.tutorId)?.fullName || "Assigned tutor"}</div></div><div className="font-semibold text-brand-700"><span className="block text-xs font-bold text-slate-500">Requested schedule</span>{fmtDate(booking.rescheduleProposal.date)} · {fmtTime(booking.rescheduleProposal.time)}<div className="text-xs">Tutor: {s.db.tutors.find((tutor) => tutor.userId === booking.rescheduleProposal.tutorId)?.fullName || s.db.tutors.find((tutor) => tutor.userId === booking.rescheduleProposal.original.tutorId)?.fullName || "Assigned tutor"}</div></div></div><p className="mt-2 text-xs text-slate-500">You can edit this request until an admin reviews it. The original schedule remains active until approval.</p></div>}{(booking.scheduleHistory || []).map((entry, index) => <div key={`${booking.id}-history-${index}`} className="rounded-xl border border-slate-300 p-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><b>{booking.subject || "Session"}</b><Badge status="approved">Approved</Badge></div><div className="mt-2 grid gap-2 sm:grid-cols-2"><div><span className="block text-xs font-bold text-slate-500">Previous schedule</span>{fmtDate(entry.old.date)} · {fmtTime(entry.old.time)}<div className="text-xs text-slate-500">Assigned Tutor: {s.db.tutors.find((tutor) => tutor.userId === entry.old.tutorId)?.fullName || "Assigned tutor"}</div></div><div className="font-semibold text-brand-700"><span className="block text-xs font-bold text-slate-500">Updated schedule</span>{fmtDate(entry.updated.date)} · {fmtTime(entry.updated.time)}<div className="text-xs">New Assigned Tutor: {s.db.tutors.find((tutor) => tutor.userId === entry.updated.tutorId)?.fullName || s.db.tutors.find((tutor) => tutor.userId === entry.old.tutorId)?.fullName || "Assigned tutor"}</div></div></div></div>)}</section>}
               {booking.scheduleProposal?.sessions && <div className="mt-4 space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
                 <b>The admin proposed a schedule change. Review it:</b><p>{booking.scheduleProposal.sessions.map((session) => `${fmtDate(session.date)} at ${fmtTime(session.time)}`).join(" · ")}</p>
                 <div className="flex flex-wrap gap-2"><Button size="sm" onClick={async () => { const result = await s.decideBookingScheduleProposal(booking.id, true); setProposalMessage((current) => ({ ...current, [booking.id]: result.ok ? "Schedule approved." : result.error })); }}>Approve schedule</Button><Button size="sm" variant="secondary" onClick={async () => { const result = await s.decideBookingScheduleProposal(booking.id, false); setProposalMessage((current) => ({ ...current, [booking.id]: result.ok ? "Original schedule kept." : result.error })); }}>Decline</Button></div>
               </div>}
-              {cancelMessage[booking.id] && <p className="mt-3 text-sm text-slate-600">{cancelMessage[booking.id]}</p>}
               {proposalMessage[booking.id] && <p className="mt-3 text-sm text-slate-600">{proposalMessage[booking.id]}</p>}
+              <Button variant="secondary" className="w-full bg-slate-200" onClick={() => setBookingDetailsOpen((current) => ({ ...current, [booking.id]: false }))}>Hide Details</Button>
+            </div> : <Button variant="secondary" className="mt-5 w-full bg-slate-200" onClick={() => setBookingDetailsOpen((current) => ({ ...current, [booking.id]: true }))}>Show details</Button>}
+              {cancelMessage[booking.id] && <p className="mt-3 text-sm text-slate-600">{cancelMessage[booking.id]}</p>}
+              <footer className="mt-4 flex flex-wrap justify-between gap-2 px-1 text-xs font-semibold text-slate-400">
+                <span>Booked on {bookedAt ? dateTime(bookedAt) : "—"}</span>
+                {category === "approved" && <span className="text-green-700">Approved on {approvedAt ? dateTime(approvedAt) : "—"}</span>}
+                {category === "completed" && <span className="text-blue-700">Completed on {booking.completedAt ? dateTime(booking.completedAt) : "—"}</span>}
+                {category === "cancelled" && <span className="text-red-600">Cancelled on {cancelledAt ? dateTime(cancelledAt) : "—"}</span>}
+              </footer>
             </article>;
           })}
         </div>}
@@ -337,6 +394,7 @@ export default function TuteeRequests() {
               const subject = booking?.sessionSlots?.find((slot) => slot.date === session.date && slot.time === session.time)?.subject || booking?.sessionSubjects?.[session.date] || booking?.subject || "Session";
               const active = reschedule.sessionIds.includes(session.id);
               const schedule = reschedule.schedules[session.id] || { date: "", time: "" };
+              const availabilityTimes = schedule.date ? HOURS.filter((time) => rescheduleAvailability.available[`${schedule.date}|${time}|${subject}`] === true) : [];
               return <div key={session.id} className={`rounded-2xl border-2 p-4 ${active ? "border-brand-500" : "border-slate-300"}`}>
                 <button type="button" className="flex w-full items-start gap-3 text-left" onClick={() => setReschedule((current) => ({ ...current, sessionIds: active ? current.sessionIds.filter((id) => id !== session.id) : [...current.sessionIds, session.id] }))}>
                   <span className={`mt-1 h-5 w-5 shrink-0 rounded-full border-2 ${active ? "border-brand-600 bg-brand-600 ring-2 ring-brand-200" : "border-slate-400"}`}/>
@@ -346,14 +404,14 @@ export default function TuteeRequests() {
                   <h3 className="text-lg font-extrabold">New Schedule</h3>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="Preferred date"><Input type="date" min={todayISO()} value={schedule.date} onChange={(event) => setReschedule((current) => ({ ...current, schedules: { ...current.schedules, [session.id]: { ...current.schedules[session.id], date: event.target.value, time: "" } } }))}/></Field>
-                    <Field label="Preferred time"><Select value={schedule.time} onChange={(event) => setReschedule((current) => ({ ...current, schedules: { ...current.schedules, [session.id]: { ...current.schedules[session.id], time: event.target.value } } }))}><option value="">Select time</option>{HOURS.map((time) => <option key={time} value={time}>{fmtTime(time)}</option>)}</Select></Field>
+                    <Field label="Preferred time"><Select value={schedule.time} onChange={(event) => setReschedule((current) => ({ ...current, schedules: { ...current.schedules, [session.id]: { ...current.schedules[session.id], time: event.target.value } } }))}><option value="">{!schedule.date ? "Choose a date first" : rescheduleAvailability.loading ? "Checking open times…" : availabilityTimes.length ? "Select an available time" : "No available times"}</option>{availabilityTimes.map((time) => <option key={time} value={time}>{fmtTime(time)}</option>)}</Select></Field>
                   </div>
                 </div>}
               </div>;
             })}
           </div>
           <Field label="Reason for rescheduling"><Textarea placeholder="Type a message..." value={reschedule.reason} onChange={(event) => setReschedule((current) => ({ ...current, reason: event.target.value }))}/></Field>
-          <p className="text-xs font-semibold text-slate-500">Only selected sessions will be affected by your request. Your original schedule remains confirmed until the admin approves the change.</p>
+          <p className="text-xs font-semibold text-slate-500">Only the sessions you select will be rescheduled. Every unselected session stays on its current schedule. Your original schedule remains confirmed until the admin approves the change.</p>
           {rescheduleError && <Alert kind="error">{rescheduleError}</Alert>}
           <Button className="w-full" disabled={rescheduleBusy || !selectedSessions.length || selectedSessions.some((session) => !reschedule.schedules[session.id]?.date || !reschedule.schedules[session.id]?.time) || !reschedule.reason.trim()} onClick={async () => {
             setRescheduleBusy(true);
@@ -372,9 +430,23 @@ export default function TuteeRequests() {
       {bookingModal && (() => {
         const booking = bookingModal.booking;
         const slots = booking.sessionSlots || (booking.dates || []).map((date) => ({ date, time: booking.sessionTimes?.[date] ?? booking.time, subject: booking.sessionSubjects?.[date] ?? booking.subject }));
+        const category = categoryOf(booking);
+        const actualSessions = s.db.sessions.filter((session) => session.bookingId === booking.id);
+        const sessionStatus = (slot, index) => {
+          if (category === "cancelled") return "Cancelled";
+          if (category === "completed") return "Completed";
+          if (category === "pending") return "Pending";
+          const session = actualSessions.find((entry) => entry.date === slot.date && entry.time === slot.time) || actualSessions[index];
+          return session?.status === "completed" ? "Completed" : session?.status === "cancelled" ? "Cancelled" : "Scheduled";
+        };
+        const completedCount = category === "completed" ? slots.length : slots.filter((slot, index) => sessionStatus(slot, index) === "Completed").length;
+        const scheduleBadge = (value) => value === "Completed" ? "bg-blue-100 text-blue-700" : value === "Scheduled" ? "bg-green-100 text-green-700" : value === "Cancelled" ? "bg-slate-200 text-slate-700" : "bg-amber-100 text-amber-700";
         return <div className="space-y-3 text-sm">
-          <div className="flex items-center justify-between gap-3"><span className="font-bold">{booking.program === "playgroup" ? "Playgroup" : booking.subject}</span><Badge status={statusOf(booking)}>{statusLabel(booking)}</Badge></div>
-          {bookingModal.type === "schedule" ? <div className="max-h-[60vh] space-y-2 overflow-y-auto">{slots.map((slot, index) => <div key={`${slot.date}-${slot.time}-${index}`} className="rounded-lg bg-slate-50 px-3 py-2">{fmtDate(slot.date)} · {slot.subject || booking.subject} · {fmtTime(slot.time)}</div>)}</div> : <>
+          {bookingModal.type === "schedule" ? <>
+            <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-extrabold text-slate-800">{booking.program === "playgroup" ? "Playgroup" : booking.subject || booking.program} · {completedCount}/{slots.length} Completed Sessions</h3></div><span className={`rounded-full px-4 py-2 text-center text-xs font-extrabold ${category === "completed" ? "bg-blue-100 text-blue-700" : category === "approved" ? "bg-green-100 text-green-700" : category === "cancelled" ? "bg-slate-200 text-slate-700" : "bg-amber-100 text-amber-700"}`}>{statusLabel(booking)}</span></div>
+            <div className="max-h-[60vh] space-y-2 overflow-y-auto">{slots.map((slot, index) => { const value = sessionStatus(slot, index); return <div key={`${slot.date}-${slot.time}-${index}`} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2"><span className="min-w-0">{fmtDate(slot.date)} · {slot.subject || booking.subject || "Session"} · {fmtTime(slot.time)}</span><span className={`shrink-0 rounded-lg px-3 py-2 text-center text-xs font-extrabold ${scheduleBadge(value)}`}>{value}</span></div>; })}</div>
+          </> : <>
+            <div className="flex items-center justify-between gap-3"><span className="font-bold">{booking.program === "playgroup" ? "Playgroup" : booking.subject}</span><Badge status={statusOf(booking)}>{statusLabel(booking)}</Badge></div>
             <p>{booking.modality} · {peso(booking.totalFee)}</p>
             <p>Tutor: {[...new Set(sessionsFor(booking).map((session) => session.tutorId).filter(Boolean))].map((tutorId) => s.db.tutors.find((tutor) => tutor.userId === tutorId)?.fullName || "Assigned").join(" · ") || "Not yet assigned"}</p>
             {booking.scheduleHistory?.length > 0 && <div><b>Schedule history</b>{booking.scheduleHistory.map((entry, index) => <p key={index}>From {fmtDate(entry.old.date)} at {fmtTime(entry.old.time)} to {fmtDate(entry.updated.date)} at {fmtTime(entry.updated.time)}</p>)}</div>}

@@ -8,13 +8,13 @@ const Ctx = createContext(null);
 
 const BUSINESS_ACTIONS = [
   "notify", "markNotificationsRead", "markMessageNotificationsRead", "sendMessage",
-  "saveTuteeProfile", "saveTutorProfile", "requestAssessment", "scheduleAssessment", "completeAssessment", "renewReadingAssessment", "cancelAssessment", "cancelTutorialBooking",
+  "saveTuteeProfile", "saveTutorProfile", "saveAdminProfile", "requestAssessment", "scheduleAssessment", "completeAssessment", "renewReadingAssessment", "cancelAssessment", "cancelTutorialBooking",
   "bookPlaygroup", "cancelPlaygroupBooking", "submitTutorialBooking", "rateSession", "submitLeave",
   "scheduleInterview", "evaluateApplicant", "verifyExistingTutor", "setTutorPay",
   "adminEditTutorAvailability", "setTutorWeeklySchedule", "decideLeave", "adminLeave", "proposeBookingSchedule",
   "decideBookingScheduleProposal", "confirmBooking", "confirmBookingSession", "confirmReadingAssignment", "rejectReadingAssignment", "rejectBooking", "terminateBooking", "completeSession",
   "checkInSession", "reassignSession", "proposeSessionReschedule", "cancelSession",
-  "updateCohort", "addCohort", "deleteCohort", "removeFromCohort", "assignPlaygroupBooking", "assignPlaygroupWeekday", "approvePlaygroupBooking", "addMaterial", "updateMaterial",
+  "updateCohort", "addCohort", "deleteCohort", "removeFromCohort", "assignPlaygroupBooking", "assignPlaygroupWeekday", "approvePlaygroupBooking", "addMaterial", "updateMaterial", "managePaymentSettings",
   "deleteMaterial", "logMaterialAccess",
 ];
 

@@ -142,18 +142,26 @@ export function tutorFreeOn(db, t, p, date) {
 }
 export function matchTutors(db, p) {
     const out = [];
-    for (const t of db.tutors) {
-        if (!tutorQualifies(t, p))
-            continue;
+    const candidateTutors = db.tutors.filter((tutor) => tutorQualifies(tutor, p));
+    const workloadByTutor = new Map(candidateTutors.map((tutor) => [tutor.userId,
+        (db.sessions || []).filter((session) => session.tutorId === tutor.userId
+            && p.dates.includes(session.date)
+            && ["scheduled", "needs_reassignment"].includes(session.status)
+            && session.bookingId !== p.ignoreBookingId).length]));
+    for (const t of candidateTutors) {
         const ok = p.dates.filter((d) => tutorFreeOn(db, t, p, d));
         if (!ok.length)
             continue;
         const rating = tutorRating(db, t.userId);
         const full = ok.length === p.dates.length;
         const gradeScore = tutorHasGradeBand(t, bandOf(p.gradeLevel)) ? 25 : 0;
-        const scheduleScore = (ok.length / p.dates.length) * 35;
-        const subjectScore = tutorQualifies(t, p) ? 40 : 0;
-        const score = gradeScore + scheduleScore + subjectScore;
+        const scheduleScore = (ok.length / p.dates.length) * 25;
+        const subjectScore = tutorQualifies(t, p) ? 35 : 0;
+        const workload = workloadByTutor.get(t.userId) || 0;
+        // Workload is a soft preference: each existing session reduces points
+        // gradually, and never by itself makes an otherwise eligible tutor score zero.
+        const workloadScore = 15 / (1 + workload / Math.max(1, p.dates.length * 2));
+        const score = gradeScore + scheduleScore + subjectScore + workloadScore;
         out.push({
             tutor: t,
             coverage: ok.length,
@@ -162,6 +170,8 @@ export function matchTutors(db, p) {
             gradeScore,
             scheduleScore,
             subjectScore,
+            workloadScore,
+            workload,
             score,
             rating,
             missingDates: p.dates.filter((d) => !ok.includes(d)),

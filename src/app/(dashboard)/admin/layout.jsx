@@ -1,5 +1,5 @@
 "use client";
-import { CalendarDays, ClipboardList, FileLock2, History, Home, MessageCircle, CreditCard, Users, Baby } from "lucide-react";
+import { CalendarDays, ClipboardList, FileLock2, History, Home, MessageCircle, CreditCard, Users, Baby, BookOpenCheck, UserRound } from "lucide-react";
 import { DashboardShell } from "@/components/Shell";
 import { useStore } from "@/lib/store";
 export default function AdminLayout({ children }) {
@@ -14,14 +14,16 @@ export default function AdminLayout({ children }) {
     const assessments = db.assessments?.filter((a) => ["booked", "pending_admin_scheduling"].includes(a.status)).length ?? 0;
     return (<DashboardShell role="admin" nav={[
             { href: "/admin", label: "Dashboard", icon: <Home /> },
-            { href: "/admin/tutors", label: "Tutor", icon: <Users />, badge: apps + approvals },
             { href: "/admin/booking-requests", label: "Booking Requests", icon: <ClipboardList />, badge: matching + assessments },
             { href: "/admin/scheduling", label: "Calendar", icon: <CalendarDays />, badge: conflicts },
-            { href: "/admin/users", label: "Tutee Records", icon: <Baby /> },
+            { href: "/admin/users", label: "Tutee", icon: <Baby /> },
+            { href: "/admin/tutors", label: "Tutor", icon: <Users />, badge: apps + approvals },
+            { href: "/admin/payments", label: "Payment Records", icon: <CreditCard />, badge: payments },
+            { href: "/admin/booking-records", label: "Booking Records", icon: <BookOpenCheck /> },
             { href: "/admin/materials", label: "Learning Materials", icon: <FileLock2 /> },
-            { href: "/admin/orders", label: "Booking Payments", icon: <CreditCard />, badge: payments },
             { href: "/admin/chat", label: "Messages", icon: <MessageCircle />, badge: unreadMessages },
             { href: "/admin/history", label: "Activity History", icon: <History /> },
+            { href: "/admin/profile", label: "Profile", icon: <UserRound /> },
         ]}>
       {children}
     </DashboardShell>);

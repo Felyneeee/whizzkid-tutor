@@ -142,8 +142,8 @@ export default function Scheduling() {
     })}</div>{err && <div className="mt-2"><Alert kind="error">{err}</Alert></div>}</Card>}
 
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(320px,0.85fr)_minmax(0,1.4fr)]">
-      <Card className="p-3 sm:p-5"><Calendar selected={[selectedDate]} onSelect={selectDate} onMonthChange={setCalendarMonth} allowPast initialMonth={selectedDate} mark={(date) => new Date(`${date}T12:00:00`).getDay() === 0 ? null : ({ text: `${slotsByDate[date] || 0} Slot${slotsByDate[date] === 1 ? "" : "s"}`, tone: slotsByDate[date] ? "brand" : "coral" })} />
-        <div className="mt-4 flex items-center justify-between gap-2"><Button size="sm" variant="secondary" onClick={() => selectDate(addDays(selectedDate, -1))}>Previous day</Button><Button size="sm" variant="ghost" onClick={() => selectDate(today)}>Today</Button><Button size="sm" variant="secondary" onClick={() => selectDate(addDays(selectedDate, 1))}>Next day</Button></div>
+      <Card className="p-3 sm:p-5"><Calendar selected={[selectedDate]} onSelect={selectDate} onMonthChange={setCalendarMonth} allowPast minMonth={today.slice(0, 7)} initialMonth={selectedDate} mark={(date) => new Date(`${date}T12:00:00`).getDay() === 0 ? null : ({ text: `${slotsByDate[date] || 0} Slot${slotsByDate[date] === 1 ? "" : "s"}`, tone: slotsByDate[date] ? "brand" : "coral" })} />
+        <div className="mt-4 flex items-center justify-between gap-2"><Button size="sm" variant="secondary" disabled={addDays(selectedDate, -1).slice(0, 7) < today.slice(0, 7)} onClick={() => selectDate(addDays(selectedDate, -1))}>Previous day</Button><Button size="sm" variant="ghost" onClick={() => selectDate(today)}>Today</Button><Button size="sm" variant="secondary" onClick={() => selectDate(addDays(selectedDate, 1))}>Next day</Button></div>
         <div className="mt-4 flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs font-extrabold text-slate-600"><span><b className="text-mint-600">{availableSlotCount}</b> Available Slots</span><span><b className="text-brand-600">{fullyBookedCount}</b> Fully Booked Slots</span></div>
       </Card>
       <Card className="min-h-[520px] p-4 sm:p-6">

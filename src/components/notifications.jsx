@@ -4,7 +4,7 @@ export function notificationDestination(notification, role) {
   const text = String(notification.text || "").toLowerCase();
   const base = role === "admin" ? "/admin" : role === "tutor" ? "/tutor" : "/tutee";
   if (/new message/.test(text)) return role === "admin" ? "/admin/chat" : `${base}/chat`;
-  if (/payment|receipt|reservation|paid/.test(text)) return role === "admin" ? "/admin/orders" : `${base}/requests`;
+  if (/payment|receipt|reservation|paid/.test(text)) return role === "admin" ? "/admin/payments" : `${base}/requests`;
   if (/leave request|leave/.test(text)) return role === "admin" ? "/admin/tutors" : role === "tutor" ? "/tutor/leave" : "/tutee/requests";
   if (/assessment|reading/.test(text)) return role === "admin" ? "/admin/booking-requests" : `${base}/requests`;
   if (/booking|reschedul|tutor was matched|reservation/.test(text)) return role === "admin" ? "/admin/booking-requests" : role === "tutor" ? "/tutor/calendar" : "/tutee/requests";

@@ -15,7 +15,7 @@ const TUTEE_ACTIONS = new Set([
 const TUTOR_ACTIONS = new Set(["submitLeave", "checkInSession", "completeSession"]);
 const SHARED_ACTIONS = new Set([
   "markNotificationsRead", "markMessageNotificationsRead", "sendMessage", "logMaterialAccess",
-  "saveTuteeProfile", "saveTutorProfile", "decideBookingScheduleProposal",
+  "saveTuteeProfile", "saveTutorProfile", "saveAdminProfile", "decideBookingScheduleProposal",
 ]);
 
 function deny(message = "You are not allowed to perform this action.") {
@@ -50,7 +50,7 @@ export function authorizeBusinessAction(state, user, action, args) {
     if (user.role !== "admin") {
       if (user.role !== "tutee") return deny();
       safeArgs[0] = user.id;
-      const allowed = new Set(["fullName", "age", "birthday", "gradeLevel", "contact", "guardianName"]);
+      const allowed = new Set(["fullName", "age", "birthday", "gradeLevel", "contact", "guardianName", "photo"]);
       safeArgs[1] = Object.fromEntries(Object.entries(safeArgs[1] || {}).filter(([key]) => allowed.has(key)));
     }
   }
@@ -61,6 +61,12 @@ export function authorizeBusinessAction(state, user, action, args) {
       const allowed = new Set(["fullName", "photo", "age", "contact", "resumeName", "resumeData", "bio", "subjects", "gradeBands", "birthday"]);
       safeArgs[1] = Object.fromEntries(Object.entries(safeArgs[1] || {}).filter(([key]) => allowed.has(key)));
     }
+  }
+  if (action === "saveAdminProfile") {
+    if (user.role !== "admin") return deny();
+    safeArgs[0] = user.id;
+    const allowed = new Set(["fullName", "photo", "age", "birthday", "contact"]);
+    safeArgs[1] = Object.fromEntries(Object.entries(safeArgs[1] || {}).filter(([key]) => allowed.has(key)));
   }
   if (action === "bookPlaygroup" || action === "requestAssessment") safeArgs[0] = user.id;
   if (action === "submitTutorialBooking") safeArgs[0] = { ...(safeArgs[0] || {}), tuteeId: user.id };
