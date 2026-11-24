@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
-import { readCurrentApplicationState } from "@/server/application-state";
+import { mysqlPool } from "@/server/mysql";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const { state } = await readCurrentApplicationState();
-    return NextResponse.json({ hirings: state.hirings.filter((item) => item.open).map(({ id, title, desc }) => ({ id, title, desc })) });
+    const [rows] = await mysqlPool.execute(
+      "SELECT id, title, description AS `desc` FROM hirings WHERE open = TRUE ORDER BY title, id",
+    );
+    return NextResponse.json({ hirings: rows });
   } catch {
-    return NextResponse.json({ hirings: [] }, { status: 200 });
+    return NextResponse.json({ error: "Could not load current hiring opportunities." }, { status: 503 });
   }
 }

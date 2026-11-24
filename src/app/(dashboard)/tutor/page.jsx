@@ -18,7 +18,6 @@ export default function TutorHome() {
   const completed = s.db.sessions.filter((x) => x.tutorId === id && x.status === "completed");
   const completedThisWeek = completed.filter((x) => dateIsThisWeek(x.date)).length;
   const upcomingThisWeek = upcoming.filter((x) => dateIsThisWeek(x.date)).length;
-  const flagged = s.db.sessions.filter((x) => x.tutorId === id && x.status === "needs_reassignment");
   const students = new Set(s.db.sessions.filter((x) => x.tutorId === id && x.status !== "cancelled").map((x) => x.tuteeId));
   const studentsThisWeek = new Set(upcoming.filter((x) => dateIsThisWeek(x.date)).map((x) => x.tuteeId));
   const pendingLeaves = s.db.leaves.filter((l) => l.tutorId === id && l.status === "pending").length;
@@ -56,7 +55,6 @@ export default function TutorHome() {
       </div>
     </section>
 
-    {flagged.length > 0 && <Card className="border-coral-100 bg-coral-50 !p-4 text-sm text-coral-600">{flagged.length} of your session(s) were flagged for reassignment by the admin (leave/availability change).</Card>}
     {pendingLeaves > 0 && <p className="text-sm text-slate-500">You have {pendingLeaves} leave request(s) awaiting admin approval. <Link href="/tutor/leave" className="font-bold text-brand-600">View leave requests →</Link></p>}
 
     <section>

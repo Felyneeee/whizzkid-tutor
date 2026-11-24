@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Badge, Empty, FilterPopover, FilterTrigger, Input, PageHeader, ProfileModal, Table, Td, Tabs } from "@/components/ui";
 
 import { useStore } from "@/lib/store";
@@ -16,7 +16,7 @@ export default function TutorRecords() {
   const [sortBy, setSortBy] = useState("name-asc");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selected, setSelected] = useState(null);
-  const email = (id) => s.db.users.find((user) => user.id === id)?.email;
+  const email = useCallback((id) => s.db.users.find((user) => user.id === id)?.email, [s.db.users]);
   const availableSubjects = useMemo(() => [...new Set(s.db.tutors.flatMap((tutor) => tutor.subjects || []).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [s.db.tutors]);
   const tutors = useMemo(() => s.db.tutors.filter((tutor) => {
     const statusGroup = tutor.status === "active" ? "active" : tutor.status === "rejected" ? "rejected" : "pending";
@@ -29,7 +29,7 @@ export default function TutorRecords() {
     }
     const result = String(a.verifiedAt || "").localeCompare(String(b.verifiedAt || ""));
     return sortBy === "verified-oldest" ? result : -result;
-  }), [s.db.tutors, s.db.users, query, statusFilters, subjectFilters, sortBy]);
+  }), [s.db.tutors, email, query, statusFilters, subjectFilters, sortBy]);
   const tutor = selected ? s.db.tutors.find((item) => item.userId === selected) : null;
   const students = tutor ? [...new Set(s.db.sessions.filter((session) => session.tutorId === tutor.userId && session.status !== "cancelled").map((session) => s.db.tutees.find((tutee) => tutee.userId === session.tuteeId)?.fullName).filter(Boolean))] : [];
   const labels = { records: "Tutor Records", schedules: "Tutor Schedules", leaves: "Leave Requests", verification: "Account Verification" };

@@ -264,7 +264,12 @@ export async function initializeApplicationState(importedState, user) {
 }
 
 export function stateVisibleToUser(state, user) {
-  const visibleNotifications = (state.notifications ?? []).filter((item) => !/purchase|purchase order|order placed|your order is now marked|paid purchase/i.test(item.text || ""));
+  const visibleNotifications = (state.notifications ?? []).filter((item) => {
+    const text = item.text || "";
+    if (/purchase|purchase order|order placed|your order is now marked|paid purchase/i.test(text)) return false;
+    if (user.role === "tutor" && /flagged for reassignment|need reassignment|reassigned to another tutor/i.test(text)) return false;
+    return true;
+  });
   if (user.role === "admin") return { ...state, notifications: visibleNotifications };
   const visible = structuredClone(state);
   const paymentSettings = state.paymentSettings || { onlineAccounts: [], onlineEnabled: true, inPersonEnabled: true, addresses: [], paymentDeadlineHours: 48 };

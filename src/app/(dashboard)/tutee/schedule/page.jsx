@@ -7,6 +7,7 @@ import { addDays, firstName, fmtDate, fmtDateTime, fmtTime, todayISO, weekday } 
 import { useStore } from "@/lib/store";
 export default function TuteeSchedule() {
     const s = useStore();
+    const { bookings, sessions: sessionRows } = s.db;
     const id = s.me.id;
     const [rating, setRating] = useState(null);
     const today = todayISO();
@@ -24,7 +25,7 @@ export default function TuteeSchedule() {
           .map((session) => [session.id, session.date, session.time, session.tutorId, session.status])
           .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
       });
-      const signature = signatureOf(s.db);
+      const signature = signatureOf({ bookings, sessions: sessionRows });
       const refreshIfChanged = async () => {
         if (document.visibilityState !== "visible") return;
         try {
@@ -41,7 +42,7 @@ export default function TuteeSchedule() {
         window.clearInterval(timer);
         document.removeEventListener("visibilitychange", handleVisibility);
       };
-    }, [id, s.db.bookings, s.db.sessions]);
+    }, [id, bookings, sessionRows]);
     const sessions = s.db.sessions.filter((x) => {
       const booking = s.db.bookings.find((entry) => entry.id === x.bookingId);
       return x.tuteeId === id && !!booking && booking.paymentStatus === "paid" && ["confirmed", "completed"].includes(booking.status);

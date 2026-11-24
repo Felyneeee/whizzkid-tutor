@@ -14,6 +14,7 @@ export function homeFor(role) {
 }
 export function DashboardShell({ role, nav, children, gate }) {
     const s = useStore();
+    const { me, refreshState } = s;
     const router = useRouter();
     const path = usePathname();
     const [menuState, setMenuState] = useState({ path, open: false });
@@ -21,11 +22,11 @@ export function DashboardShell({ role, nav, children, gate }) {
     const [notificationsOpen, setNotificationsOpen] = useState(false);
     const [profileMenuOpen, setProfileMenuOpen] = useState(false);
     useEffect(() => {
-      if (!s.me) return;
+      if (!me) return;
       let stopped = false;
       const refreshNotifications = async () => {
         if (stopped || document.visibilityState !== "visible") return;
-        await s.refreshState(s.me);
+        await refreshState(me);
       };
       const timer = window.setInterval(() => void refreshNotifications(), 8000);
       document.addEventListener("visibilitychange", refreshNotifications);
@@ -34,7 +35,7 @@ export function DashboardShell({ role, nav, children, gate }) {
         window.clearInterval(timer);
         document.removeEventListener("visibilitychange", refreshNotifications);
       };
-    }, [s.me, s.refreshState]);
+    }, [me, refreshState]);
     useEffect(() => {
         if (!s.ready)
             return;

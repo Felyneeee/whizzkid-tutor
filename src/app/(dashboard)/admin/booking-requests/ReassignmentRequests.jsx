@@ -76,7 +76,7 @@ export default function ReassignmentRequests() {
       const byDate = String(a.sortAt).localeCompare(String(b.sortAt));
       return (sortOrder === "newest" ? -byDate : byDate) || a.name.localeCompare(b.name);
     });
-  }, [s.db.bookings, s.db.sessions, s.db.tutees, sortOrder]);
+  }, [s.db.bookings, s.db.sessions, s.db.tutees, s.db.cohorts, sortOrder]);
 
   const matchingFor = (entry) => {
     const booking = entry.booking || {};

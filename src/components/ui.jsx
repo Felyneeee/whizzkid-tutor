@@ -19,8 +19,9 @@ export function FilterTrigger({ onClick, expanded, count = 0, ariaLabel = "Open 
       <SlidersHorizontal className="h-4 w-4 text-brand-600" aria-hidden="true"/>Filters{count > 0 && <span className="rounded-full bg-brand-600 px-1.5 text-xs text-white">{count}</span>}
     </button>;
 }
-export function FilterPopover({ children, onClear, onCancel, onApply }) {
-    return <div className="absolute right-0 top-full z-30 mt-2 max-h-[min(70vh,36rem)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+export function FilterPopover({ children, onClear, onCancel, onApply, mobileAlign = "right" }) {
+    const alignment = mobileAlign === "left" ? "left-0 right-auto sm:left-auto sm:right-0" : "right-0";
+    return <div className={cn("absolute top-full z-30 mt-2 max-h-[min(70vh,36rem)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-xl", alignment)}>
       <div className="space-y-3">{children}</div>
       <div className="mt-3 flex justify-between border-t border-slate-100 pt-3">
         <button type="button" onClick={onClear} className="text-xs font-semibold text-slate-500 hover:text-brand-600">Clear all</button>

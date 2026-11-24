@@ -7,6 +7,7 @@ import { onApprovedLeave } from "@/lib/logic";
 import { useStore } from "@/lib/store";
 export default function TutorCalendar() {
     const s = useStore();
+    const { bookings, sessions, cohorts: cohortRows } = s.db;
     const id = s.me.id;
     const [sel, setSel] = useState(todayISO());
     useEffect(() => {
@@ -21,7 +22,7 @@ export default function TutorCalendar() {
         })).map((booking) => [booking.id, (booking.dates || []).map((date) => [date, booking.tutorAssignments?.[date] || booking.tutorId || "", booking.reassignmentPendingDates?.[date] || ""])])
           .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
       });
-      const signature = signatureOf(s.db);
+      const signature = signatureOf({ bookings, sessions, cohorts: cohortRows });
       const refreshIfChanged = async () => {
         if (document.visibilityState !== "visible") return;
         try {
@@ -38,7 +39,7 @@ export default function TutorCalendar() {
         window.clearInterval(timer);
         document.removeEventListener("visibilitychange", handleVisibility);
       };
-    }, [id, s.db.sessions, s.db.bookings, s.db.cohorts]);
+    }, [id, sessions, bookings, cohortRows]);
     const mine = s.db.sessions.filter((x) => x.tutorId === id && x.status !== "cancelled" && x.status !== "needs_reassignment");
     const day = mine.filter((x) => x.date === sel).sort((a, b) => a.time.localeCompare(b.time));
     const playgroupBookings = s.db.bookings.filter((booking) => booking.program === "playgroup" && ["approved", "confirmed", "to_pay", "awaiting_payment_approval"].includes(booking.status));

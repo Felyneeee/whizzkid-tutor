@@ -550,7 +550,7 @@ export function createBusinessActions({ get, mutate, actorId }) {
                   pushNotif(n, session.tuteeId, `Your session with ${firstNameOf(n, tutorId)} on ${fmtDate(session.date)} at ${fmtTime(session.time)} needs rescheduling because the tutor's availability changed. The admin will follow up.`, ["web", "email", "sms"]);
               }
           });
-          pushNotif(n, tutorId, `The admin updated your availability for ${fmtDate(date)}.${conflicts.length ? ` ${conflicts.length} session(s) need reassignment because they no longer fit the edited schedule.` : ""}`, ["web", "email"]);
+          pushNotif(n, tutorId, `The admin updated your availability for ${fmtDate(date)}.`, ["web", "email"]);
           if (conflicts.length)
               pushAdmins(n, `${conflicts.length} session(s) of ${nameOf(n, tutorId)} need reassignment after an admin schedule edit.`);
           logAct(n, actingAdminIdOf(n), "availability", `Edited ${nameOf(n, tutorId)}'s availability for ${fmtDate(date)}`);
@@ -582,7 +582,7 @@ export function createBusinessActions({ get, mutate, actorId }) {
                   pushNotif(n, session.tuteeId, `Your session on ${fmtDate(session.date)} at ${fmtTime(session.time)} needs rescheduling because the tutor's weekly rotation changed. The admin will follow up.`, ["web", "email", "sms"]);
               }
           });
-          pushNotif(n, tutorId, `The admin updated your weekly schedule. Day off: ${allowedDays.find((day) => !days[day])}.${conflicts.length ? ` ${conflicts.length} session(s) need reassignment.` : ""}`, ["web", "email"]);
+          pushNotif(n, tutorId, `The admin updated your weekly schedule. Day off: ${allowedDays.find((day) => !days[day])}.`, ["web", "email"]);
           if (conflicts.length) pushAdmins(n, `${conflicts.length} session(s) of ${nameOf(n, tutorId)} need reassignment after a weekly schedule change.`);
           logAct(n, actingAdminIdOf(n), "availability", `Updated ${nameOf(n, tutorId)}'s weekly tutor schedule`);
       });
@@ -615,7 +615,6 @@ export function createBusinessActions({ get, mutate, actorId }) {
           }
           const tutorName = nameOf(n, tutorId);
           const total = affected.length + playgroupDates.length;
-          pushNotif(n, tutorId, `${total} upcoming session(s) were flagged for reassignment. Your calendar will update when replacement tutors are assigned.`, ["web", "email"]);
           const affectedByBooking = new Map();
           for (const session of affected) affectedByBooking.set(session.bookingId, (affectedByBooking.get(session.bookingId) || 0) + 1);
           for (const { bookingId } of playgroupDates) {
@@ -1067,7 +1066,6 @@ export function createBusinessActions({ get, mutate, actorId }) {
           }
           pushBookingNotif(n, ss.bookingId, ss.tuteeId, `Your session on ${fmtDate(ss.date)} at ${fmtTime(ss.time)} was reassigned to ${firstNameOf(n, tutorId)}. Your calendar and My Bookings details are updated.`, ["web", "email", "sms"]);
           pushNotif(n, tutorId, `You were assigned a session on ${fmtDate(ss.date)} at ${fmtTime(ss.time)}. Your calendar is updated.`, ["web", "email"]);
-          pushNotif(n, old, `${firstNameOf(n, ss.tuteeId)}'s session on ${fmtDate(ss.date)} was reassigned to another tutor and removed from your calendar schedule. My Students updates when no sessions with this student remain assigned to you.`, ["web", "email"]);
           logAct(n, actingAdminIdOf(n), "match", `Reassigned ${b?.subject || "session"} on ${fmtDate(ss.date)} at ${fmtTime(ss.time)} for ${nameOf(n, ss.tuteeId)} from ${nameOf(n, old)} to ${nameOf(n, tutorId)}`);
       });
       return { ok: true };
@@ -1105,7 +1103,6 @@ export function createBusinessActions({ get, mutate, actorId }) {
               logAct(n, actingAdminIdOf(n), "match", `Reassigned ${cohortName} session on ${fmtDate(date)} for ${nameOf(n, target.tuteeId)} from ${nameOf(n, oldTutorId)} to ${nameOf(n, tutorId)}`);
           }
           pushNotif(n, tutorId, `You were assigned ${cohortName} sessions on ${fmtDate(date)} at ${fmtTime(booking.time || cohort?.time || "10:00")}. Your calendar is updated.`, ["web", "email"]);
-          pushNotif(n, oldTutorId, `${cohortName} students on ${fmtDate(date)} were reassigned to another tutor and removed from your calendar schedule. My Students updates when no sessions with those students remain assigned to you.`, ["web", "email"]);
       });
       return { ok: true };
   },

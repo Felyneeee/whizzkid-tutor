@@ -84,8 +84,8 @@ function Thread({ threadId, meId, title }) {
             e.preventDefault();
             send();
         }}>
-        <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…"/>
-        <Button type="submit" disabled={!text.trim()}>
+        <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…" className="min-h-11"/>
+        <Button type="submit" disabled={!text.trim()} className="min-h-11">
           <Send className="h-4 w-4"/> Send
         </Button>
       </form>

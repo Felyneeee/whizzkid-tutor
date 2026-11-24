@@ -16,7 +16,7 @@ The active Next.js app is the root `src/` tree, configured by the root `package.
 
 The shop purchase flow is disabled. Program bookings can still accept payment receipts for administrator review; this app does not take online payments.
 
-Tutorial booking requests reserve their requested slots while awaiting admin review, with no automatic expiration. Admins may confirm a tutor for all dates or allow a partial match; dates the tutor cannot cover are removed from that booking. The app does not yet provide a tutee cancellation flow for a submitted tutorial request or define refunds for any center-collected payments.
+Tutorial booking requests reserve their requested slots while awaiting admin review, with no automatic expiration. Admins may confirm a tutor for all dates or allow a partial match; dates the tutor cannot cover are removed from that booking. Tutees can cancel eligible unpaid tutorial requests from My Bookings. Refund behavior for center-collected payments is not defined.
 
 Notifications currently appear in the app. `email` and `sms` values attached to notifications describe intended channels only; no email or SMS provider is configured, so those messages are not sent externally.
 

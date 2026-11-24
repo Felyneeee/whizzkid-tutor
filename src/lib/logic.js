@@ -186,7 +186,6 @@ export function timesForDate(db, base, date) {
         ? ["12:00", "12:45", "13:30", "14:15", "15:00", "15:45", "16:30", "17:15"]
         : day === 2 || day === 4 || day === 6 ? HOURS : [];
     return hours.map((time) => {
-        const m = matchTutors(db, { ...base, dates: [date], time });
         return { time, count: remainingCapacity(db, date, time, base) };
     });
 }

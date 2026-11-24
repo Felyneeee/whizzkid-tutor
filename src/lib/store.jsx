@@ -190,7 +190,7 @@ export function StoreProvider({ children }) {
       registerTutor(value) { return register("/api/auth/register/tutor", value); },
       ...actions,
     };
-  }, [acceptState, actionFeedback, db, loadState, ready, me, refreshSlotAvailability, refreshState, runBusinessAction]);
+  }, [acceptState, actionFeedback, db, ready, me, refreshSlotAvailability, refreshState, runBusinessAction]);
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }
