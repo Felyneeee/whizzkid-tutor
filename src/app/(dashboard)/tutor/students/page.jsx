@@ -7,12 +7,19 @@ import { firstName, fmtDate, fmtTime } from "@/lib/dates";
 import { useStore } from "@/lib/store";
 
 const SESSION_MINUTES = 45;
-const SUBJECT_TONES = [
-  "bg-sunny-100 text-slate-800",
-  "bg-coral-100 text-slate-800",
-  "bg-mint-100 text-slate-800",
-  "bg-brand-100 text-slate-800",
-];
+const SUBJECT_TONES = {
+  English: "bg-[#E5F0FF] text-[#34466B]",
+  Mathematics: "bg-[#EEE8FF] text-[#514070]",
+  Math: "bg-[#EEE8FF] text-[#514070]",
+  "Araling Panlipunan": "bg-[#FFF3D6] text-[#6B5429]",
+  "Araling Panlipunan (AP)": "bg-[#FFF3D6] text-[#6B5429]",
+  "Araling Panipunan (AP)": "bg-[#FFF3D6] text-[#6B5429]",
+  AP: "bg-[#FFF3D6] text-[#6B5429]",
+  Filipino: "bg-[#FDE7EB] text-[#713E4A]",
+  Reading: "bg-[#DFF5ED] text-[#315C4C]",
+  Science: "bg-[#E8F2DC] text-[#455B34]",
+  default: "bg-brand-100 text-slate-800",
+};
 
 function sessionSubject(session, booking) {
   const subject = booking?.sessionSlots?.find((slot) => slot.date === session.date && slot.time === session.time)?.subject
@@ -181,8 +188,8 @@ export default function MyStudents() {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-3">
               <h2 className="text-xl font-extrabold tracking-tight text-slate-950">{student.name}</h2>
-              <span className="rounded-full bg-brand-100 px-2.5 py-1.5 text-xs">{gradeLabel(student.grade)}</span>
-              {student.subjectProgress.map(({ subject, completed, total }, index) => <span key={subject} className={cn("rounded-full px-2.5 py-1.5 text-xs", SUBJECT_TONES[index % SUBJECT_TONES.length])}>
+              <span className="rounded-full bg-[#EEF2F7] px-2.5 py-1.5 text-xs text-[#475569]">{gradeLabel(student.grade)}</span>
+              {student.subjectProgress.map(({ subject, completed, total }) => <span key={subject} className={cn("rounded-full px-2.5 py-1.5 text-xs", SUBJECT_TONES[subject] || SUBJECT_TONES.default)}>
                 {subject}{student.subjects.length >= 2 && <span className="ml-1 text-[10px] opacity-75">{completed}/{total} completed</span>}
               </span>)}
             </div>

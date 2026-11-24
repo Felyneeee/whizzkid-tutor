@@ -228,8 +228,8 @@ export function createBusinessActions({ get, mutate, actorId }) {
       const bookingId = nextBookingId(d, "playgroup");
       const tutee = d.tutees.find((t) => t.userId === tuteeId);
       const dates = cohortSessionDates(c);
-      if (!dates.length || dates.some((date) => date < todayISO() || date > addMonths(todayISO(), 1)))
-          return { ok: false, error: "Playgroup sessions must be within the next month." };
+      if (!dates.length || dates[0] < todayISO() || dates[0] > addMonths(todayISO(), 1))
+          return { ok: false, error: "The first Playgroup session must be within the next month." };
       const activeTuteeStatuses = ["pending", "approved", "pending_assessment", "assessment_scheduled", "ready_for_matching", "confirmed", "awaiting_admin", "to_pay", "awaiting_payment_approval"];
       const dateConflict = dates.some((date) => d.bookings.some((booking) => booking.tuteeId === tuteeId && activeTuteeStatuses.includes(booking.status) && (booking.sessionSlots || (booking.dates || []).map((bookingDate) => ({ date: bookingDate, time: booking.sessionTimes?.[bookingDate] ?? booking.time }))).some((slot) => slot.date === date && slot.time === (c.time || "10:00"))) || d.sessions.some((session) => session.tuteeId === tuteeId && ["scheduled", "needs_reassignment"].includes(session.status) && session.date === date && session.time === (c.time || "10:00")));
       if (dateConflict) return { ok: false, error: "You already have a booking or request at one or more Playgroup dates and times." };

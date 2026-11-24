@@ -197,7 +197,7 @@ function PlaygroupFlow() {
     }, [id, s.db.bookings]);
     const cohorts = s.db.cohorts
         .map((c) => ({ c, dates: cohortSessionDates(c).slice().sort() }))
-        .filter(({ dates }) => dates[0] >= today && dates.every((date) => date <= bookingDeadline))
+        .filter(({ dates }) => dates[0] >= today && dates[0] <= bookingDeadline)
         .filter(({ c }) => c.modality !== "online" || c.enrolled.includes(id))
         .map((c) => {
           const active = s.db.bookings.filter((b) => b.program === "playgroup" && b.cohortId === c.c.id && ["pending", "approved", "confirmed", "awaiting_admin", "to_pay", "awaiting_payment_approval"].includes(b.status));
