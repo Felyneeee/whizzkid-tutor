@@ -4,6 +4,7 @@ import { authenticatedUser } from "@/server/auth";
 import { readApplicationState } from "@/server/application-state";
 import { mysqlPool } from "@/server/mysql";
 import { persistRelationalState } from "@/server/relational-state";
+import { readJson, RequestBodyError } from "@/server/request-guards";
 
 export const runtime = "nodejs";
 
@@ -13,7 +14,7 @@ export async function POST(request) {
     const user = await authenticatedUser(request);
     if (!user) return NextResponse.json({ error: "Please log in." }, { status: 401 });
     if (user.role !== "admin") return NextResponse.json({ error: "Administrator access is required." }, { status: 403 });
-    const { bookingId } = await request.json();
+    const { bookingId } = await readJson(request, 8 * 1024);
     if (typeof bookingId !== "string" || !bookingId) return NextResponse.json({ error: "Choose a Playgroup booking." }, { status: 400 });
 
     connection = await mysqlPool.getConnection();
@@ -101,6 +102,7 @@ export async function POST(request) {
     return NextResponse.json({ ok: true, status: "to_pay", paymentDeadlineAt });
   } catch (error) {
     if (connection) await connection.rollback().catch(() => undefined);
+    if (error instanceof RequestBodyError) return NextResponse.json({ error: error.message }, { status: error.status });
     console.error("[approve-playgroup-booking]", error?.code ?? "UNKNOWN", error?.message ?? "No error detail");
     return NextResponse.json({ error: "Could not approve the Playgroup booking." }, { status: 503 });
   } finally {

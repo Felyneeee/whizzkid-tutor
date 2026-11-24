@@ -5,6 +5,7 @@ import { authenticatedUser } from "@/server/auth";
 import { readApplicationState } from "@/server/application-state";
 import { mysqlPool } from "@/server/mysql";
 import { persistRelationalState } from "@/server/relational-state";
+import { readJson, RequestBodyError } from "@/server/request-guards";
 
 export const runtime = "nodejs";
 
@@ -14,7 +15,7 @@ export async function POST(request) {
     const user = await authenticatedUser(request);
     if (!user) return NextResponse.json({ error: "Please log in." }, { status: 401 });
     if (user.role !== "admin") return NextResponse.json({ error: "Administrator access is required." }, { status: 403 });
-    const { cohortId, date, tutorId } = await request.json();
+    const { cohortId, date, tutorId } = await readJson(request, 8 * 1024);
     connection = await mysqlPool.getConnection();
     await connection.beginTransaction();
     const { state, initialized } = await readApplicationState(connection, { lock: true });
@@ -74,6 +75,7 @@ export async function POST(request) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (connection) await connection.rollback().catch(() => undefined);
+    if (error instanceof RequestBodyError) return NextResponse.json({ error: error.message }, { status: error.status });
     console.error("[playgroup-tutor-replacement]", error?.code ?? "UNKNOWN", error?.message ?? "No error detail");
     return NextResponse.json({ error: "Could not save the Playgroup tutor replacement." }, { status: 503 });
   } finally {

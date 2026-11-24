@@ -4,6 +4,7 @@ import { slotRequestable } from "@/lib/logic";
 import { addMonths, todayISO } from "@/lib/dates";
 import { authenticatedUser } from "@/server/auth";
 import { readStateForUser } from "@/server/application-state";
+import { readJson, RequestBodyError } from "@/server/request-guards";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ export async function POST(request) {
   try {
     const user = await authenticatedUser(request);
     if (!user) return NextResponse.json({ error: "Please log in." }, { status: 401 });
-    const input = await request.json();
+    const input = await readJson(request, 32 * 1024);
     const { dates, times, subjects, program, gradeLevel, modality, sessionType, bookingId } = input || {};
     if (user.role !== "tutee" || !Array.isArray(dates) || dates.length > 35 || !dates.every(validDate)
       || !Array.isArray(times) || times.length > HOURS.length || !times.every((time) => HOURS.includes(time))
@@ -59,6 +60,7 @@ export async function POST(request) {
     }
     return NextResponse.json({ available }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
+    if (error instanceof RequestBodyError) return NextResponse.json({ error: error.message }, { status: error.status });
     console.error("[state/slot-availability]", error?.code ?? "UNKNOWN", error?.message ?? "No error detail");
     return NextResponse.json({ error: "Could not refresh slot availability." }, { status: 503 });
   }

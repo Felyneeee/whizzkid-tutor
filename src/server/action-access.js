@@ -2,9 +2,9 @@ import "server-only";
 
 const ADMIN_ACTIONS = new Set([
   "notify", "completeAssessment", "scheduleAssessment", "renewReadingAssessment", "scheduleInterview", "evaluateApplicant", "verifyExistingTutor",
-  "setTutorPay", "adminEditTutorAvailability", "setTutorWeeklySchedule", "decideLeave",
+  "setTutorPay", "adminEditTutorAvailability", "setTutorWeeklySchedule", "flagTutorSessionsForReassignment", "decideLeave",
   "adminLeave", "proposeBookingSchedule", "confirmBooking", "confirmBookingSession", "confirmReadingAssignment", "rejectReadingAssignment", "rejectBooking", "terminateBooking",
-  "reassignSession", "proposeSessionReschedule", "cancelSession", "updateCohort",
+  "reassignSession", "reassignPlaygroupSession", "proposeSessionReschedule", "cancelSession", "updateCohort",
   "addCohort", "deleteCohort", "removeFromCohort", "assignPlaygroupBooking", "assignPlaygroupWeekday", "approvePlaygroupBooking", "addMaterial", "updateMaterial", "deleteMaterial",
 ]);
 
@@ -14,7 +14,7 @@ const TUTEE_ACTIONS = new Set([
 ]);
 const TUTOR_ACTIONS = new Set(["submitLeave", "checkInSession", "completeSession"]);
 const SHARED_ACTIONS = new Set([
-  "markNotificationsRead", "markMessageNotificationsRead", "sendMessage", "logMaterialAccess",
+  "markNotificationsRead", "markBookingNotificationsRead", "markMessageNotificationsRead", "sendMessage", "logMaterialAccess",
   "saveTuteeProfile", "saveTutorProfile", "saveAdminProfile", "decideBookingScheduleProposal",
 ]);
 
@@ -39,6 +39,10 @@ export function authorizeBusinessAction(state, user, action, args) {
   const safeArgs = [...args];
   if (action === "markNotificationsRead" || action === "markMessageNotificationsRead") {
     safeArgs[0] = user.id;
+  }
+  if (action === "markBookingNotificationsRead") {
+    if (user.role !== "tutee" || !state.bookings.some((booking) => booking.id === safeArgs[0] && booking.tuteeId === user.id)) return deny();
+    safeArgs[0] = state.bookings.find((booking) => booking.id === safeArgs[0]).id;
   }
   if (action === "sendMessage") {
     const [, , text] = safeArgs;

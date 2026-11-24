@@ -14,18 +14,24 @@ export default function TuteeSchedule() {
     const statusOf = (booking) => String(booking.status || booking.bookingStatus || "").toLowerCase();
     const isPlaygroup = (booking) => String(booking.program || "").toLowerCase() === "playgroup";
     useEffect(() => {
-      const signatureOf = (bookings) => JSON.stringify((bookings || [])
-        .filter((booking) => booking.tuteeId === id && isPlaygroup(booking))
-        .map((booking) => [booking.id, booking.cohortId || "", statusOf(booking)])
-        .sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
-      const signature = signatureOf(s.db.bookings);
+      const signatureOf = (db) => JSON.stringify({
+        playgroups: (db?.bookings || [])
+          .filter((booking) => booking.tuteeId === id && isPlaygroup(booking))
+          .map((booking) => [booking.id, booking.cohortId || "", statusOf(booking), booking.tutorAssignments || {}, booking.reassignmentPendingDates || {}])
+          .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+        sessions: (db?.sessions || [])
+          .filter((session) => session.tuteeId === id)
+          .map((session) => [session.id, session.date, session.time, session.tutorId, session.status])
+          .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+      });
+      const signature = signatureOf(s.db);
       const refreshIfChanged = async () => {
         if (document.visibilityState !== "visible") return;
         try {
           const response = await fetch("/api/state", { credentials: "same-origin", cache: "no-store" });
           if (!response.ok) return;
           const payload = await response.json();
-          if (signatureOf(payload.db?.bookings) !== signature) window.location.reload();
+          if (signatureOf(payload.db) !== signature) window.location.reload();
         } catch { /* Keep the current page if the refresh check cannot reach the server. */ }
       };
       const timer = window.setInterval(refreshIfChanged, 8000);
@@ -35,7 +41,7 @@ export default function TuteeSchedule() {
         window.clearInterval(timer);
         document.removeEventListener("visibilitychange", handleVisibility);
       };
-    }, [id, s.db.bookings]);
+    }, [id, s.db.bookings, s.db.sessions]);
     const sessions = s.db.sessions.filter((x) => {
       const booking = s.db.bookings.find((entry) => entry.id === x.bookingId);
       return x.tuteeId === id && !!booking && booking.paymentStatus === "paid" && ["confirmed", "completed"].includes(booking.status);
@@ -63,15 +69,12 @@ export default function TuteeSchedule() {
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(320px,0.85fr)_minmax(0,1.4fr)]">
         <Card className="p-3 sm:p-5">
           <Calendar selected={[selectedDate]} onSelect={setSelectedDate} allowPast initialMonth={selectedDate} mark={(date) => {
-              const sessionCount = sessionsByDate[date]?.length ?? 0;
-              const assessmentCount = assessmentsByDate[date]?.length ?? 0;
-              const playgroupCount = playgroupsByDate[date]?.length ?? 0;
-              if (!sessionCount && !assessmentCount && !playgroupCount) return null;
-              return {
-                text: playgroupCount ? `${playgroupCount} Playgroup` : sessionCount ? `${sessionCount} session${sessionCount === 1 ? "" : "s"}` : `${assessmentCount} assessment${assessmentCount === 1 ? "" : "s"}`,
-                tone: playgroupCount ? "mint" : sessionCount ? "brand" : "sunny",
-                ...((sessionCount || assessmentCount) && playgroupCount ? { subtext: `${sessionCount + assessmentCount} other item${sessionCount + assessmentCount === 1 ? "" : "s"}`, subtone: sessionCount ? "brand" : "sunny" } : {}),
-              };
+              if (date < today) return null;
+              const sessionCount = (sessionsByDate[date] || []).filter((session) => !["completed", "cancelled"].includes(session.status)).length;
+              const assessmentCount = (assessmentsByDate[date] || []).filter((assessment) => assessment.status === "booked").length;
+              const playgroupCount = (playgroupsByDate[date] || []).filter((booking) => !sessions.some((session) => session.bookingId === booking.id && session.date === date && session.status === "completed")).length;
+              const count = sessionCount + assessmentCount + playgroupCount;
+              return count ? { count } : null;
           }}/>
           <div className="mt-4 flex items-center justify-between gap-2">
             <Button size="sm" variant="secondary" onClick={() => setSelectedDate(addDays(selectedDate, -1))}>Previous day</Button>
@@ -88,7 +91,7 @@ export default function TuteeSchedule() {
           {daySessions.map((x) => (<Card key={x.id} className="flex flex-wrap items-center gap-3">
               <div className="min-w-20 rounded-xl bg-brand-50 px-3 py-2 text-center font-extrabold text-brand-700">{fmtTime(x.time)}</div>
               <div className="min-w-[180px] flex-1">
-                <div className="font-bold">{subj(x.bookingId, x.date, x.time)} · {tutor(x.tutorId)}</div>
+                <div className="font-bold">{subj(x.bookingId, x.date, x.time)} · {x.status === "needs_reassignment" ? "---" : tutor(x.tutorId)}</div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500">
                   <Badge status={x.modality}/>
                   <Badge status={x.status}/>
@@ -114,9 +117,10 @@ export default function TuteeSchedule() {
           </Card>))}
           {(playgroupsByDate[selectedDate] || []).map((booking) => {
             const cohort = s.db.cohorts.find((item) => item.id === booking.cohortId);
-            const assignedTutorId = booking.tutorAssignments?.[selectedDate] || cohort?.weekdayTutorIds?.[weekday(selectedDate)] || booking.tutorId;
+            const reassignmentPending = !!booking.reassignmentPendingDates?.[selectedDate];
+            const assignedTutorId = reassignmentPending ? null : booking.tutorAssignments?.[selectedDate] || cohort?.weekdayTutorIds?.[weekday(selectedDate)] || booking.tutorId;
             const time = cohort?.time || booking.time || "10:00";
-            return <Card key={`playgroup-${booking.id}`} className="flex flex-wrap items-center gap-3 border-mint-200 bg-mint-50/40"><div className="min-w-20 rounded-xl bg-mint-100 px-3 py-2 text-center font-extrabold text-mint-700">{fmtTime(time)}</div><div className="min-w-[180px] flex-1"><div className="font-bold">Playgroup · {cohort?.label || "Class"}</div><div className="mt-1 text-sm text-slate-500">{fmtTime(time)} · {cohort?.modality || "Face-to-Face"} · Tutor {assignedTutorId ? tutor(assignedTutorId) : "Unassigned"}</div></div><Badge status={booking.status}>{assignedTutorId ? (booking.tutorAssignmentStatus || "Assigned") : "Unassigned"}</Badge></Card>;
+            return <Card key={`playgroup-${booking.id}`} className="flex flex-wrap items-center gap-3 border-mint-200 bg-mint-50/40"><div className="min-w-20 rounded-xl bg-mint-100 px-3 py-2 text-center font-extrabold text-mint-700">{fmtTime(time)}</div><div className="min-w-[180px] flex-1"><div className="font-bold">Playgroup · {cohort?.label || "Class"}</div><div className="mt-1 text-sm text-slate-500">{fmtTime(time)} · {cohort?.modality || "Face-to-Face"} · Tutor {reassignmentPending ? "---" : assignedTutorId ? tutor(assignedTutorId) : "Unassigned"}</div></div><Badge status={reassignmentPending ? "needs_reassignment" : booking.status}>{reassignmentPending ? "Reassignment Pending" : assignedTutorId ? (booking.tutorAssignmentStatus || "Assigned") : "Unassigned"}</Badge></Card>;
           })}
         </section>
       </div>

@@ -1,16 +1,24 @@
 "use client";
 import { useCallback, useMemo, useState } from "react";
-import { SlidersHorizontal, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import Link from "next/link";
 import { Calendar } from "@/components/Calendar";
-import { Alert, Badge, Button, Card, Empty, PageHeader, Select } from "@/components/ui";
+import { Alert, Badge, Button, Card, Empty, FilterPopover, FilterTrigger, PageHeader, Select } from "@/components/ui";
 import { addDays, fmtDate, fmtTime, todayISO } from "@/lib/dates";
 import { HOURS } from "@/lib/constants";
 import { approvedSlot, onApprovedLeave, tutorBusy } from "@/lib/logic";
 import { useStore } from "@/lib/store";
 
-const FILTERS = ["program", "subject", "sessionType", "modality", "bookingState"];
-const EMPTY_FILTERS = Object.fromEntries(FILTERS.map((key) => [key, "All"]));
+const FILTERS = ["program", "subject", "sessionType", "modality"];
+const SUBJECT_FILTERS = ["English", "Science", "Mathematics", "Filipino", "Araling Panlipunan"];
+const EMPTY_FILTERS = Object.fromEntries(FILTERS.map((key) => [key, []]));
 const label = (value = "") => String(value).replace(/_/g, " ").replace(/\b\w/g, (x) => x.toUpperCase());
+const normalizeSubject = (value = "") => {
+  const subject = String(value).trim().toLowerCase();
+  if (["math", "mathematics"].includes(subject)) return "Mathematics";
+  if (["ap", "araling panlipunan", "araling panlipunan (ap)", "araling panipunan (ap)"].includes(subject)) return "Araling Panlipunan";
+  return SUBJECT_FILTERS.find((option) => option.toLowerCase() === subject) || "";
+};
 const timeRange = (time) => {
   const [hour, minute] = time.split(":").map(Number);
   const end = `${String(Math.floor((hour * 60 + minute + 45) / 60) % 24).padStart(2, "0")}:${String((minute + 45) % 60).padStart(2, "0")}`;
@@ -28,8 +36,6 @@ export default function Scheduling() {
   const [showUnbooked, setShowUnbooked] = useState(false);
   const [slotMonth, setSlotMonth] = useState("this-month");
   const [expanded, setExpanded] = useState({});
-  const [pick, setPick] = useState({});
-  const [err, setErr] = useState("");
   const [reschedule, setReschedule] = useState(null);
   const [rescheduleError, setRescheduleError] = useState("");
   const selectDate = (date) => { setSelectedDate(date); setCalendarMonth(date.slice(0, 7)); };
@@ -41,6 +47,7 @@ export default function Scheduling() {
   const activeAssessments = useMemo(() => (db.assessments || []).filter((x) => x.date && ["booked", "completed"].includes(x.status)), [db.assessments]);
   const activePlaygroups = useMemo(() => bookings.filter((b) => b.program === "playgroup" && ["pending", "approved", "confirmed", "awaiting_admin", "to_pay", "awaiting_payment_approval"].includes(b.status)), [bookings]);
   const flagged = activeSessions.filter((x) => x.status === "needs_reassignment");
+  const flaggedPlaygroups = db.bookings.filter((booking) => booking.program === "playgroup").reduce((total, booking) => total + Object.keys(booking.reassignmentPendingDates || {}).filter((date) => date >= today).length, 0);
 
   const entries = useMemo(() => {
     const result = [];
@@ -97,21 +104,23 @@ export default function Scheduling() {
   }, [db, calendarMonth, selectedDate, bookings, activeSessions, activeAssessments, activePlaygroups, tn, un]);
 
   const optionValues = (key) => {
-    const values = entries.flatMap((item) => key === "bookingState" ? [item.state] : key === "program" && item.programNames ? item.programNames : key === "sessionType" ? [item.sessionType === "group" ? "Group Session" : item.sessionType ? "One-on-One" : ""] : key === "modality" ? [label(item.modality)] : [label(item[key])]).filter(Boolean);
+    if (key === "subject") return SUBJECT_FILTERS;
+    const values = entries.flatMap((item) => key === "program" && item.programNames ? item.programNames : key === "sessionType" ? [item.sessionType === "group" ? "Group Session" : item.sessionType ? "One-on-One" : ""] : key === "modality" ? [label(item.modality)] : [label(item[key])]).filter(Boolean);
     if (key === "program") values.push("Academic", "Reading", "Playgroup");
-    if (key === "subject") values.push("Playgroup");
     if (key === "sessionType") values.push("One-on-One", "Group Session");
     if (key === "modality") values.push("Face-To-Face", "Online");
     return [...new Set(values)].sort();
   };
   const matches = (entry) => FILTERS.every((key) => {
-    if (filters[key] === "All") return true;
+    if (!filters[key].length) return true;
+    if (key === "subject") return String(entry.subject || "").split(" · ").some((subject) => filters.subject.includes(normalizeSubject(subject)));
     if (entry.state === "Unbooked" && ["sessionType", "modality"].includes(key)) return true;
-    if (entry.state === "Unbooked" && key === "program") return entry.programNames.includes(filters[key]);
-    const value = key === "bookingState" ? entry.state : key === "sessionType" ? entry.sessionType === "group" ? "Group Session" : entry.sessionType ? "One-on-One" : "" : key === "modality" ? label(entry.modality) : label(entry[key]);
-    return value === filters[key];
+    if (entry.state === "Unbooked" && key === "program") return entry.programNames.some((program) => filters.program.includes(program));
+    const value = key === "sessionType" ? entry.sessionType === "group" ? "Group Session" : entry.sessionType ? "One-on-One" : "" : key === "modality" ? label(entry.modality) : label(entry[key]);
+    return filters[key].includes(value);
   });
   const filteredEntries = entries.filter(matches);
+  const activeFilterCount = Object.values(filters).reduce((count, values) => count + values.length, 0);
   const dayEntries = filteredEntries.filter((entry) => entry.state !== "Unbooked" && entry.date === selectedDate).sort((a, b) => a.time.localeCompare(b.time));
   const timeGroups = [...new Map(dayEntries.map((entry) => [entry.time, { time: entry.time, entries: [] }])).values()];
   timeGroups.forEach((group) => { group.entries = dayEntries.filter((entry) => entry.time === group.time); });
@@ -128,18 +137,9 @@ export default function Scheduling() {
   const slotMonths = [...new Set(filteredEntries.map((entry) => entry.date.slice(0, 7)))].sort();
   const monthLabel = (month) => new Date(`${month}-01T12:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" });
   const visibleSlotEntries = filteredEntries.filter((entry) => slotMonth === "all" || entry.date.slice(0, 7) === (slotMonth === "this-month" ? today.slice(0, 7) : slotMonth));
-  const eligible = (sessionId) => {
-    const session = db.sessions.find((x) => x.id === sessionId);
-    if (!session) return [];
-    return db.tutors.filter((t) => t.status === "active" && t.userId !== session.tutorId && approvedSlot(db, t.userId, session.date, session.time, session.modality) && !onApprovedLeave(db, t.userId, session.date) && !tutorBusy(db, t.userId, session.date, session.time));
-  };
-
   return <>
     <PageHeader title="Calendar" />
-    {flagged.length > 0 && <Card className="mb-5 border-coral-100 bg-coral-50"><h2 className="mb-2 font-extrabold text-coral-600">Conflicts needing reassignment ({flagged.length})</h2><div className="space-y-2">{flagged.map((x) => {
-      const opts = eligible(x.id);
-      return <div key={x.id} className="flex flex-wrap items-center gap-2 rounded-xl bg-white p-3 text-sm"><div className="min-w-[200px] flex-1"><b>{fmtDate(x.date)} {fmtTime(x.time)}</b> · {un(x.tuteeId)} · {tn(x.tutorId)}</div><Select className="!w-48" value={pick[x.id] || ""} onChange={(e) => setPick({ ...pick, [x.id]: e.target.value })}><option value="">{opts.length ? "Choose tutor…" : "No tutor free"}</option>{opts.map((t) => <option key={t.userId} value={t.userId}>{t.fullName}</option>)}</Select><Button size="sm" disabled={!pick[x.id]} onClick={async () => { const r = await s.reassignSession(x.id, pick[x.id]); setErr(r.ok ? "" : r.error); }}>Reassign</Button><Button size="sm" variant="danger" onClick={() => s.cancelSession(x.id)}>Cancel & reschedule</Button></div>;
-    })}</div>{err && <div className="mt-2"><Alert kind="error">{err}</Alert></div>}</Card>}
+    {flagged.length + flaggedPlaygroups > 0 && <Card className="mb-5 border-coral-100 bg-coral-50"><h2 className="mb-1 font-extrabold text-coral-600">Sessions needing reassignment ({flagged.length + flaggedPlaygroups})</h2><p className="text-sm text-slate-600">Review tutor matches and reassign these sessions in Booking Requests.</p><Link href="/admin/booking-requests" className="mt-2 inline-block text-sm font-bold text-brand-600 hover:underline">Open Booking Requests →</Link></Card>}
 
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(320px,0.85fr)_minmax(0,1.4fr)]">
       <Card className="p-3 sm:p-5"><Calendar selected={[selectedDate]} onSelect={selectDate} onMonthChange={setCalendarMonth} allowPast minMonth={today.slice(0, 7)} initialMonth={selectedDate} mark={(date) => new Date(`${date}T12:00:00`).getDay() === 0 ? null : ({ text: `${slotsByDate[date] || 0} Slot${slotsByDate[date] === 1 ? "" : "s"}`, tone: slotsByDate[date] ? "brand" : "coral" })} />
@@ -147,8 +147,12 @@ export default function Scheduling() {
         <div className="mt-4 flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs font-extrabold text-slate-600"><span><b className="text-mint-600">{availableSlotCount}</b> Available Slots</span><span><b className="text-brand-600">{fullyBookedCount}</b> Fully Booked Slots</span></div>
       </Card>
       <Card className="min-h-[520px] p-4 sm:p-6">
-        <div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-xl font-extrabold">{fmtDate(selectedDate)}</h2><button type="button" onClick={() => setFiltersOpen((value) => !value)} aria-label="Toggle schedule filters" className="rounded-xl p-2 text-brand-600 hover:bg-brand-50"><SlidersHorizontal className="h-5 w-5"/></button></div>
-        {filtersOpen && <div className="mb-5 grid gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 sm:grid-cols-2 lg:grid-cols-3">{FILTERS.map((key) => <label key={key} className="text-xs font-bold text-slate-500">{({ program: "Program", subject: "Subject", sessionType: "Type of session", modality: "Type of modality", bookingState: "Booking status" })[key]}<Select className="mt-1" value={filters[key]} onChange={(e) => setFilters((current) => ({ ...current, [key]: e.target.value }))}><option>All</option>{optionValues(key).map((option) => <option key={option}>{option}</option>)}{key === "bookingState" && !optionValues(key).includes("Partially booked") && <option>Partially booked</option>}</Select></label>)}<div className="sm:col-span-2 lg:col-span-3"><Button size="sm" variant="secondary" onClick={() => setFilters(EMPTY_FILTERS)}>Clear filters</Button></div></div>}
+        <div className="relative mb-4 flex items-center justify-between gap-3"><h2 className="text-xl font-extrabold">{fmtDate(selectedDate)}</h2><FilterTrigger onClick={() => setFiltersOpen((value) => !value)} ariaLabel="Toggle schedule filters" expanded={filtersOpen} count={activeFilterCount}/>
+          {filtersOpen && <FilterPopover onClear={() => setFilters(EMPTY_FILTERS)} onApply={() => setFiltersOpen(false)}>{FILTERS.map((key) => {
+              const options = optionValues(key);
+              return <fieldset key={key}><legend className="mb-1 text-xs font-extrabold text-slate-700">{({ program: "Program", subject: "Subject", sessionType: "Type of session", modality: "Type of modality" })[key]}</legend><div className="flex flex-wrap gap-1"><button type="button" onClick={() => setFilters((current) => ({ ...current, [key]: [] }))} aria-pressed={!filters[key].length} className={`min-h-7 rounded-md border px-2 py-1 text-xs font-semibold ${!filters[key].length ? "border-brand-600 bg-brand-600 text-white" : "border-slate-200 text-slate-600 hover:bg-brand-50"}`}>All</button>{options.map((option) => <label key={option} className="cursor-pointer"><input type="checkbox" checked={filters[key].includes(option)} onChange={() => setFilters((current) => ({ ...current, [key]: current[key].includes(option) ? current[key].filter((value) => value !== option) : [...current[key], option] }))} className="peer sr-only"/><span className="inline-flex min-h-7 items-center rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-brand-50 peer-checked:border-brand-600 peer-checked:bg-brand-600 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-brand-300">{option}</span></label>)}</div></fieldset>;
+            })}</FilterPopover>}
+        </div>
         <div className="space-y-3 overflow-y-auto lg:max-h-[590px]">{dayEntries.length === 0 ? <Empty>No schedule entries match these filters.</Empty> : timeGroups.map((group) => {
           const isOpen = expanded[group.time] ?? false;
           return <div key={group.time} className={`overflow-hidden rounded-2xl border-2 bg-white ${isOpen ? "border-brand-500" : "border-slate-300"}`}><button type="button" onClick={() => setExpanded((current) => ({ ...current, [group.time]: !isOpen }))} className={`flex w-full items-center justify-between px-4 py-3 text-left font-bold ${isOpen ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-700"}`}><span>{timeRange(group.time)}</span>{isOpen ? <ChevronUp className="h-5 w-5"/> : <ChevronDown className="h-5 w-5"/>}</button>
@@ -158,7 +162,7 @@ export default function Scheduling() {
       </Card>
     </div>
     <Button className="mt-4 w-full rounded-2xl py-3" onClick={() => setShowUnbooked(true)}>View all unbooked slots</Button>
-    {showUnbooked && <div className="fixed inset-0 z-40 overflow-y-auto bg-white/95 p-4 backdrop-blur-sm sm:p-8"><div className="mx-auto max-w-7xl py-6"><button type="button" className="mb-8 font-bold text-brand-600" onClick={() => setShowUnbooked(false)}>← Back to Calendar</button><div className="mb-5 flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-3xl font-extrabold">Slot Availability</h1><p className="text-sm text-slate-500">Filter unbooked and partially booked slots by month.</p></div><label className="w-full max-w-xs text-sm font-bold text-slate-600">Month<Select className="mt-1" value={slotMonth} onChange={(event) => setSlotMonth(event.target.value)}><option value="this-month">This month</option><option value="all">All months</option>{slotMonths.filter((month) => month !== today.slice(0, 7)).map((month) => <option key={month} value={month}>{monthLabel(month)}</option>)}</Select></label></div><details className="mb-8 overflow-hidden rounded-xl bg-white shadow-sm"><summary className="cursor-pointer bg-brand-600 px-5 py-4 text-xl font-extrabold text-white">Unbooked Slots</summary><div className="p-4"><p className="mb-2 text-sm font-semibold text-slate-500">Total of <span className="text-coral-500">{visibleSlotEntries.filter((entry) => entry.state === "Unbooked").length}</span> Unbooked Slots</p><div className="mb-12 overflow-x-auto rounded-xl bg-white shadow-sm"><table className="w-full min-w-[760px] text-center text-sm"><thead className="bg-brand-600 text-white"><tr>{["Date", "Time", "Program", "Subject", "Grade Levels", "Available Tutor"].map((head) => <th key={head} className="px-4 py-5">{head}</th>)}</tr></thead><tbody className="divide-y divide-slate-300">{visibleSlotEntries.filter((entry) => entry.state === "Unbooked").map((entry) => <tr key={entry.key}><td className="px-4 py-4">{fmtDate(entry.date)}</td><td>{fmtTime(entry.time)}</td><td>{entry.programNames.join(" · ")}</td><td>{entry.subject}</td><td>{entry.grade}</td><td>{entry.tutor}</td></tr>)}</tbody></table></div></div></details><details className="overflow-hidden rounded-xl bg-white shadow-sm"><summary className="cursor-pointer bg-brand-600 px-5 py-4 text-xl font-extrabold text-white">Partially Booked Slots</summary><div className="p-4"><p className="mb-2 text-sm font-semibold text-slate-500">Total of <span className="text-coral-500">{visibleSlotEntries.filter((entry) => entry.state === "Partially booked").length}</span> Partially Booked Slots</p><div className="overflow-x-auto rounded-xl bg-white shadow-sm"><table className="w-full min-w-[860px] text-center text-sm"><thead className="bg-brand-600 text-white"><tr>{["Date", "Time", "Program", "Subject", "Grade Levels", "Capacity Occupied", "Assigned Tutor"].map((head) => <th key={head} className="px-4 py-5">{head}</th>)}</tr></thead><tbody className="divide-y divide-slate-300">{visibleSlotEntries.filter((entry) => entry.state === "Partially booked").map((entry) => <tr key={entry.key}><td className="px-4 py-4">{fmtDate(entry.date)}</td><td>{fmtTime(entry.time)}</td><td>{label(entry.program)}</td><td>{entry.subject}</td><td>{entry.grade}</td><td>{entry.capacity}</td><td>{entry.tutor}</td></tr>)}</tbody></table></div></div></details></div></div>}
+    {showUnbooked && <div className="fixed inset-0 z-40 overflow-y-auto bg-white/95 p-4 backdrop-blur-sm sm:p-8"><div className="mx-auto max-w-7xl py-6"><button type="button" className="mb-8 font-bold text-brand-600" onClick={() => setShowUnbooked(false)}>← Back to Calendar</button><div className="mb-5 flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-3xl font-extrabold">Slot Availability</h1><p className="text-sm text-slate-500">Filter unbooked and partially booked slots by month.</p></div><label className="w-full max-w-xs text-sm font-bold text-slate-600">Month<Select className="mt-1" value={slotMonth} onChange={(event) => setSlotMonth(event.target.value)}><option value="this-month">This month</option><option value="all">All months</option>{slotMonths.filter((month) => month !== today.slice(0, 7)).map((month) => <option key={month} value={month}>{monthLabel(month)}</option>)}</Select></label></div><details className="mb-8 overflow-hidden rounded-xl bg-white shadow-sm"><summary className="cursor-pointer bg-brand-600 px-5 py-4 text-xl font-extrabold text-white">Unbooked Slots</summary><div className="p-4"><p className="mb-2 text-sm font-semibold text-slate-500">Total of <span className="text-coral-500">{visibleSlotEntries.filter((entry) => entry.state === "Unbooked").length}</span> Unbooked Slots</p><div className="mb-12 max-h-[65vh] overflow-auto rounded-xl bg-white shadow-sm"><table className="w-full min-w-[760px] text-center text-sm"><thead className="sticky top-0 z-10 bg-brand-600 text-white"><tr>{["Date", "Time", "Program", "Subject", "Grade Levels", "Available Tutor"].map((head) => <th key={head} className="px-4 py-5">{head}</th>)}</tr></thead><tbody className="divide-y divide-slate-300">{visibleSlotEntries.filter((entry) => entry.state === "Unbooked").map((entry) => <tr key={entry.key}><td className="px-4 py-4">{fmtDate(entry.date)}</td><td>{fmtTime(entry.time)}</td><td>{entry.programNames.join(" · ")}</td><td>{entry.subject}</td><td>{entry.grade}</td><td>{entry.tutor}</td></tr>)}</tbody></table></div></div></details><details className="overflow-hidden rounded-xl bg-white shadow-sm"><summary className="cursor-pointer bg-brand-600 px-5 py-4 text-xl font-extrabold text-white">Partially Booked Slots</summary><div className="p-4"><p className="mb-2 text-sm font-semibold text-slate-500">Total of <span className="text-coral-500">{visibleSlotEntries.filter((entry) => entry.state === "Partially booked").length}</span> Partially Booked Slots</p><div className="max-h-[65vh] overflow-auto rounded-xl bg-white shadow-sm"><table className="w-full min-w-[860px] text-center text-sm"><thead className="sticky top-0 z-10 bg-brand-600 text-white"><tr>{["Date", "Time", "Program", "Subject", "Grade Levels", "Capacity Occupied", "Assigned Tutor"].map((head) => <th key={head} className="px-4 py-5">{head}</th>)}</tr></thead><tbody className="divide-y divide-slate-300">{visibleSlotEntries.filter((entry) => entry.state === "Partially booked").map((entry) => <tr key={entry.key}><td className="px-4 py-4">{fmtDate(entry.date)}</td><td>{fmtTime(entry.time)}</td><td>{label(entry.program)}</td><td>{entry.subject}</td><td>{entry.grade}</td><td>{entry.capacity}</td><td>{entry.tutor}</td></tr>)}</tbody></table></div></div></details></div></div>}
     {reschedule && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={() => setReschedule(null)}><div className="w-full max-w-lg space-y-4 rounded-2xl bg-white p-6" onClick={(e) => e.stopPropagation()}><h2 className="text-lg font-extrabold">Propose session reschedule</h2><div className="grid grid-cols-2 gap-3"><label className="text-xs font-bold text-slate-500">New date<input className="mt-1 w-full rounded-xl border p-2 text-sm" type="date" min={today} value={reschedule.date} onChange={(e) => setReschedule({ ...reschedule, date: e.target.value })}/></label><label className="text-xs font-bold text-slate-500">New time<Select className="mt-1" value={reschedule.time} onChange={(e) => setReschedule({ ...reschedule, time: e.target.value })}>{HOURS.map((hour) => <option key={hour} value={hour}>{fmtTime(hour)}</option>)}</Select></label></div>{rescheduleError && <Alert kind="error">{rescheduleError}</Alert>}<div className="flex gap-2"><Button onClick={async () => { const result = await s.proposeSessionReschedule(reschedule.id, reschedule.date, reschedule.time); if (!result.ok) return setRescheduleError(result.error); setReschedule(null); }}>Send to tutee for approval</Button><Button variant="secondary" onClick={() => setReschedule(null)}>Close</Button></div></div></div>}
   </>;
 }

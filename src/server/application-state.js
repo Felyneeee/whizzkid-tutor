@@ -185,15 +185,26 @@ export async function readStateForUser(user) {
   const connection = await mysqlPool.getConnection();
   try {
     await connection.beginTransaction();
-    const result = await readApplicationState(connection, { lock: true });
-    const previousState = structuredClone(result.state);
-    if (user.role === "admin" && result.initialized && runBirthdayGreetings(result.state)) {
-      await persistRelationalState(connection, result.state, previousState);
-      await connection.execute(
-        "UPDATE application_state SET revision = revision + 1 WHERE id = 1",
-      );
-    }
+    const result = await readApplicationState(connection);
     await connection.commit();
+
+    // Normal dashboard reads should not queue behind the global write lock.
+    // Birthday greetings are a rare admin-side write, so acquire the lock only
+    // when the unlocked snapshot indicates there is work to do, then re-read.
+    const birthdayProbe = structuredClone(result.state);
+    if (user.role === "admin" && result.initialized && runBirthdayGreetings(birthdayProbe)) {
+      await connection.beginTransaction();
+      const current = await readApplicationState(connection, { lock: true });
+      const previousState = structuredClone(current.state);
+      if (current.initialized && runBirthdayGreetings(current.state)) {
+        await persistRelationalState(connection, current.state, previousState);
+        await connection.execute(
+          "UPDATE application_state SET revision = revision + 1 WHERE id = 1",
+        );
+      }
+      await connection.commit();
+      return current;
+    }
     return result;
   } catch (error) {
     await connection.rollback().catch(() => undefined);
@@ -279,7 +290,18 @@ export function stateVisibleToUser(state, user) {
     .map((profile) => user.role === "tutee" && profile.userId !== user.id
       ? { ...profile, contact: "", resumeName: "", resumeData: "", hourlyRate: 0, fixedSalary: 0, interviewNotes: undefined, rejectionReason: undefined }
       : profile);
-  visible.bookings = ownBookings;
+  visible.bookings = ownBookings.map((booking) => {
+    if (user.role !== "tutor") return booking;
+    const safeBooking = { ...booking };
+    for (const key of [
+      "paymentProof", "paymentProofHistory", "paymentAmount", "paymentInstructions",
+      "paymentReviewNote", "paymentReviewedAt", "paymentApprovedAt", "paymentDeadlineAt",
+    ]) delete safeBooking[key];
+    if (safeBooking.scheduleProposal?.__payment) {
+      safeBooking.scheduleProposal = safeBooking.scheduleProposal.proposal;
+    }
+    return safeBooking;
+  });
   visible.sessions = ownSessions;
   // Ratings and written feedback are restricted to administrators. Keep the
   // session records available for scheduling, but remove rating fields from

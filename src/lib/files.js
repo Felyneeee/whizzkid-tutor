@@ -40,3 +40,18 @@ export function downloadPdfDataUrl(name, data) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     return true;
 }
+
+export function openPdfDataUrl(data) {
+    if (!isValidPdfDataUrl(data)) return false;
+    const payload = data.slice(data.indexOf(",") + 1);
+    const bytes = Uint8Array.from(atob(payload), (character) => character.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    const opened = window.open(url, "_blank");
+    if (!opened) {
+        URL.revokeObjectURL(url);
+        return false;
+    }
+    opened.opener = null;
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return true;
+}

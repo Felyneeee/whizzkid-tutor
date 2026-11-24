@@ -2,11 +2,16 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { hashPassword, issueSession } from "@/server/auth";
 import { mysqlPool } from "@/server/mysql";
+import { checkRateLimit, readJson, RequestBodyError } from "@/server/request-guards";
 export const runtime = "nodejs";
 export async function POST(request) {
     let connection;
     try {
-        const body = await request.json();
+        const body = await readJson(request, 16 * 1024);
+        const limit = checkRateLimit(request, "register-tutee", "all", 10, 60 * 60 * 1000);
+        if (!limit.allowed) {
+            return NextResponse.json({ error: "Too many registration attempts. Try again later." }, { status: 429, headers: { "Retry-After": String(limit.retryAfter) } });
+        }
         const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
         const username = typeof body.username === "string" ? body.username.trim() : "";
         const password = typeof body.password === "string" ? body.password : "";
@@ -33,6 +38,9 @@ export async function POST(request) {
         return response;
     }
     catch (error) {
+        if (error instanceof RequestBodyError) {
+            return NextResponse.json({ error: error.message }, { status: error.status });
+        }
         if (connection)
             await connection.rollback().catch(() => undefined);
         console.error("Tutee registration failed:", {

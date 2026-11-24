@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { Alert, Badge, Button, Card, Empty, Field, Modal, PageHeader, Select, Tabs, Textarea } from "@/components/ui";
+import { Alert, Badge, Button, Card, Empty, Field, FilterPopover, FilterTrigger, Modal, PageHeader, Select, Tabs, Textarea } from "@/components/ui";
 import { fmtDate } from "@/lib/dates";
 import { useStore } from "@/lib/store";
 
@@ -13,6 +13,14 @@ const mondayOf = (date) => {
 };
 const asISO = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const scheduleDateLabel = (date) => date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+const LEAVE_SORT_OPTIONS = [["newest", "Newest"], ["oldest", "Oldest"]];
+
+function LeaveFilterPanel({ sortOrder, setSortOrder, statuses = [], toggleStatus, showStatuses = false, onClear, onApply, name }) {
+  return <FilterPopover onClear={onClear} onApply={onApply}>
+    <fieldset><legend className="mb-2 text-xs font-extrabold text-slate-700">Sort by</legend><div className="space-y-1">{LEAVE_SORT_OPTIONS.map(([value, label]) => <label key={value} className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 hover:bg-brand-50"><input type="radio" name={name} checked={sortOrder === value} onChange={() => setSortOrder(value)} className="accent-brand-600"/>{label}</label>)}</div></fieldset>
+    {showStatuses && <fieldset><legend className="mb-2 text-xs font-extrabold text-slate-700">Status</legend><div className="space-y-1">{[["approved", "Approved"], ["rejected", "Rejected"]].map(([value, label]) => <label key={value} className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 hover:bg-brand-50"><input type="checkbox" checked={statuses.includes(value)} onChange={() => toggleStatus(value)} className="accent-brand-600"/>{label}</label>)}</div></fieldset>}
+  </FilterPopover>;
+}
 
 export default function Approvals({ embedded = false, defaultTab = "schedules" } = {}) {
   const s = useStore();
@@ -29,15 +37,35 @@ export default function Approvals({ embedded = false, defaultTab = "schedules" }
   const [scheduleResult, setScheduleResult] = useState(null);
   const [leaveForm, setLeaveForm] = useState(null);
   const [leaveNote, setLeaveNote] = useState("");
+  const [pendingSort, setPendingSort] = useState("newest");
+  const [recordSort, setRecordSort] = useState("newest");
+  const [recordStatuses, setRecordStatuses] = useState([]);
+  const [pendingFiltersOpen, setPendingFiltersOpen] = useState(false);
+  const [recordFiltersOpen, setRecordFiltersOpen] = useState(false);
   const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
-  const leaves = db.leaves.filter((leave) => db.tutors.some((tutor) => tutor.userId === leave.tutorId)).sort((a, b) => (a.status === "pending" ? -1 : 1) - (b.status === "pending" ? -1 : 1));
+  const tn = (id) => db.tutors.find((tutor) => tutor.userId === id)?.fullName || "Admin";
+  const leaves = db.leaves.filter((leave) => db.tutors.some((tutor) => tutor.userId === leave.tutorId));
+  const pendingLeaves = leaves.filter((leave) => leave.status === "pending").sort((a, b) => {
+    const byDate = String(b.submittedAt || "").localeCompare(String(a.submittedAt || ""));
+    return (pendingSort === "newest" ? byDate : -byDate) || tn(a.tutorId).localeCompare(tn(b.tutorId));
+  });
+  const leaveRecords = leaves.filter((leave) => leave.status !== "pending" && (!recordStatuses.length || recordStatuses.includes(leave.status))).sort((a, b) => {
+    const aDate = a.decidedAt ? new Date(a.decidedAt).getTime() : null;
+    const bDate = b.decidedAt ? new Date(b.decidedAt).getTime() : null;
+    if (aDate === null || !Number.isFinite(aDate)) return bDate === null || !Number.isFinite(bDate) ? tn(a.tutorId).localeCompare(tn(b.tutorId)) : 1;
+    if (bDate === null || !Number.isFinite(bDate)) return -1;
+    const byDate = bDate - aDate;
+    return (recordSort === "newest" ? byDate : -byDate) || tn(a.tutorId).localeCompare(tn(b.tutorId));
+  });
+  const toggleRecordStatus = (status) => setRecordStatuses((current) => current.includes(status) ? current.filter((entry) => entry !== status) : [...current, status]);
+  const clearPendingFilters = () => setPendingSort("newest");
+  const clearRecordFilters = () => { setRecordSort("newest"); setRecordStatuses([]); };
   const selectedWeek = useMemo(() => WEEK.map((day, index) => {
     const date = new Date(weekStart);
     date.setDate(date.getDate() + index);
     return { day, date };
   }), [weekStart]);
   const isCurrentWeek = weekStart.getTime() === mondayOf(new Date()).getTime();
-  const tn = (id) => db.tutors.find((tutor) => tutor.userId === id)?.fullName || "Admin";
   const openLeaveForm = (leave) => { setLeaveForm(leave); setLeaveNote(leave.status === "pending" ? "" : leave.note || ""); };
 
   const setScheduleDays = (update) => setScheduleDayEdits((current) => {
@@ -112,9 +140,9 @@ export default function Approvals({ embedded = false, defaultTab = "schedules" }
             {!isCurrentWeek && <button className="rounded-lg bg-brand-600 px-3 py-1.5 font-bold text-white" onClick={() => setWeekStart(mondayOf(new Date()))}>This Week</button>}
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="max-h-[65vh] overflow-auto">
           <table className="w-full min-w-[760px] border-separate border-spacing-0 text-center">
-            <thead><tr className="bg-brand-600 text-white">
+            <thead className="sticky top-0 z-10"><tr className="bg-brand-600 text-white">
               <th className="rounded-tl-xl px-3 py-4 text-left">Tutor</th>
               {selectedWeek.map(({ day, date }) => <th key={day} className="px-2 py-3"><div className="text-sm font-extrabold uppercase">{day}</div><div className="mt-0.5 text-xs font-medium">{scheduleDateLabel(date)}</div></th>)}
             </tr></thead>
@@ -136,8 +164,8 @@ export default function Approvals({ embedded = false, defaultTab = "schedules" }
 
     {tab === "leaves" && <div className="space-y-8">
       <section className="space-y-3">
-        <h2 className="text-xl font-extrabold">Pending Requests</h2>
-        {leaves.filter((leave) => leave.status === "pending").length === 0 ? <Empty>No pending leave requests.</Empty> : leaves.filter((leave) => leave.status === "pending").map((leave) => {
+        <div className="relative flex items-center justify-between gap-3"><h2 className="text-xl font-extrabold">Pending Requests</h2><FilterTrigger onClick={() => setPendingFiltersOpen((open) => !open)} ariaLabel="Sort pending leave requests" expanded={pendingFiltersOpen} count={pendingSort !== "newest" ? 1 : 0}/>{pendingFiltersOpen && <LeaveFilterPanel sortOrder={pendingSort} setSortOrder={setPendingSort} onClear={clearPendingFilters} onApply={() => setPendingFiltersOpen(false)} name="pending-leave-sort"/>}</div>
+        {pendingLeaves.length === 0 ? <Empty>No pending leave requests.</Empty> : pendingLeaves.map((leave) => {
         const affected = db.sessions.filter((session) => session.tutorId === leave.tutorId && session.status === "scheduled" && (leave.dates ? leave.dates.includes(session.date) : session.date >= leave.startDate && session.date <= leave.endDate)).length;
         return <Card key={leave.id} className="flex flex-wrap items-center justify-between gap-3 !p-4">
           <div>
@@ -151,8 +179,8 @@ export default function Approvals({ embedded = false, defaultTab = "schedules" }
         })}
       </section>
       <section>
-        <h2 className="mb-3 text-xl font-extrabold">Leave Records</h2>
-        {leaves.filter((leave) => leave.status !== "pending").length === 0 ? <Empty>No completed leave records.</Empty> : <div className="overflow-x-auto rounded-2xl bg-white shadow-sm"><table className="w-full min-w-[760px] text-sm"><thead className="bg-slate-400 text-left text-white"><tr>{["Name", "Date Requested", "Date Approved/Rejected", "Status", ""].map((heading) => <th key={heading} className="px-4 py-3">{heading}</th>)}</tr></thead><tbody className="divide-y divide-slate-200">{leaves.filter((leave) => leave.status !== "pending").map((leave) => {
+        <div className="relative mb-3 flex items-center justify-between gap-3"><h2 className="text-xl font-extrabold">Leave Records</h2><FilterTrigger onClick={() => setRecordFiltersOpen((open) => !open)} ariaLabel="Filter and sort leave records" expanded={recordFiltersOpen} count={recordStatuses.length + (recordSort !== "newest" ? 1 : 0)}/>{recordFiltersOpen && <LeaveFilterPanel sortOrder={recordSort} setSortOrder={setRecordSort} statuses={recordStatuses} toggleStatus={toggleRecordStatus} showStatuses onClear={clearRecordFilters} onApply={() => setRecordFiltersOpen(false)} name="leave-record-sort"/>}</div>
+        {leaveRecords.length === 0 ? <Empty>No completed leave records match these filters.</Empty> : <div className="max-h-[65vh] overflow-auto rounded-2xl bg-white shadow-sm"><table className="w-full min-w-[760px] text-sm"><thead className="sticky top-0 z-10 bg-slate-400 text-left text-white"><tr>{["Name", "Date Requested", "Date Approved/Rejected", "Status", ""].map((heading) => <th key={heading} className="px-4 py-3">{heading}</th>)}</tr></thead><tbody className="divide-y divide-slate-200">{leaveRecords.map((leave) => {
           const start = leave.startDate || leave.dates?.[0];
           const end = leave.endDate || leave.dates?.[leave.dates.length - 1] || start;
           const requestRange = start ? `${fmtDate(String(start).slice(0,10))} to ${fmtDate(String(end).slice(0,10))}` : "—";
@@ -161,6 +189,6 @@ export default function Approvals({ embedded = false, defaultTab = "schedules" }
         })}</tbody></table></div>}
       </section>
     </div>}
-    <Modal open={!!leaveForm} onClose={() => setLeaveForm(null)} title="Leave Form" wide>{leaveForm && <div className="space-y-4 text-sm text-slate-700"><p>Date Submitted: <b>{leaveForm.submittedAt ? new Date(leaveForm.submittedAt).toLocaleDateString("en-PH") : "—"}</b></p><div className="rounded-2xl border-2 border-slate-300"><div className="border-b-2 border-slate-300 px-4 py-3">Employee Name: <b>{tn(leaveForm.tutorId)}</b></div><div className="space-y-3 px-4 py-4"><p>Reason for requested leave:</p><b>{leaveForm.leaveType || leaveForm.reason}</b>{leaveForm.otherReason && <p>Other: {leaveForm.otherReason}</p>}</div><div className="border-t-2 border-slate-300 px-4 py-3">Date Requested: <b>{fmtDate(leaveForm.startDate)} to {fmtDate(leaveForm.endDate)}</b></div></div>{leaveForm.status === "pending" ? <Field label="Note for tutor (optional)"><Textarea maxLength={2000} placeholder="Explain why this leave request is approved or rejected…" value={leaveNote} onChange={(event) => setLeaveNote(event.target.value)}/></Field> : <div className="rounded-xl border border-slate-300 p-4"><b>Admin note</b><p className="mt-2 min-h-16 whitespace-pre-wrap">{leaveForm.note || "No note provided."}</p></div>}<div className="flex flex-wrap items-center justify-between gap-2"><Badge status={leaveForm.status}/>{leaveForm.status === "pending" && <div className="flex gap-2"><Button variant="success" onClick={() => { s.decideLeave(leaveForm.id, true, leaveNote.trim()); setLeaveForm(null); }}>Approve</Button><Button variant="danger" onClick={() => { s.decideLeave(leaveForm.id, false, leaveNote.trim()); setLeaveForm(null); }}>Reject</Button></div>}</div></div>}</Modal>
+    <Modal open={!!leaveForm} onClose={() => setLeaveForm(null)} title="Leave Form" wide>{leaveForm && <div className="space-y-4 text-sm text-slate-700"><p>Date Submitted: <b>{leaveForm.submittedAt ? new Date(leaveForm.submittedAt).toLocaleDateString("en-PH") : "—"}</b></p><div className="rounded-2xl border-2 border-slate-300"><div className="border-b-2 border-slate-300 px-4 py-3">Employee Name: <b>{tn(leaveForm.tutorId)}</b></div><div className="space-y-3 px-4 py-4"><p>Reason for requested leave:</p><b>{leaveForm.leaveType || leaveForm.reason}</b>{leaveForm.otherReason && <p>Other: {leaveForm.otherReason}</p>}</div><div className="border-t-2 border-slate-300 px-4 py-3">Date Requested: <b>{fmtDate(leaveForm.startDate)} to {fmtDate(leaveForm.endDate)}</b></div></div>{leaveForm.status === "pending" ? <Field label="Note for tutor (optional)"><Textarea maxLength={2000} placeholder="Explain why this leave request is approved or rejected…" value={leaveNote} onChange={(event) => setLeaveNote(event.target.value)}/></Field> : <div className="rounded-xl border border-slate-300 p-4"><b>Admin note</b><p className="mt-2 min-h-16 whitespace-pre-wrap">{leaveForm.note || "No note provided."}</p></div>}{leaveForm.status === "pending" && <div className="flex justify-end gap-2"><Button variant="success" onClick={() => { s.decideLeave(leaveForm.id, true, leaveNote.trim()); setLeaveForm(null); }}>Approve</Button><Button variant="danger" onClick={() => { s.decideLeave(leaveForm.id, false, leaveNote.trim()); setLeaveForm(null); }}>Reject</Button></div>}</div>}</Modal>
   </>;
 }

@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Alert, Badge, Button, Card, Empty, Select } from "@/components/ui";
+import { Alert, Badge, Button, Card, Empty, FilterPopover, FilterTrigger } from "@/components/ui";
 import { fmtDate, fmtTime } from "@/lib/dates";
 import { useStore } from "@/lib/store";
 
@@ -13,9 +13,13 @@ export default function PlaygroupBookingRequests() {
   const [busy, setBusy] = useState({});
   const [errors, setErrors] = useState({});
   const [sortOrder, setSortOrder] = useState("newest");
-  const requests = (s.db.bookings || []).filter((booking) => booking.program === "playgroup" && pendingStatuses.includes(bookingStatusOf(booking)))
-    .sort((a, b) => sortOrder === "newest" ? String(b.createdAt || "").localeCompare(String(a.createdAt || "")) : String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const nameOf = (id) => s.db.tutees.find((tutee) => tutee.userId === id)?.fullName || id;
+  const requests = (s.db.bookings || []).filter((booking) => booking.program === "playgroup" && pendingStatuses.includes(bookingStatusOf(booking)))
+    .sort((a, b) => {
+      const comparison = String(a.createdAt || "").localeCompare(String(b.createdAt || ""));
+      return sortOrder === "newest" ? -comparison : comparison;
+    });
   const cohortOf = (booking) => s.db.cohorts.find((cohort) => cohort.id === booking.cohortId);
   const dateLabel = (date) => date ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${date}T12:00:00`)) : "—";
   const approve = async (booking) => {
@@ -41,7 +45,7 @@ export default function PlaygroupBookingRequests() {
 
   if (!requests.length) return <Empty>No pending playgroup booking requests.</Empty>;
   return <>
-  <div className="mb-3 flex justify-end"><label className="flex items-center gap-2 text-sm font-semibold text-slate-600"><span>Sort by</span><Select className="w-auto min-w-36" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option></Select></label></div>
+  <div className="relative mb-3 flex justify-end"><FilterTrigger onClick={() => setFiltersOpen((open) => !open)} ariaLabel="Filter Playgroup booking requests" expanded={filtersOpen} count={sortOrder !== "newest" ? 1 : 0}/>{filtersOpen && <FilterPopover onClear={() => setSortOrder("newest")} onApply={() => setFiltersOpen(false)}><fieldset><legend className="mb-2 text-xs font-extrabold text-slate-700">Sort by</legend><div className="space-y-1">{[["newest", "Newest first"], ["oldest", "Oldest first"]].map(([value, label]) => <label key={value} className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 hover:bg-brand-50"><input type="radio" name="playgroup-request-sort" checked={sortOrder === value} onChange={() => setSortOrder(value)} className="accent-brand-600"/>{label}</label>)}</div></fieldset></FilterPopover>}</div>
   <div className="space-y-3">
     {requests.map((booking) => {
       const cohort = cohortOf(booking);

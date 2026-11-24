@@ -7,7 +7,7 @@ export function notificationDestination(notification, role) {
   if (/payment|receipt|reservation|paid/.test(text)) return role === "admin" ? "/admin/payments" : `${base}/requests`;
   if (/leave request|leave/.test(text)) return role === "admin" ? "/admin/tutors" : role === "tutor" ? "/tutor/leave" : "/tutee/requests";
   if (/assessment|reading/.test(text)) return role === "admin" ? "/admin/booking-requests" : `${base}/requests`;
-  if (/booking|reschedul|tutor was matched|reservation/.test(text)) return role === "admin" ? "/admin/booking-requests" : role === "tutor" ? "/tutor/calendar" : "/tutee/requests";
+  if (/reassign|reassigned|booking|reschedul|tutor was matched|reservation/.test(text)) return role === "admin" ? "/admin/booking-requests" : role === "tutor" ? "/tutor/calendar" : "/tutee/requests";
   if (/schedule|session/.test(text)) return role === "admin" ? "/admin/scheduling" : role === "tutor" ? "/tutor/calendar" : "/tutee/schedule";
   if (/application|registration|interview/.test(text)) return role === "admin" ? "/admin/tutors" : `${base}/profile`;
   return `${base}/notifications`;

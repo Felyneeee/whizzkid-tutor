@@ -11,7 +11,9 @@ function createPool() {
         connectionLimit: 10,
         maxIdle: 10,
         idleTimeout: 60000,
-        queueLimit: 0,
+        // Bound queued requests so DB saturation cannot grow the process queue
+        // without limit. Tune together with the host's worker count.
+        queueLimit: 100,
         enableKeepAlive: true,
         charset: "utf8mb4",
         dateStrings: true,

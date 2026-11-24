@@ -1,6 +1,6 @@
 "use client";
 import clsx from "clsx";
-import { Blocks, BookOpenText, Flag, GraduationCap, PencilLine, X } from "lucide-react";
+import { Blocks, BookOpenText, Flag, GraduationCap, PencilLine, SlidersHorizontal, X } from "lucide-react";
 import React from "react";
 export const cn = clsx;
 export function Button({ variant = "primary", size = "md", className, ...p }) {
@@ -13,6 +13,20 @@ export function Button({ variant = "primary", size = "md", className, ...p }) {
         sunny: "bg-sunny-400 text-slate-900 hover:bg-sunny-300",
     }[variant];
     return (<button {...p} className={cn("inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-[color,transform] duration-150 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100", size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm", v, className)}/>);
+}
+export function FilterTrigger({ onClick, expanded, count = 0, ariaLabel = "Open filters" }) {
+    return <button type="button" onClick={onClick} aria-label={ariaLabel} aria-expanded={expanded} className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50">
+      <SlidersHorizontal className="h-4 w-4 text-brand-600" aria-hidden="true"/>Filters{count > 0 && <span className="rounded-full bg-brand-600 px-1.5 text-xs text-white">{count}</span>}
+    </button>;
+}
+export function FilterPopover({ children, onClear, onCancel, onApply }) {
+    return <div className="absolute right-0 top-full z-30 mt-2 max-h-[min(70vh,36rem)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+      <div className="space-y-3">{children}</div>
+      <div className="mt-3 flex justify-between border-t border-slate-100 pt-3">
+        <button type="button" onClick={onClear} className="text-xs font-semibold text-slate-500 hover:text-brand-600">Clear all</button>
+        <div className="flex items-center gap-2"><button type="button" onClick={onCancel || onApply} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">Cancel</button><button type="button" onClick={onApply} className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-700">Apply</button></div>
+      </div>
+    </div>;
 }
 export function Card({ className, children }) {
     return <div className={cn("rounded-2xl border border-slate-100 bg-white p-5 shadow-sm", className)}>{children}</div>;
@@ -102,6 +116,16 @@ export function Modal({ open, onClose, title, children, wide }) {
       </div>
     </div>);
 }
+export function ProfileModal({ open, onClose, title, children }) {
+    if (!open)
+        return null;
+    return <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/40 p-4" onClick={onClose}>
+      <section role="dialog" aria-modal="true" aria-labelledby="profile-modal-title" className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-5 text-sm text-slate-700 shadow-2xl sm:p-6" onClick={(event) => event.stopPropagation()}>
+        <div className="mb-5 flex items-center justify-between gap-4"><h2 id="profile-modal-title" className="min-w-0 truncate text-xl font-extrabold text-slate-800">{title}</h2><button type="button" onClick={onClose} aria-label="Close profile" className="shrink-0 rounded-lg p-1 text-slate-600 hover:bg-slate-100"><X className="h-5 w-5"/></button></div>
+        {children}
+      </section>
+    </div>;
+}
 export function Empty({ children }) {
     return <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-400">{children}</div>;
 }
@@ -115,9 +139,9 @@ export function Alert({ kind = "info", children }) {
     return <div className={cn("rounded-xl border px-4 py-3 text-sm", c)}>{children}</div>;
 }
 export function Table({ head, children }) {
-    return (<div className="overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-sm">
+    return (<div className="max-h-[65vh] overflow-auto rounded-2xl border border-slate-100 bg-white shadow-sm">
       <table className="w-full text-left text-sm">
-        <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <thead className="sticky top-0 z-10 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
           <tr>
             {head.map((h) => (<th key={h} className="whitespace-nowrap px-4 py-3 font-bold">
                 {h}

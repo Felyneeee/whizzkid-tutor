@@ -6,7 +6,7 @@ import { useState } from "react";
 import { Alert, Button, Chips, Field, Input } from "@/components/ui";
 import { SUBJECTS } from "@/lib/constants";
 import { ageFromBirthday } from "@/lib/dates";
-import { readFileAsDataURL, readPdfAsDataURL } from "@/lib/files";
+import { openPdfDataUrl, readFileAsDataURL, readPdfAsDataURL } from "@/lib/files";
 import { useStore } from "@/lib/store";
 
 const GRADE_CHOICES = ["Nursery", "Preschool", "Kinder", "Elementary", "High School"];
@@ -81,7 +81,8 @@ export default function TutorProfilePage() {
 
     {editing ? <section className="relative mt-28 rounded-2xl bg-white px-6 pb-6 pt-6 shadow-sm sm:px-12">
       <div className="absolute -top-24 left-1/2 -translate-x-1/2"><Avatar photo={photo} large/><label className="absolute -bottom-1 -right-1 z-10 grid h-8 w-8 cursor-pointer place-items-center rounded-lg bg-white text-slate-600 shadow" aria-label="Change profile photo"><Pencil className="h-5 w-5"/><input className="sr-only" type="file" accept="image/*" onChange={(e) => up(e.target.files?.[0], "photo")}/></label></div>
-      <div className="mb-8 flex justify-end"><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
+      <div className="mb-8 hidden justify-end sm:flex"><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
+      <div className="mb-6 mt-14 flex justify-center sm:hidden"><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
       <div className="border-l-4 border-slate-100 pl-5 sm:pl-6">
         <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
           <Field label="Full name"><Input value={f.fullName} onChange={set("fullName")} className="rounded-2xl py-3"/></Field>
@@ -103,8 +104,9 @@ export default function TutorProfilePage() {
     </section> : <>
       <section className="relative mt-24 rounded-2xl bg-white shadow-sm">
         <div className="absolute -top-16 left-1/2 -translate-x-1/2"><Avatar photo={photo} large/><label className="absolute -bottom-1 -right-1 z-10 grid h-8 w-8 cursor-pointer place-items-center rounded-lg bg-white text-slate-600 shadow" aria-label="Change profile photo"><Pencil className="h-5 w-5"/><input className="sr-only" type="file" accept="image/*" onChange={(e) => up(e.target.files?.[0], "photo")}/></label></div>
-        <div className="flex justify-end px-6 pt-6 sm:px-12"><Button onClick={() => setEditing(true)} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">Edit Profile</Button></div>
-        <div className="px-6 pb-5 pt-12 text-center"><h2 className="text-2xl font-bold text-[#5d5b5a]">{f.fullName || "Tutor"}</h2><p className="mt-1 text-lg font-semibold text-slate-400">Tutor</p></div>
+        <div className="hidden justify-end px-6 pt-6 sm:flex sm:px-12"><Button onClick={() => setEditing(true)} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">Edit Profile</Button></div>
+        <div className="px-6 pb-5 pt-28 text-center sm:pt-12"><h2 className="text-2xl font-bold text-[#5d5b5a]">{f.fullName || "Tutor"}</h2><p className="mt-1 text-lg font-semibold text-slate-400">{t.status === "active" ? "Tutor" : "Applicant"}</p></div>
+        <div className="mb-5 flex justify-center px-6 sm:hidden"><Button onClick={() => setEditing(true)} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">Edit Profile</Button></div>
         <div className="rounded-b-2xl bg-blue-600 px-8 py-5 text-white sm:px-12">
           <p><b>Birthday:</b> <span className="ml-2">{formattedBirthday}</span></p>
           <p><b>Age:</b> <span className="ml-2">{age || "Not provided"}{typeof age === "number" ? " y/o" : ""}</span></p>
@@ -118,7 +120,7 @@ export default function TutorProfilePage() {
       </div>
       <section className="mt-5 grid gap-5 rounded-2xl border-2 border-blue-600 bg-white p-5 sm:grid-cols-[160px_1fr] sm:items-center sm:px-8">
         <h2 className="text-center text-xl font-bold text-[#5d5b5a]">Resume</h2>
-        {resume.data ? <a href={resume.data} target="_blank" rel="noreferrer" className="flex min-w-0 items-center justify-between gap-4 rounded-2xl bg-[#e7e7e7] px-5 py-4 text-sm font-bold text-[#5d5b5a] hover:bg-slate-200"><span className="flex min-w-0 items-center gap-3 truncate"><FileText className="h-5 w-5 shrink-0"/>{resume.name || "Resume.pdf"}</span><span className="shrink-0 text-slate-500">PDF</span></a> : <div className="rounded-2xl bg-slate-100 px-5 py-4 text-sm text-slate-500">No resume uploaded</div>}
+        {resume.data ? <button type="button" onClick={() => { if (!openPdfDataUrl(resume.data)) setMsg({ kind: "error", text: "The resume could not be opened. Please allow pop-ups and try again." }); }} className="flex min-w-0 items-center justify-between gap-4 rounded-2xl bg-[#e7e7e7] px-5 py-4 text-left text-sm font-bold text-[#5d5b5a] hover:bg-slate-200"><span className="flex min-w-0 items-center gap-3 truncate"><FileText className="h-5 w-5 shrink-0"/>{resume.name || "Resume.pdf"}</span><span className="shrink-0 text-slate-500">Open PDF</span></button> : <div className="rounded-2xl bg-slate-100 px-5 py-4 text-sm text-slate-500">No resume uploaded</div>}
       </section>
     </>}
 

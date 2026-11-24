@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Calendar } from "@/components/Calendar";
 import { Badge, Card, Empty, PageHeader } from "@/components/ui";
 import { firstName, fmtDate, fmtTime, todayISO, weekday } from "@/lib/dates";
@@ -9,12 +9,42 @@ export default function TutorCalendar() {
     const s = useStore();
     const id = s.me.id;
     const [sel, setSel] = useState(todayISO());
-    const mine = s.db.sessions.filter((x) => x.tutorId === id && x.status !== "cancelled");
+    useEffect(() => {
+      const signatureOf = (db) => JSON.stringify({
+        sessions: (db?.sessions || [])
+          .filter((session) => session.tutorId === id)
+          .map((session) => [session.id, session.date, session.time, session.tuteeId, session.status])
+          .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+        playgroups: (db?.bookings || []).filter((booking) => booking.program === "playgroup" && (booking.dates || []).some((date) => {
+          const cohort = (db.cohorts || []).find((entry) => entry.id === booking.cohortId);
+          return (booking.tutorAssignments?.[date] || cohort?.weekdayTutorIds?.[weekday(date)] || booking.tutorId) === id;
+        })).map((booking) => [booking.id, (booking.dates || []).map((date) => [date, booking.tutorAssignments?.[date] || booking.tutorId || "", booking.reassignmentPendingDates?.[date] || ""])])
+          .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+      });
+      const signature = signatureOf(s.db);
+      const refreshIfChanged = async () => {
+        if (document.visibilityState !== "visible") return;
+        try {
+          const response = await fetch("/api/state", { credentials: "same-origin", cache: "no-store" });
+          if (!response.ok) return;
+          const payload = await response.json();
+          if (signatureOf(payload.db) !== signature) window.location.reload();
+        } catch { /* Keep the current page if the refresh check cannot reach the server. */ }
+      };
+      const timer = window.setInterval(refreshIfChanged, 8000);
+      const handleVisibility = () => { if (document.visibilityState === "visible") void refreshIfChanged(); };
+      document.addEventListener("visibilitychange", handleVisibility);
+      return () => {
+        window.clearInterval(timer);
+        document.removeEventListener("visibilitychange", handleVisibility);
+      };
+    }, [id, s.db.sessions, s.db.bookings, s.db.cohorts]);
+    const mine = s.db.sessions.filter((x) => x.tutorId === id && x.status !== "cancelled" && x.status !== "needs_reassignment");
     const day = mine.filter((x) => x.date === sel).sort((a, b) => a.time.localeCompare(b.time));
-    const playgroupBookings = s.db.bookings.filter((booking) => booking.program === "playgroup" && ["approved", "confirmed"].includes(booking.status));
+    const playgroupBookings = s.db.bookings.filter((booking) => booking.program === "playgroup" && ["approved", "confirmed", "to_pay", "awaiting_payment_approval"].includes(booking.status));
     const playgroupAssignments = playgroupBookings.flatMap((booking) => {
       const cohort = s.db.cohorts.find((item) => item.id === booking.cohortId);
-      return booking.dates.filter((date) => (booking.tutorAssignments?.[date] || cohort?.weekdayTutorIds?.[weekday(date)] || booking.tutorId) === id).map((date) => ({ booking, date }));
+      return booking.dates.filter((date) => !booking.reassignmentPendingDates?.[date] && (booking.tutorAssignments?.[date] || cohort?.weekdayTutorIds?.[weekday(date)] || booking.tutorId) === id).map((date) => ({ booking, date }));
     });
     const playgroupDays = Object.values(playgroupAssignments.reduce((groups, item) => {
       const key = `${item.booking.cohortId || item.booking.id}|${item.date}`;

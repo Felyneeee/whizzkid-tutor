@@ -1,8 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { SlidersHorizontal } from "lucide-react";
-import { Button, Empty, Input, Modal, PageHeader, Textarea, peso } from "@/components/ui";
+import { Button, Empty, FilterPopover, FilterTrigger, Input, Modal, PageHeader, Textarea, peso } from "@/components/ui";
 import { fmtDateTime } from "@/lib/dates";
 import { useStore } from "@/lib/store";
 
@@ -11,6 +10,7 @@ const statusFor = (booking) => booking.status === "awaiting_payment_approval" ||
   : booking.paymentStatus === "paid" ? "paid"
     : booking.status === "expired" ? "overdue" : "unpaid";
 const filterKey = (label) => ({ "For Verification": "verification" })[label] || label.toLowerCase();
+const PAYMENT_SORT_OPTIONS = [["name-asc", "Name A–Z"], ["name-desc", "Name Z–A"], ["newest", "Newest"], ["oldest", "Oldest"]];
 
 export default function BookingPayments() {
   const s = useStore();
@@ -28,6 +28,8 @@ export default function BookingPayments() {
   const paymentSettings = s.db.paymentSettings || { onlineAccounts: [], onlineEnabled: true, inPersonEnabled: true, addresses: [], paymentDeadlineHours: 48 };
   const name = (id) => s.db.tutees.find((t) => t.userId === id)?.fullName || s.db.users.find((u) => u.id === id)?.username || id;
   const paymentMethod = (booking) => booking.paymentProof?.method;
+  const paymentDate = (booking) => String(booking.paymentApprovedAt || booking.paymentProof?.submittedAt || booking.createdAt || booking.at || "");
+  const clearFilters = () => { setMethodFilter("all"); setSortOrder("name-asc"); };
 
   useEffect(() => {
     if (!s.ready || !s.me) return;
@@ -56,8 +58,11 @@ export default function BookingPayments() {
       && (methodFilter === "all" || paymentMethod(booking) === methodFilter)
       && `${name(booking.tuteeId)} ${booking.id} ${booking.subject || ""}`.toLowerCase().includes(query.toLowerCase());
   }).sort((a, b) => {
-    const result = name(a.tuteeId).localeCompare(name(b.tuteeId), undefined, { sensitivity: "base" });
-    return sortOrder === "name-asc" ? result : -result;
+    const byName = name(a.tuteeId).localeCompare(name(b.tuteeId), undefined, { sensitivity: "base" });
+    const byDate = paymentDate(b).localeCompare(paymentDate(a));
+    if (sortOrder === "name-asc") return byName || byDate;
+    if (sortOrder === "name-desc") return -byName || byDate;
+    return (sortOrder === "newest" ? byDate : -byDate) || byName;
   });
   const review = async (booking, approve, note = "") => {
     if (!approve && !note.trim()) return setMessage("Enter a reason before rejecting this receipt.");
@@ -88,24 +93,23 @@ export default function BookingPayments() {
     </div>
     <section className="rounded-3xl bg-white p-4 shadow-sm sm:p-6">
       <h2 className="mb-4 text-xl font-extrabold">Payment Records</h2>
-      <div className="mb-4 flex items-center gap-3">
+      <div className="relative mb-4">
+        <div className="flex items-center gap-3">
         <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tutee name or booking ID…" className="rounded-2xl border-2 border-slate-300 px-5 py-3" />
-        <div className="relative shrink-0">
-          <button type="button" onClick={() => setFiltersOpen((open) => !open)} aria-label="Filter and sort payment records" aria-expanded={filtersOpen} className="rounded-xl p-2.5 text-brand-600 hover:bg-brand-50"><SlidersHorizontal className="h-5 w-5"/></button>
-          {filtersOpen && <div className="absolute right-0 z-20 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
-            <label className="block px-1 text-xs font-bold uppercase tracking-wide text-slate-500">Payment method<select value={methodFilter} onChange={(event) => setMethodFilter(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm normal-case tracking-normal text-slate-700"><option value="all">All methods</option><option value="online">Online transfer</option><option value="in_person">In-person</option></select></label>
-            <label className="mt-3 block border-t border-slate-100 px-1 pt-3 text-xs font-bold uppercase tracking-wide text-slate-500">Sort by name<select value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm normal-case tracking-normal text-slate-700"><option value="name-asc">Ascending (A–Z)</option><option value="name-desc">Descending (Z–A)</option></select></label>
-            <button type="button" onClick={() => setFiltersOpen(false)} className="mt-3 w-full rounded-lg bg-brand-600 px-3 py-2 text-sm font-bold text-white">Done</button>
-          </div>}
+        <FilterTrigger onClick={() => setFiltersOpen((open) => !open)} ariaLabel="Filter and sort payment records" expanded={filtersOpen} count={(methodFilter !== "all" ? 1 : 0) + (sortOrder !== "name-asc" ? 1 : 0)}/>
         </div>
+        {filtersOpen && <FilterPopover onClear={clearFilters} onApply={() => setFiltersOpen(false)}>
+          <fieldset><legend className="mb-2 text-xs font-extrabold text-slate-700">Sort by</legend><div className="space-y-1">{PAYMENT_SORT_OPTIONS.map(([value, label]) => <label key={value} className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 hover:bg-brand-50"><input type="radio" name="payment-record-sort" checked={sortOrder === value} onChange={() => setSortOrder(value)} className="accent-brand-600"/>{label}</label>)}</div></fieldset>
+          <fieldset><legend className="mb-2 text-xs font-extrabold text-slate-700">Payment method</legend><div className="space-y-1">{[["all", "All methods"], ["online", "Online transfer"], ["in_person", "In-person"]].map(([value, label]) => <label key={value} className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 hover:bg-brand-50"><input type="radio" name="payment-method-filter" checked={methodFilter === value} onChange={() => setMethodFilter(value)} className="accent-brand-600"/>{label}</label>)}</div></fieldset>
+        </FilterPopover>}
       </div>
       <div className="mb-5 flex flex-wrap gap-2 rounded-full border-2 border-brand-500 p-1">
         {filters.map((label) => <button key={label} onClick={() => setFilter(label)} className={`flex-1 rounded-full px-3 py-2 text-sm font-bold ${filter === label ? "bg-brand-600 text-white" : "text-slate-700 hover:bg-slate-50"}`}>{label}<span className="ml-1 hidden text-xs opacity-75 sm:inline">{counts[label]}</span></button>)}
       </div>
       {message && <p role="alert" className="mb-3 rounded-xl bg-coral-50 p-3 text-sm font-semibold text-coral-700">{message}</p>}
-      {visible.length === 0 ? <Empty>No booking payments match this filter.</Empty> : <div className="overflow-x-auto rounded-2xl bg-blue-50/70">
+      {visible.length === 0 ? <Empty>No booking payments match this filter.</Empty> : <div className="max-h-[65vh] overflow-auto rounded-2xl bg-blue-50/70">
         <table className="w-full min-w-[900px] text-left text-sm">
-          <thead className="bg-slate-400 text-white"><tr>{["Name", "Payment Method", "Amount", "Date Confirmed", "Status", ""].map((label) => <th key={label} className="px-4 py-4 font-extrabold">{label}</th>)}</tr></thead>
+          <thead className="sticky top-0 z-10 bg-slate-400 text-white"><tr>{["Name", "Payment Method", "Amount", "Date Confirmed", "Status", ""].map((label) => <th key={label} className="px-4 py-4 font-extrabold">{label}</th>)}</tr></thead>
           <tbody>{visible.map((booking) => { const status = statusFor(booking); return <tr key={booking.id} className="border-b border-slate-300 bg-slate-50 last:border-0">
             <td className="px-4 py-4 font-bold">{name(booking.tuteeId)}<span className="block text-xs text-slate-500">{booking.id}</span></td>
             <td className="px-4 py-4 font-semibold">{paymentMethod(booking) ? paymentMethod(booking) === "in_person" ? "In-person" : "Online" : "—"}</td>

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Alert, Badge, Button, Empty, Field, Input, Modal, PageHeader, Select, Textarea, peso } from "@/components/ui";
 import { HOURS } from "@/lib/constants";
-import { fmtDate, fmtTime, todayISO, isAssessmentOutdated } from "@/lib/dates";
+import { fmtDate, fmtTime, todayISO, weekday, isAssessmentOutdated } from "@/lib/dates";
 import { useStore } from "@/lib/store";
 
 const TABS = [
@@ -144,7 +144,11 @@ export default function TuteeRequests() {
       paymentSettings: db?.paymentSettings,
       bookings: (db?.bookings || [])
         .filter((booking) => booking.tuteeId === id || (db.sessions || []).some((session) => session.tuteeId === id && session.bookingId === booking.id))
-        .map((booking) => [booking.id, statusOf(booking), booking.paymentStatus || "", !!booking.rescheduleProposal])
+        .map((booking) => [booking.id, statusOf(booking), booking.paymentStatus || "", !!booking.rescheduleProposal, booking.dates || [], booking.sessionTimes || {}, booking.tutorAssignments || {}, booking.reassignmentPendingDates || {}, booking.scheduleHistory || [], booking.reassignmentHistory || []])
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+      sessions: (db?.sessions || [])
+        .filter((session) => session.tuteeId === id)
+        .map((session) => [session.id, session.date, session.time, session.tutorId, session.status, session.reassignmentHistory || []])
         .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
     });
     const signature = signatureOf(s.db);
@@ -192,8 +196,11 @@ export default function TuteeRequests() {
   };
   const programBookings = bookings.filter((booking) => (booking.program || "academic") === program);
   const filteredBookings = (tab === "all" ? programBookings : programBookings.filter((booking) => categoryOf(booking) === tab));
-  const programCounts = (key) => bookings.filter((booking) => (booking.program || "academic") === key && categoryOf(booking) === "pending").length
-    + (key === "reading" ? assessments.length : 0);
+  const unreadBookingIds = new Set(s.db.notifications
+    .filter((notification) => notification.userId === id && !notification.read && notification.threadId?.startsWith("booking:"))
+    .map((notification) => notification.threadId.slice("booking:".length)));
+  const newUpdateCount = (category) => programBookings.filter((booking) => (category === "all" || categoryOf(booking) === category) && unreadBookingIds.has(booking.id)).length;
+  const programCounts = (key) => bookings.filter((booking) => (booking.program || "academic") === key && unreadBookingIds.has(booking.id)).length;
 
   const submitProof = async (bookingId, file, reference, method) => {
     if (!file) return setProofMessage((current) => ({ ...current, [bookingId]: "Choose a receipt file first." }));
@@ -240,7 +247,7 @@ export default function TuteeRequests() {
     <PageHeader title="My Bookings"/>
     <section className="space-y-4 rounded-3xl bg-white p-4 shadow-sm sm:p-6">
       <nav className="flex gap-1 overflow-x-auto rounded-2xl bg-slate-100 p-1" aria-label="Program category">
-        {[{id:"academic",label:"Academic Program"},{id:"reading",label:"Reading Program"},{id:"playgroup",label:"Playgroup Program"}].map((item) => <button key={item.id} type="button" onClick={() => setProgram(item.id)} className={`shrink-0 rounded-xl px-3 py-2 text-sm font-bold ${program === item.id ? "bg-white text-brand-600 shadow-sm" : "text-slate-600"}`}>{item.label}{programCounts(item.id) > 0 && <span className="ml-1.5 inline-block h-2.5 w-2.5 rounded-full bg-red-500" aria-label={`${programCounts(item.id)} pending`}/>}</button>)}
+        {[{id:"academic",label:"Academic Program"},{id:"reading",label:"Reading Program"},{id:"playgroup",label:"Playgroup Program"}].map((item) => <button key={item.id} type="button" onClick={() => setProgram(item.id)} className={`shrink-0 rounded-xl px-3 py-2 text-sm font-bold ${program === item.id ? "bg-white text-brand-600 shadow-sm" : "text-slate-600"}`}>{item.label}{programCounts(item.id) > 0 && <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-extrabold text-white" aria-label={`${programCounts(item.id)} pending requests`}>{programCounts(item.id)}</span>}</button>)}
       </nav>
       {program === "reading" && readingAssessment && <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-lg sm:p-8" aria-label="Initial assessment">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -254,7 +261,7 @@ export default function TuteeRequests() {
       </section>}
       {program === "reading" && readingAssessment?.status === "booked" && <p className="text-center text-sm font-semibold text-slate-500">No reading sessions yet? <Link href="/tutee/book?program=reading" className="font-extrabold text-brand-600 hover:underline">Book for a reading session <span aria-hidden="true">⟶</span></Link></p>}
       <div className="grid grid-cols-5 rounded-full border-2 border-brand-500 p-1 text-center text-xs font-bold sm:text-sm">
-        {TABS.map((item) => <button key={item.id} type="button" onClick={() => setTab(item.id)} className={`rounded-full px-1 py-2 transition sm:px-3 ${tab === item.id ? "bg-brand-600 text-white shadow-sm" : "text-slate-700 hover:bg-brand-50"}`}>{item.label}</button>)}
+        {TABS.map((item) => { const count = newUpdateCount(item.id); return <button key={item.id} type="button" onClick={() => setTab(item.id)} className={`inline-flex w-full items-center justify-center gap-1.5 rounded-full px-1 py-2 text-center transition sm:px-3 ${tab === item.id ? "bg-brand-600 text-white shadow-sm" : "text-slate-700 hover:bg-brand-50"}`}>{item.label}{count > 0 && <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-extrabold leading-none text-white" aria-label={`${count} new booking updates`}>{count}</span>}</button>; })}
       </div>
 
       {filteredBookings.length === 0
@@ -264,9 +271,47 @@ export default function TuteeRequests() {
             const status = statusOf(booking);
             const category = categoryOf(booking);
             const slots = booking.sessionSlots || (booking.dates || []).map((date) => ({ date, subject: booking.sessionSubjects?.[date] ?? booking.subject, time: booking.sessionTimes?.[date] ?? booking.time }));
-            const assignedIds = [...new Set(sessionsFor(booking).map((session) => session.tutorId).filter(Boolean))];
+            const bookingSessions = sessionsFor(booking);
+            const pendingReassignment = bookingSessions.some((session) => session.status === "needs_reassignment") || Object.keys(booking.reassignmentPendingDates || {}).length > 0;
+            const playgroupTutorIds = isPlaygroup(booking) ? (booking.dates || []).filter((date) => !booking.reassignmentPendingDates?.[date]).map((date) => booking.tutorAssignments?.[date] || s.db.cohorts.find((cohort) => cohort.id === booking.cohortId)?.weekdayTutorIds?.[weekday(date)] || booking.tutorId) : [];
+            const assignedIds = [...new Set([...bookingSessions.filter((session) => session.status !== "needs_reassignment").map((session) => session.tutorId), ...playgroupTutorIds].filter(Boolean))];
             const tutors = assignedIds.map((tutorId) => s.db.tutors.find((tutor) => tutor.userId === tutorId)?.fullName).filter(Boolean);
-            if (!tutors.length && booking.tutorId) tutors.push(s.db.tutors.find((tutor) => tutor.userId === booking.tutorId)?.fullName || "Assigned");
+            if (!tutors.length && booking.tutorId && !pendingReassignment) tutors.push(s.db.tutors.find((tutor) => tutor.userId === booking.tutorId)?.fullName || "Assigned");
+            const scheduleUpdates = [
+              ...(booking.scheduleHistory || []).map((entry) => `Rescheduled to ${fmtDate(entry.updated.date)} · ${fmtTime(entry.updated.time)}`),
+              ...(booking.reassignmentHistory || bookingSessions.flatMap((session) => session.reassignmentHistory || [])).map((entry) => `Tutor reassigned to ${s.db.tutors.find((tutor) => tutor.userId === entry.newTutorId)?.fullName || "new tutor"} on ${fmtDate(entry.date)}`),
+            ];
+            const reassignmentHistory = booking.reassignmentHistory || bookingSessions.flatMap((session) => session.reassignmentHistory || []);
+            const reassignedSessions = [
+              ...bookingSessions.filter((session) => session.status === "needs_reassignment").map((session) => ({
+                id: session.id,
+                date: session.date,
+                time: session.time,
+                pending: true,
+                tutorId: "",
+              })),
+              ...reassignmentHistory.map((entry, index) => ({
+                id: `reassigned-${entry.sessionId || `${entry.date}-${entry.time}-${index}`}`,
+                date: entry.date,
+                time: entry.time,
+                pending: false,
+                tutorId: entry.newTutorId || "",
+              })),
+              ...(isPlaygroup(booking) ? (booking.dates || []).filter((date) => booking.reassignmentPendingDates?.[date]).map((date) => ({
+                id: `playgroup-${booking.id}-${date}`,
+                date,
+                time: booking.sessionTimes?.[date] || booking.time || "10:00",
+                pending: true,
+                tutorId: "",
+              })) : []),
+              ...(isPlaygroup(booking) ? reassignmentHistory.filter((entry) => !entry.sessionId).map((entry, index) => ({
+                id: `playgroup-reassigned-${booking.id}-${entry.date}-${index}`,
+                date: entry.date,
+                time: entry.time || booking.sessionTimes?.[entry.date] || booking.time || "10:00",
+                pending: false,
+                tutorId: entry.newTutorId || "",
+              })) : []),
+            ].sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
             const paidAt = booking.paymentProof?.submittedAt || booking.paymentApprovedAt;
             const dueAt = category === "cancelled" && !paidAt ? null : booking.paymentDeadlineAt || (booking.paymentStatus && booking.expiresAt);
             const paymentDue = paymentDueFor(booking);
@@ -276,8 +321,18 @@ export default function TuteeRequests() {
             const canCancel = !paymentReviewPending && (paymentDue || ["pending", "pending_assessment", "assessment_scheduled", "ready_for_matching", "awaiting_admin"].includes(status));
             const canReschedule = category === "approved" && !booking.rescheduleUsed && !(booking.scheduleHistory?.length > 0) && sessionsFor(booking).some((session) => session.status === "scheduled" && session.date >= todayISO());
             const hasPaymentRecord = paymentReviewPending || booking.paymentStatus === "paid" || !!booking.paymentApprovedAt;
-            const title = isPlaygroup(booking) ? `Playgroup · ${s.db.cohorts.find((cohort) => cohort.id === booking.cohortId)?.label || "Cohort"}` : booking.program === "reading" ? "Reading" : `${booking.program === "academic" ? "Academic Program" : booking.program || "Program"} Booking`;
             const detailSubjects = booking.subjects?.length ? booking.subjects.join(" · ") : booking.subject || "—";
+            const slotSubjects = [...new Set((booking.sessionSlots || []).map((slot) => slot.subject).filter(Boolean))];
+            const dateSubjects = [...new Set(Object.values(booking.sessionSubjects || {}).filter(Boolean))];
+            const chosenSubjects = booking.subjects?.length
+              ? booking.subjects
+              : slotSubjects.length ? slotSubjects : dateSubjects.length ? dateSubjects : [booking.subject].filter(Boolean);
+            const title = isPlaygroup(booking) ? `Playgroup · ${s.db.cohorts.find((cohort) => cohort.id === booking.cohortId)?.label || "Cohort"}` : booking.program === "reading" ? "Reading" : booking.program === "academic" ? chosenSubjects.join(" · ") || "Academic Booking" : `${booking.program || "Program"} Booking`;
+            const bookingSubtitle = booking.program === "academic"
+              ? `${booking.sessionType === "group" ? "Group" : "One-on-One"} · ${booking.modality}`
+              : booking.program === "reading"
+                ? `${booking.sessionType === "group" ? "Group" : "One-on-One"} · ${booking.modality === "face-to-face" ? "Face-to-Face" : "Online"}`
+                : `${detailSubjects} · ${isPlaygroup(booking) ? "Cohort" : booking.sessionType === "group" ? "Group" : "One-on-One"} · ${booking.modality}`;
             const cycle = booking.cycleType === "1-month" ? "1 month" : booking.cycleType ? `${booking.cycleType} cycle` : "One-time";
             const assessment = booking.program === "reading" ? s.db.assessments.find((entry) => entry.id === booking.assessmentId) : null;
             const initialAssessmentText = assessment?.status === "booked" && assessment.date
@@ -286,18 +341,21 @@ export default function TuteeRequests() {
                 ? isAssessmentOutdated(assessment) ? "Outdated · retake required" : "Completed"
                 : "No schedule yet";
             const bookedAt = booking.createdAt || booking.at;
+            const hasUnreadUpdate = unreadBookingIds.has(booking.id);
             const approvedAt = booking.paymentApprovedAt || booking.approvedAt;
             const cancelledAt = booking.cancelledAt || booking.terminatedAt || (status === "expired" ? booking.paymentDeadlineAt || booking.expiresAt : null);
             const bookingDetails = [
               ["Booking ID", booking.id],
               ["Requested cycle", cycle],
               ["Requested sessions", `${slots.length || booking.dates?.length || 0} sessions`],
-              ["Assigned tutor", tutors.length ? tutors.join(" · ") : "Not yet assigned"],
+              ["Assigned tutor", tutors.length ? `${tutors.join(" · ")}${pendingReassignment ? " · Reassignment pending" : ""}` : pendingReassignment ? "---" : "Not yet assigned"],
+              ...(reassignedSessions.length ? [["Reassigned Sessions", reassignedSessions.map((session) => `${fmtDate(session.date)} · ${fmtTime(session.time)} — ${session.pending ? "Pending" : "Reassigned"} · New tutor: ${session.tutorId ? s.db.tutors.find((tutor) => tutor.userId === session.tutorId)?.fullName || "---" : "---"}`).join("; ")]] : []),
+              ["Schedule updates", scheduleUpdates.length ? scheduleUpdates.join(" · ") : "No changes"],
               ["Amount due", peso(booking.paymentAmount ?? booking.totalFee ?? 0)],
             ];
             return <article key={booking.id} className="rounded-2xl border-2 border-slate-300 bg-white p-4 sm:p-6">
               <header className="flex flex-wrap items-start justify-between gap-3">
-                <div><h2 className="text-lg font-extrabold">{title}</h2><p className="text-sm font-semibold text-slate-500">{booking.program === "reading" ? `${booking.sessionType === "group" ? "Group" : "One-on-One"} · ${booking.modality === "face-to-face" ? "Face-to-Face" : "Online"}` : `${detailSubjects} · ${isPlaygroup(booking) ? "Cohort" : booking.sessionType === "group" ? "Group" : "One-on-One"} · ${booking.modality}`}</p></div>
+                <div><div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-extrabold">{title}</h2>{hasUnreadUpdate && <button type="button" onClick={() => s.markBookingNotificationsRead(booking.id)} className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-[10px] font-extrabold text-red-700 hover:bg-red-100"><span className="h-2 w-2 rounded-full bg-red-500"/>New update · Mark viewed</button>}</div><p className="text-sm font-semibold text-slate-500">{bookingSubtitle}</p></div>
                 <div className="flex flex-wrap items-center gap-2">
                   {canReschedule && <Button size="sm" variant="secondary" onClick={() => {
                     const proposal = booking.rescheduleProposal;
@@ -309,6 +367,8 @@ export default function TuteeRequests() {
                   <span className={`min-w-28 rounded-full px-3 py-2 text-center text-xs font-extrabold ${category === "approved" ? "bg-green-100 text-green-700" : category === "completed" ? "bg-blue-100 text-blue-700" : category === "cancelled" ? "bg-slate-200 text-slate-700" : paymentDue ? "bg-red-100 text-red-600" : paymentReviewPending ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>{statusLabel(booking)}</span>
                 </div>
               </header>
+
+              {reassignedSessions.length > 0 && <section className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm"><h3 className="font-extrabold text-amber-900">Reassigned Sessions</h3><div className="mt-2 space-y-1">{reassignedSessions.map((session) => <div key={session.id} className="flex flex-wrap justify-between gap-x-3 gap-y-1 text-amber-900"><span>{fmtDate(session.date)} · {fmtTime(session.time)}</span><span className="font-semibold">{session.pending ? "Pending" : "Reassigned"} · New tutor: {session.tutorId ? s.db.tutors.find((tutor) => tutor.userId === session.tutorId)?.fullName || "---" : "---"}</span></div>)}</div></section>}
 
               {booking.program === "reading" && <p className="mt-3 text-sm font-semibold text-slate-700"><b>Initial Assessment:</b> <span className="text-slate-500">{initialAssessmentText}</span></p>}
               {paymentReviewPending && <p className="mt-3 flex items-start gap-2 text-xs font-semibold text-slate-500"><Info className="h-4 w-4 shrink-0 text-brand-600"/>Your confirmed schedule will appear in My Schedule once your payment is approved.</p>}
@@ -362,14 +422,14 @@ export default function TuteeRequests() {
                 {paymentDetails[booking.id] && <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600"><p>Payment status: <span className="font-bold capitalize">{String(booking.paymentStatus || "paid").replace(/_/g, " ")}</span></p><p className="mt-1">Amount paid: {peso(booking.paymentAmount ?? booking.totalFee ?? 0)}</p>{booking.paymentProof?.method && <p className="mt-1">Payment method: {booking.paymentProof.method === "in_person" ? "In-person Payment" : "Online Transfer"}</p>}{booking.paymentInstructions && <p className="mt-1">{booking.paymentInstructions}</p>}{booking.paymentProof?.reference && <p className="mt-1">Reference: {booking.paymentProof.reference}</p>}{booking.paymentProof?.receiptData && <button type="button" className="mt-2 inline-block font-bold text-brand-700 underline" onClick={() => setReceiptPreview(booking.paymentProof.receiptData)}>View payment receipt</button>}</div>}
               </div>}
 
-              {(booking.rescheduleProposal || booking.scheduleHistory?.length > 0) && <section className="mt-4 space-y-3"><h3 className="font-extrabold">Reschedule Request</h3>{booking.rescheduleProposal && <div className="rounded-xl border border-slate-300 p-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><b>{booking.subject || "Session"}</b><Badge status="pending">Pending Request</Badge></div><div className="mt-2 grid gap-2 sm:grid-cols-2"><div><span className="block text-xs font-bold text-slate-500">Current schedule</span>{fmtDate(booking.rescheduleProposal.original.date)} · {fmtTime(booking.rescheduleProposal.original.time)}<div className="text-xs text-slate-500">Tutor: {s.db.tutors.find((tutor) => tutor.userId === booking.rescheduleProposal.original.tutorId)?.fullName || "Assigned tutor"}</div></div><div className="font-semibold text-brand-700"><span className="block text-xs font-bold text-slate-500">Requested schedule</span>{fmtDate(booking.rescheduleProposal.date)} · {fmtTime(booking.rescheduleProposal.time)}<div className="text-xs">Tutor: {s.db.tutors.find((tutor) => tutor.userId === booking.rescheduleProposal.tutorId)?.fullName || s.db.tutors.find((tutor) => tutor.userId === booking.rescheduleProposal.original.tutorId)?.fullName || "Assigned tutor"}</div></div></div><p className="mt-2 text-xs text-slate-500">You can edit this request until an admin reviews it. The original schedule remains active until approval.</p></div>}{(booking.scheduleHistory || []).map((entry, index) => <div key={`${booking.id}-history-${index}`} className="rounded-xl border border-slate-300 p-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><b>{booking.subject || "Session"}</b><Badge status="approved">Approved</Badge></div><div className="mt-2 grid gap-2 sm:grid-cols-2"><div><span className="block text-xs font-bold text-slate-500">Previous schedule</span>{fmtDate(entry.old.date)} · {fmtTime(entry.old.time)}<div className="text-xs text-slate-500">Assigned Tutor: {s.db.tutors.find((tutor) => tutor.userId === entry.old.tutorId)?.fullName || "Assigned tutor"}</div></div><div className="font-semibold text-brand-700"><span className="block text-xs font-bold text-slate-500">Updated schedule</span>{fmtDate(entry.updated.date)} · {fmtTime(entry.updated.time)}<div className="text-xs">New Assigned Tutor: {s.db.tutors.find((tutor) => tutor.userId === entry.updated.tutorId)?.fullName || s.db.tutors.find((tutor) => tutor.userId === entry.old.tutorId)?.fullName || "Assigned tutor"}</div></div></div></div>)}</section>}
+              {(booking.rescheduleProposal || booking.scheduleHistory?.length > 0) && <section className="mt-4 space-y-3"><h3 className="font-extrabold">Reschedule Request</h3>{booking.rescheduleProposal && <div className="rounded-xl border border-slate-300 p-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><b>{booking.subject || "Session"}</b><Badge status="pending">Pending Request</Badge></div><div className="mt-2 grid gap-2 sm:grid-cols-2"><div><span className="block text-xs font-bold text-slate-500">Current schedule</span>{fmtDate(booking.rescheduleProposal.original.date)} · {fmtTime(booking.rescheduleProposal.original.time)}<div className="text-xs text-slate-500">Tutor: {s.db.tutors.find((tutor) => tutor.userId === booking.rescheduleProposal.original.tutorId)?.fullName || "Assigned tutor"}</div></div><div className="font-semibold text-brand-700"><span className="block text-xs font-bold text-slate-500">Requested schedule</span>{fmtDate(booking.rescheduleProposal.date)} · {fmtTime(booking.rescheduleProposal.time)}<div className="text-xs">Tutor: ---</div></div></div><p className="mt-2 text-xs text-slate-500">You can edit this request until an admin reviews it. The original schedule remains active until approval.</p></div>}{(booking.scheduleHistory || []).map((entry, index) => <div key={`${booking.id}-history-${index}`} className="rounded-xl border border-slate-300 p-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><b>{booking.subject || "Session"}</b><Badge status="approved">Approved</Badge></div><div className="mt-2 grid gap-2 sm:grid-cols-2"><div><span className="block text-xs font-bold text-slate-500">Previous schedule</span>{fmtDate(entry.old.date)} · {fmtTime(entry.old.time)}<div className="text-xs text-slate-500">Assigned Tutor: {s.db.tutors.find((tutor) => tutor.userId === entry.old.tutorId)?.fullName || "Assigned tutor"}</div></div><div className="font-semibold text-brand-700"><span className="block text-xs font-bold text-slate-500">Updated schedule</span>{fmtDate(entry.updated.date)} · {fmtTime(entry.updated.time)}<div className="text-xs">New Assigned Tutor: {s.db.tutors.find((tutor) => tutor.userId === entry.updated.tutorId)?.fullName || s.db.tutors.find((tutor) => tutor.userId === entry.old.tutorId)?.fullName || "Assigned tutor"}</div></div></div></div>)}</section>}
               {booking.scheduleProposal?.sessions && <div className="mt-4 space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
                 <b>The admin proposed a schedule change. Review it:</b><p>{booking.scheduleProposal.sessions.map((session) => `${fmtDate(session.date)} at ${fmtTime(session.time)}`).join(" · ")}</p>
                 <div className="flex flex-wrap gap-2"><Button size="sm" onClick={async () => { const result = await s.decideBookingScheduleProposal(booking.id, true); setProposalMessage((current) => ({ ...current, [booking.id]: result.ok ? "Schedule approved." : result.error })); }}>Approve schedule</Button><Button size="sm" variant="secondary" onClick={async () => { const result = await s.decideBookingScheduleProposal(booking.id, false); setProposalMessage((current) => ({ ...current, [booking.id]: result.ok ? "Original schedule kept." : result.error })); }}>Decline</Button></div>
               </div>}
               {proposalMessage[booking.id] && <p className="mt-3 text-sm text-slate-600">{proposalMessage[booking.id]}</p>}
               <Button variant="secondary" className="w-full bg-slate-200" onClick={() => setBookingDetailsOpen((current) => ({ ...current, [booking.id]: false }))}>Hide Details</Button>
-            </div> : <Button variant="secondary" className="mt-5 w-full bg-slate-200" onClick={() => setBookingDetailsOpen((current) => ({ ...current, [booking.id]: true }))}>Show details</Button>}
+              </div> : <Button variant="secondary" className="mt-5 w-full bg-slate-200" onClick={async () => { if (hasUnreadUpdate) await s.markBookingNotificationsRead(booking.id); setBookingDetailsOpen((current) => ({ ...current, [booking.id]: true })); }}>{hasUnreadUpdate ? "Show details · View update" : "Show details"}</Button>}
               {cancelMessage[booking.id] && <p className="mt-3 text-sm text-slate-600">{cancelMessage[booking.id]}</p>}
               <footer className="mt-4 flex flex-wrap justify-between gap-2 px-1 text-xs font-semibold text-slate-400">
                 <span>Booked on {bookedAt ? dateTime(bookedAt) : "—"}</span>

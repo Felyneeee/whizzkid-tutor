@@ -72,9 +72,9 @@ export const PROGRAMS = {
 };
 export const CENTER = {
     name: "Whizzkids Academic Center",
-    address: "Dasmariñas, Cavite, Philippines",
-    phone: "+63 917 000 0000",
-    email: "hello@whizzkids.ph",
+    address: "Kalayaan Rd, Barangay San Sebastian, Kawit, 4104 Cavite",
+    phone: "0956-567-1315",
+    email: "whizzkids2022@gmail.com",
     hours: "Mon–Sat, 9:00 AM – 6:00 PM",
 };
 export const FAQS = [

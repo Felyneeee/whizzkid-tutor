@@ -7,13 +7,13 @@ import { addDays, rangeDates } from "./dates";
 const Ctx = createContext(null);
 
 const BUSINESS_ACTIONS = [
-  "notify", "markNotificationsRead", "markMessageNotificationsRead", "sendMessage",
+  "notify", "markNotificationsRead", "markBookingNotificationsRead", "markMessageNotificationsRead", "sendMessage",
   "saveTuteeProfile", "saveTutorProfile", "saveAdminProfile", "requestAssessment", "scheduleAssessment", "completeAssessment", "renewReadingAssessment", "cancelAssessment", "cancelTutorialBooking",
   "bookPlaygroup", "cancelPlaygroupBooking", "submitTutorialBooking", "rateSession", "submitLeave",
   "scheduleInterview", "evaluateApplicant", "verifyExistingTutor", "setTutorPay",
-  "adminEditTutorAvailability", "setTutorWeeklySchedule", "decideLeave", "adminLeave", "proposeBookingSchedule",
+  "adminEditTutorAvailability", "setTutorWeeklySchedule", "flagTutorSessionsForReassignment", "decideLeave", "adminLeave", "proposeBookingSchedule",
   "decideBookingScheduleProposal", "confirmBooking", "confirmBookingSession", "confirmReadingAssignment", "rejectReadingAssignment", "rejectBooking", "terminateBooking", "completeSession",
-  "checkInSession", "reassignSession", "proposeSessionReschedule", "cancelSession",
+  "checkInSession", "reassignSession", "reassignPlaygroupSession", "proposeSessionReschedule", "cancelSession",
   "updateCohort", "addCohort", "deleteCohort", "removeFromCohort", "assignPlaygroupBooking", "assignPlaygroupWeekday", "approvePlaygroupBooking", "addMaterial", "updateMaterial", "managePaymentSettings",
   "deleteMaterial", "logMaterialAccess",
 ];
@@ -119,6 +119,12 @@ export function StoreProvider({ children }) {
     return { ok: true, payload: data };
   }, [acceptState]);
 
+  const refreshState = useCallback(async (user) => {
+    const loaded = await loadState(user);
+    if (!loaded.ok) return { ok: false, error: loaded.error };
+    return { ok: true };
+  }, [loadState]);
+
   const refreshSlotAvailability = useCallback(async (request) => {
     const response = await requestJson("/api/state/slot-availability", { method: "POST", body: request });
     if (!response.ok) return { ok: false, error: response.error };
@@ -151,12 +157,6 @@ export function StoreProvider({ children }) {
 
   const me = useMemo(() => db.users?.find((user) => user.id === meId) ?? null, [db, meId]);
   const store = useMemo(() => {
-    const refreshState = async (user) => {
-      const loaded = await loadState(user);
-      if (!loaded.ok) return { ok: false, error: loaded.error };
-      return { ok: true };
-    };
-
     const login = async (identifier, password) => {
       const result = await requestJson("/api/auth/login", { method: "POST", body: { identifier, password } });
       if (!result.ok) return { ok: false, error: result.error };
@@ -178,7 +178,7 @@ export function StoreProvider({ children }) {
     const actions = Object.fromEntries(BUSINESS_ACTIONS.map((name) => [name, (...args) => runBusinessAction(name, args)]));
 
     return {
-      db, ready, me, actionFeedback, refreshSlotAvailability,
+      db, ready, me, actionFeedback, refreshSlotAvailability, refreshState,
       login,
       logout() {
         void requestJson("/api/auth/logout", { method: "POST" });
@@ -190,7 +190,7 @@ export function StoreProvider({ children }) {
       registerTutor(value) { return register("/api/auth/register/tutor", value); },
       ...actions,
     };
-  }, [acceptState, actionFeedback, db, loadState, ready, me, refreshSlotAvailability, runBusinessAction]);
+  }, [acceptState, actionFeedback, db, loadState, ready, me, refreshSlotAvailability, refreshState, runBusinessAction]);
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }

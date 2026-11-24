@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Alert, Button, Card, Empty, Field, Input, Modal, PageHeader, Textarea, Select, peso } from "@/components/ui";
+import { Alert, Button, Card, Empty, Field, FilterPopover, FilterTrigger, Input, Modal, PageHeader, Textarea, Select, peso } from "@/components/ui";
 import { READING_SKILLS } from "@/lib/constants";
 import { fmtDate, fmtTime, isAssessmentOutdated } from "@/lib/dates";
 import { useStore } from "@/lib/store";
@@ -13,6 +13,7 @@ export default function Assessments({ embedded = false, onAssignTutor } = {}) {
   const [schedulingId, setSchedulingId] = useState(null);
   const [errors, setErrors] = useState({});
   const [sortOrder, setSortOrder] = useState("newest");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [scheduleBooking, setScheduleBooking] = useState(null);
   const activeAssessments = s.db.assessments.filter((a) => ["pending_admin_scheduling", "booked"].includes(a.status));
   const activeTutees = new Set(activeAssessments.map((a) => a.tuteeId));
@@ -23,13 +24,11 @@ export default function Assessments({ embedded = false, onAssignTutor } = {}) {
     const alreadyAssigned = booking && (booking.tutorId || s.db.sessions.some((session) => session.bookingId === booking.id && session.tutorId && session.status !== "cancelled"));
     if (activeRequest && !alreadyAssigned) latestCompleted.set(a.tuteeId, a);
   });
+  const nm = (id) => s.db.tutees.find((t) => t.userId === id);
   const list = [...activeAssessments, ...latestCompleted.values()].sort((a, b) => {
-    const first = String(a.createdAt || a.date || "");
-    const second = String(b.createdAt || b.date || "");
-    const comparison = first.localeCompare(second);
+    const comparison = String(a.createdAt || a.date || "").localeCompare(String(b.createdAt || b.date || ""));
     return sortOrder === "newest" ? -comparison : comparison;
   });
-  const nm = (id) => s.db.tutees.find((t) => t.userId === id);
   const scheduleAssessment = async (assessment) => {
     setErrors((v) => ({ ...v, [assessment.id]: "" }));
     const result = await s.scheduleAssessment(assessment.id, schedule[assessment.id]?.date, schedule[assessment.id]?.time || "09:00");
@@ -47,7 +46,7 @@ export default function Assessments({ embedded = false, onAssignTutor } = {}) {
 
   return <>
     {!embedded && <PageHeader title="Reading assessments" subtitle="Schedule initial assessments for program requests, then record results and learning needs." />}
-    {list.length > 0 && <div className="mb-3 flex justify-end"><label className="flex items-center gap-2 text-sm font-semibold text-slate-600"><span>Sort by</span><Select className="w-auto min-w-36" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option></Select></label></div>}
+    {list.length > 0 && <div className="relative mb-3 flex justify-end"><FilterTrigger onClick={() => setFiltersOpen((open) => !open)} ariaLabel="Filter reading requests" expanded={filtersOpen} count={sortOrder !== "newest" ? 1 : 0}/>{filtersOpen && <FilterPopover onClear={() => setSortOrder("newest")} onApply={() => setFiltersOpen(false)}><fieldset><legend className="mb-2 text-xs font-extrabold text-slate-700">Sort by</legend><div className="space-y-1">{[["newest", "Newest first"], ["oldest", "Oldest first"]].map(([value, label]) => <label key={value} className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 hover:bg-brand-50"><input type="radio" name="reading-request-sort" checked={sortOrder === value} onChange={() => setSortOrder(value)} className="accent-brand-600"/>{label}</label>)}</div></fieldset></FilterPopover>}</div>}
     {list.length === 0 && <Empty>No assessment requests yet.</Empty>}
     <div className="space-y-3">
       {list.map((a) => {

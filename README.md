@@ -22,3 +22,11 @@ Notifications currently appear in the app. `email` and `sms` values attached to 
 
 Supabase migrations are an unconnected future-backend artifact. `whizzkids.db` is a disconnected SQLite file; MySQL/MariaDB is the active database.
 
+## Production operations and limits
+
+Login is limited to five failed attempts per account identifier per 15 minutes and 100 failed attempts per IP per 15 minutes. Each registration route is limited to 10 attempts per IP per hour. These throttles are process-local and are suitable only when this app runs as one persistent Node.js server process. For a multi-instance or serverless deployment, replace them with a shared rate-limit store. When deployed behind a reverse proxy, configure it to overwrite `X-Real-IP` or `X-Forwarded-For`; the application uses those headers to group attempts.
+
+Read-only app state requests use a consistent database snapshot and do not take the application-wide write lock. Business updates still lock and load the shared application state to preserve booking and scheduling consistency. This can limit write throughput as records and concurrent traffic grow; measure load and plan a transition to narrower, domain-level transactions before scaling.
+
+Production responses include baseline browser security headers and a Content Security Policy. The policy permits inline scripts for Next.js hydration, so it is not a strict nonce-based CSP. Deploy behind HTTPS, keep MySQL private, configure backups and monitoring, and review the hosting proxy's request-size and rate limits before opening the app to public traffic.
+

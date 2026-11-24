@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Alert, Badge, Button, Card, Empty, Field, Input, Modal, PageHeader, Select, Textarea, peso } from "@/components/ui";
+import { Alert, Badge, Button, Card, Empty, Field, FilterPopover, FilterTrigger, Input, Modal, PageHeader, Select, Textarea, peso } from "@/components/ui";
 import { addDays, fmtDate, fmtTime, todayISO } from "@/lib/dates";
 import { HOURS } from "@/lib/constants";
 import { matchTutors } from "@/lib/logic";
@@ -14,7 +14,7 @@ function sessionEndTime(time) {
 }
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-export default function Matching({ embedded = false, programFilter = null, cardLayout = false } = {}) {
+export default function Matching({ embedded = false, programFilter = null, cardLayout = false, showReschedules = true } = {}) {
   const s = useStore();
   const [msg, setMsg] = useState({});
   const [selectedId, setSelectedId] = useState(null);
@@ -28,6 +28,7 @@ export default function Matching({ embedded = false, programFilter = null, cardL
   const [rescheduleErrors, setRescheduleErrors] = useState({});
   const [rescheduleBusy, setRescheduleBusy] = useState({});
   const [sortOrder, setSortOrder] = useState("newest");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [scheduleModal, setScheduleModal] = useState(null);
   const sortByCreatedAt = (a, b) => {
     const comparison = String(a.createdAt || "").localeCompare(String(b.createdAt || ""));
@@ -105,8 +106,8 @@ export default function Matching({ embedded = false, programFilter = null, cardL
 
   return <>
     {!embedded && <PageHeader title="Tutor–tutee matching" subtitle="Review each booking, then assign tutors to its sessions."/>}
-    {!booking && (pending.length > 0 || pendingReschedules.length > 0) && <div className="mb-3 flex justify-end">{cardLayout ? <div className="flex items-center gap-2 text-sm font-semibold"><span>Sort by:</span>{[{id:"oldest",label:"Oldest"},{id:"newest",label:"Newest"}].map((item) => <button key={item.id} type="button" className={sortOrder === item.id ? "font-extrabold text-brand-600" : "text-slate-500 hover:text-brand-600"} onClick={() => setSortOrder(item.id)}>{item.label} ↕</button>)}</div> : <label className="flex items-center gap-2 text-sm font-semibold text-slate-600"><span>Sort by</span><Select className="w-auto min-w-36" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option></Select></label>}</div>}
-    {pendingReschedules.length > 0 && <Card className="border-sunny-200 bg-sunny-50/50"><h2 className="mb-3 font-extrabold">Reschedule matching ({pendingReschedules.length})</h2><p className="mb-3 text-sm text-slate-600">Review the requested slots and assign the same tutor or another tutor who is available.</p><div className="space-y-3">{pendingReschedules.map((entry) => {
+    {!booking && (pending.length > 0 || (showReschedules && pendingReschedules.length > 0)) && <div className="relative mb-3 flex justify-end"><FilterTrigger onClick={() => setFiltersOpen((open) => !open)} ariaLabel="Filter booking requests" expanded={filtersOpen} count={sortOrder !== "newest" ? 1 : 0}/>{filtersOpen && <FilterPopover onClear={() => setSortOrder("newest")} onApply={() => setFiltersOpen(false)}><fieldset><legend className="mb-2 text-xs font-extrabold text-slate-700">Sort by</legend><div className="space-y-1">{[["newest", "Newest first"], ["oldest", "Oldest first"]].map(([value, label]) => <label key={value} className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 hover:bg-brand-50"><input type="radio" name="academic-booking-request-sort" checked={sortOrder === value} onChange={() => setSortOrder(value)} className="accent-brand-600"/>{label}</label>)}</div></fieldset></FilterPopover>}</div>}
+    {showReschedules && pendingReschedules.length > 0 && <Card className="border-sunny-200 bg-sunny-50/50"><h2 className="mb-3 font-extrabold">Reschedule matching ({pendingReschedules.length})</h2><p className="mb-3 text-sm text-slate-600">Review the requested slots and assign the same tutor or another tutor who is available.</p><div className="space-y-3">{pendingReschedules.map((entry) => {
       const proposal = entry.rescheduleProposal;
       const items = proposal.sessions || [proposal];
       const student = s.db.tutees.find((row) => row.userId === entry.tuteeId)?.fullName || entry.tuteeId;

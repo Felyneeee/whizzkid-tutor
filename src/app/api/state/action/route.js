@@ -10,6 +10,7 @@ import { GRADE_LEVELS, HOURS, SUBJECTS } from "@/lib/constants";
 import { nowISO, todayISO, uid } from "@/lib/dates";
 import { expandBookingDates, matchTutors, slotRequestable } from "@/lib/logic";
 import { queueCompletedReadingBookings } from "../reading-bookings";
+import { readJson, RequestBodyError } from "@/server/request-guards";
 
 export const runtime = "nodejs";
 
@@ -31,7 +32,7 @@ function unpackExtendedState(state) {
 function packExtendedState(state) {
   const packed = structuredClone(state);
   for (const booking of packed.bookings || []) {
-    const payment = Object.fromEntries(["paymentStatus", "paymentProof", "paymentAmount", "paymentInstructions", "paymentApprovedAt", "paymentReviewedAt", "paymentReviewNote", "paymentProofHistory", "approvedAt", "completedAt", "cancelledAt", "rescheduleProposal", "scheduleHistory", "rescheduleUsed"].filter((key) => booking[key] !== undefined).map((key) => [key, booking[key]]));
+    const payment = Object.fromEntries(["paymentStatus", "paymentProof", "paymentAmount", "paymentInstructions", "paymentApprovedAt", "paymentReviewedAt", "paymentReviewNote", "paymentProofHistory", "approvedAt", "completedAt", "cancelledAt", "rescheduleProposal", "scheduleHistory", "rescheduleUsed", "reassignmentHistory", "reassignmentPendingDates"].filter((key) => booking[key] !== undefined).map((key) => [key, booking[key]]));
     if (Object.keys(payment).length) booking.scheduleProposal = { ...(booking.scheduleProposal ? { proposal: booking.scheduleProposal } : {}), __payment: payment };
     else if (booking.scheduleProposal?.__payment) booking.scheduleProposal = booking.scheduleProposal.proposal;
   }
@@ -60,7 +61,7 @@ export async function POST(request) {
     const user = await authenticatedUser(request);
     if (!user) return NextResponse.json({ error: "Please log in." }, { status: 401 });
 
-    const body = await request.json();
+    const body = await readJson(request, 10 * 1024 * 1024);
     if (typeof body.action !== "string" || !Array.isArray(body.args) || body.args.length > 12) {
       return NextResponse.json({ error: "Invalid action request." }, { status: 400 });
     }
@@ -464,10 +465,10 @@ export async function POST(request) {
               if (booking.sessionSlots) booking.sessionSlots = booking.sessionSlots.map((slot) => slot.date === oldSchedule.date && slot.time === oldSchedule.time ? { ...slot, date: item.date, time: item.time } : slot);
               booking.scheduleHistory = [...(booking.scheduleHistory || []), { old: oldSchedule, updated: { date: item.date, time: item.time, tutorId: item.tutorId }, changedAt: nowISO() }];
             }
-            nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, text: `Your reschedule request was approved: ${proposals.map((item) => `${item.date} at ${item.time}`).join(", ")}.`, at: nowISO(), read: false, channels: ["web", "email"] });
-            for (const tutorId of new Set([...oldTutorIds, ...proposals.map((item) => item.tutorId)])) nextState.notifications.unshift({ id: uid("n"), userId: tutorId, text: `The reschedule for ${booking.subject} booking from ${personName(nextState, booking.tuteeId)} was approved.`, at: nowISO(), read: false, channels: ["web", "email"] });
+            nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, threadId: `booking:${booking.id}`, text: `Your reschedule request was approved: ${proposals.map((item) => `${item.date} at ${item.time}`).join(", ")}. Your booking details and calendar are updated.`, at: nowISO(), read: false, channels: ["web", "email", "sms"] });
+            for (const tutorId of new Set([...oldTutorIds, ...proposals.map((item) => item.tutorId)])) nextState.notifications.unshift({ id: uid("n"), userId: tutorId, threadId: `booking:${booking.id}`, text: `The reschedule for ${booking.subject} booking from ${personName(nextState, booking.tuteeId)} was approved. Your calendar is updated.`, at: nowISO(), read: false, channels: ["web", "email"] });
           } else {
-            nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, text: "Your reschedule request was declined. The original session time remains unchanged.", at: nowISO(), read: false, channels: ["web", "email"] });
+            nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, threadId: `booking:${booking.id}`, text: "Your reschedule request was declined. The original session time remains unchanged.", at: nowISO(), read: false, channels: ["web", "email"] });
             for (const tutorId of new Set(oldTutorIds)) nextState.notifications.unshift({ id: uid("n"), userId: tutorId, text: `The reschedule request for ${booking.subject} booking from ${personName(nextState, booking.tuteeId)} was declined; your original session remains scheduled.`, at: nowISO(), read: false, channels: ["web", "email"] });
           }
           const tuteeName = personName(nextState, booking.tuteeId);
@@ -500,8 +501,8 @@ export async function POST(request) {
             booking.paymentApprovedAt = nowISO();
             logActivity(nextState, user.id, `Approved ${booking.subject} payment receipt from ${personName(nextState, booking.tuteeId)}`);
             for (const session of nextState.sessions.filter((entry) => entry.bookingId === booking.id && entry.status === "awaiting_payment")) session.status = "scheduled";
-            nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, text: `Your payment was approved. ${booking.subject} booking is confirmed and now appears on your schedule.`, at: nowISO(), read: false, channels: ["web", "email"] });
-            for (const tutorId of new Set(nextState.sessions.filter((entry) => entry.bookingId === booking.id).map((entry) => entry.tutorId))) nextState.notifications.unshift({ id: uid("n"), userId: tutorId, text: `Payment for ${booking.subject} booking from ${personName(nextState, booking.tuteeId)} was approved; the sessions are confirmed.`, at: nowISO(), read: false, channels: ["web", "email"] });
+            nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, threadId: `booking:${booking.id}`, text: `Your payment was approved. ${booking.subject} booking is confirmed and now appears on your schedule.`, at: nowISO(), read: false, channels: ["web", "email"] });
+            for (const tutorId of new Set(nextState.sessions.filter((entry) => entry.bookingId === booking.id).map((entry) => entry.tutorId))) nextState.notifications.unshift({ id: uid("n"), userId: tutorId, threadId: `booking:${booking.id}`, text: `Payment for ${booking.subject} booking from ${personName(nextState, booking.tuteeId)} was approved; the sessions are confirmed.`, at: nowISO(), read: false, channels: ["web", "email"] });
           } else {
             logActivity(nextState, user.id, `Rejected ${booking.subject} payment receipt from ${personName(nextState, booking.tuteeId)}${note ? `: ${note}` : ""}`);
             booking.status = "to_pay";
@@ -517,7 +518,7 @@ export async function POST(request) {
             booking.paymentProof = undefined;
             booking.paymentDeadlineAt = new Date(Date.now() + (nextState.paymentSettings?.paymentDeadlineHours || 48) * 60 * 60 * 1000).toISOString();
             booking.expiresAt = booking.paymentDeadlineAt;
-            nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, text: `Your payment proof for ${booking.subject} could not be approved.${note ? ` ${note}` : " Please submit a new receipt."}`, at: nowISO(), read: false, channels: ["web", "email"] });
+            nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, threadId: `booking:${booking.id}`, text: `Your payment proof for ${booking.subject} could not be approved.${note ? ` ${note}` : " Please submit a new receipt."}`, at: nowISO(), read: false, channels: ["web", "email"] });
           }
           return { ok: true };
         }
@@ -553,7 +554,7 @@ export async function POST(request) {
         booking.expiresAt = booking.paymentDeadlineAt;
         booking.paymentAmount = booking.totalFee;
         for (const session of sessions) session.status = "scheduled";
-        nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, text: `A tutor was matched to your ${booking.subject} booking. Please submit payment proof within ${nextState.paymentSettings?.paymentDeadlineHours || 48} hours to confirm your reservation.`, at: nowISO(), read: false, channels: ["web", "email", "sms"] });
+        nextState.notifications.unshift({ id: uid("n"), userId: booking.tuteeId, threadId: `booking:${booking.id}`, text: `A tutor was matched to your ${booking.subject} booking. Please submit payment proof within ${nextState.paymentSettings?.paymentDeadlineHours || 48} hours to confirm your reservation.`, at: nowISO(), read: false, channels: ["web", "email", "sms"] });
         for (const admin of nextState.users.filter((entry) => entry.role === "admin")) nextState.notifications.unshift({ id: uid("n"), userId: admin.id, text: `${booking.subject} booking from ${personName(nextState, booking.tuteeId)} was matched and is awaiting payment within 48 hours.`, at: nowISO(), read: false, channels: ["web"] });
       }
     }
@@ -573,6 +574,9 @@ export async function POST(request) {
     return NextResponse.json({ result: result ?? { ok: true }, db: stateVisibleToUser(nextState, user) });
   } catch (error) {
     if (connection) await connection.rollback().catch(() => undefined);
+    if (error instanceof RequestBodyError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("[state/action]", error?.code ?? "UNKNOWN", error?.message ?? "No error detail");
     return NextResponse.json({ error: "Could not save the action to MySQL." }, { status: 503 });
   } finally {
