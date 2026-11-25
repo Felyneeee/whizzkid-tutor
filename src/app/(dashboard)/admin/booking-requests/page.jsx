@@ -12,6 +12,7 @@ export default function BookingRequests() {
   const s = useStore();
   const [program, setProgram] = useState("academic");
   const [readingStage, setReadingStage] = useState("assessment");
+  const [assignmentBookingId, setAssignmentBookingId] = useState(null);
   const [playgroupStage, setPlaygroupStage] = useState("schedule");
   const pendingBookings = s.db.bookings.filter((booking) => ["awaiting_admin", "ready_for_matching"].includes(booking.status));
   const academicCount = pendingBookings.filter((booking) => booking.program === "academic").length;
@@ -30,7 +31,7 @@ export default function BookingRequests() {
 
     {program === "academic" && <Matching embedded programFilter="academic" cardLayout showReschedules={false} />}
     {program === "reading" && <>
-      {readingStage === "assessment" ? <Assessments embedded onAssignTutor={() => setReadingStage("assignment")} /> : <><button type="button" onClick={() => setReadingStage("assessment")} className="mb-3 text-sm font-bold text-brand-600 hover:underline">← Back to Reading requests</button><Matching embedded programFilter="reading" showReschedules={false} /></>}
+      {readingStage === "assessment" ? <Assessments embedded onAssignTutor={(bookingId) => { setAssignmentBookingId(bookingId); setReadingStage("assignment"); }} /> : <><button type="button" onClick={() => setReadingStage("assessment")} className="mb-3 text-sm font-bold text-brand-600 hover:underline">← Back to Pending Requests</button><Matching embedded programFilter="reading" initialSelectedId={assignmentBookingId} showReschedules={false} /></>}
     </>}
     {program === "playgroup" && <>
       <Tabs variant="segmented" tabs={[{ id: "schedule", label: "Playgroup Schedule" }, { id: "requests", label: "Booking Requests", count: playgroupCount }]} value={playgroupStage} onChange={setPlaygroupStage} />
