@@ -67,23 +67,25 @@ export default function TuteeSchedule() {
     const subj = (bid, date, time) => { const booking = s.db.bookings.find((b) => b.id === bid); return booking?.sessionSlots?.find((slot) => slot.date === date && slot.time === time)?.subject || booking?.sessionSubjects?.[date] || booking?.subject || ""; };
     return (<>
       <PageHeader title="My schedule" subtitle="Confirmed matches are added automatically."/>
-      <div className="grid items-start gap-5 lg:grid-cols-[minmax(320px,0.85fr)_minmax(0,1.4fr)]">
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(400px,1.1fr)_minmax(0,1.4fr)]">
         <Card className="p-3 sm:p-5">
-          <Calendar selected={[selectedDate]} onSelect={setSelectedDate} allowPast initialMonth={selectedDate} mark={(date) => {
-              const sessionCount = sessionsByDate[date]?.length ?? 0;
-              const assessmentCount = assessmentsByDate[date]?.length ?? 0;
-              const playgroupCount = playgroupsByDate[date]?.length ?? 0;
-              if (!sessionCount && !assessmentCount && !playgroupCount) return null;
-              return {
-                text: playgroupCount ? `${playgroupCount} Playgroup` : sessionCount ? `${sessionCount} session${sessionCount === 1 ? "" : "s"}` : `${assessmentCount} assessment${assessmentCount === 1 ? "" : "s"}`,
-                tone: playgroupCount ? "mint" : sessionCount ? "brand" : "sunny",
-                ...((sessionCount || assessmentCount) && playgroupCount ? { subtext: `${sessionCount + assessmentCount} other item${sessionCount + assessmentCount === 1 ? "" : "s"}`, subtone: sessionCount ? "brand" : "sunny" } : {}),
-              };
+          <Calendar selected={[selectedDate]} onSelect={setSelectedDate} allowPast initialMonth={selectedDate} eventDots mark={(date) => {
+              const tones = new Set();
+              (sessionsByDate[date] || []).forEach((session) => {
+                const booking = s.db.bookings.find((entry) => entry.id === session.bookingId);
+                tones.add(booking?.program === "reading" ? "sunny" : "brand");
+              });
+              if (assessmentsByDate[date]?.length) tones.add("mint");
+              if (playgroupsByDate[date]?.length) tones.add("slate");
+              return tones.size ? { dots: [...tones] } : null;
           }}/>
           <div className="mt-4 flex items-center justify-between gap-2">
             <Button size="sm" variant="secondary" onClick={() => setSelectedDate(addDays(selectedDate, -1))}>Previous day</Button>
             <Button size="sm" variant="ghost" onClick={() => setSelectedDate(today)}>Today</Button>
             <Button size="sm" variant="secondary" onClick={() => setSelectedDate(addDays(selectedDate, 1))}>Next day</Button>
+          </div>
+          <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-2 border-t border-slate-100 pt-4 text-[11px] font-semibold text-slate-700 sm:text-xs">
+            {[ ["brand", "Academic Sessions"], ["sunny", "Reading Sessions"], ["slate", "Playgroup Class"], ["mint", "Initial Assessments"] ].map(([tone, label]) => <span key={tone} className="flex items-center gap-2"><i className={cn("h-2.5 w-2.5 rounded-full", tone === "brand" ? "bg-brand-600" : tone === "sunny" ? "bg-sunny-400" : tone === "slate" ? "bg-slate-400" : "bg-mint-600")}/>{label}</span>)}
           </div>
         </Card>
         <section className="space-y-3">
