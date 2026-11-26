@@ -4,6 +4,7 @@ import { Alert, Badge, Button, Card, Field, Input, Modal, PageHeader, Select } f
 import { addDays, DAY_NAMES, fmtDate, fmtTime, todayISO, weekday } from "@/lib/dates";
 import { cohortSessionDates, onApprovedLeave, tutorBusy, tutorWorksPlaygroupDate } from "@/lib/logic";
 import { useStore } from "@/lib/store";
+import { loadStateWhenRevisionChanges } from "@/lib/state-revision";
 
 const COHORT_WEEKDAYS = [1, 3, 5];
 const mondayOnOrAfter = (date) => addDays(date, (1 - weekday(date) + 7) % 7);
@@ -39,17 +40,21 @@ export default function Classes({ embedded = false } = {}) {
     const [replacementErrors, setReplacementErrors] = useState({});
     const [replacementBusy, setReplacementBusy] = useState({});
     const [replacementDrafts, setReplacementDrafts] = useState({});
+    const [editingAssignments, setEditingAssignments] = useState({});
+    const [weekdayDrafts, setWeekdayDrafts] = useState({});
+    const [scheduleSaveErrors, setScheduleSaveErrors] = useState({});
+    const [scheduleSaveBusy, setScheduleSaveBusy] = useState({});
     const [editingCohortId, setEditingCohortId] = useState(null);
     const [c, setC] = useState({ label: "", startDate: "", weekdays: COHORT_WEEKDAYS, time: "10:00", modality: "face-to-face", capacity: 6, sessionsCount: 12, assignmentMode: "manual", weekdayTutorIds: {} });
     useEffect(() => {
       const currentSignature = playgroupBookingSignature(s.db.bookings);
+      let knownRevision = s.revision;
       const refreshIfChanged = async () => {
         if (document.visibilityState !== "visible") return;
         try {
-          const response = await fetch("/api/state", { credentials: "same-origin", cache: "no-store" });
-          if (!response.ok) return;
-          const payload = await response.json();
-          if (playgroupBookingSignature(payload.db?.bookings) !== currentSignature) window.location.reload();
+          const refreshed = await loadStateWhenRevisionChanges(knownRevision);
+          knownRevision = refreshed.revision;
+          if (refreshed.db && playgroupBookingSignature(refreshed.db.bookings) !== currentSignature) window.location.reload();
         } catch { /* Keep the current page if the refresh check cannot reach the server. */ }
       };
       const timer = window.setInterval(refreshIfChanged, 8000);
@@ -59,15 +64,17 @@ export default function Classes({ embedded = false } = {}) {
         window.clearInterval(timer);
         document.removeEventListener("visibilitychange", handleVisibility);
       };
-    }, [s.db.bookings]);
+    }, [s.db.bookings, s.revision]);
     const nm = (id) => s.db.tutees.find((t) => t.userId === id)?.fullName || id;
     const tutors = useMemo(() => s.db.tutors.filter((t) => t.status === "active"), [s.db.tutors]);
     const assignedPlaygroupTutorIds = new Set((s.db.cohorts || []).flatMap((cohort) => [
       ...Object.values(cohort.weekdayTutorIds || {}),
       ...Object.values(cohort.dateTutorOverrides || {}),
     ]));
-    const availablePlaygroupTutorCount = tutors.filter((tutor) => assignedPlaygroupTutorIds.has(tutor.userId)).length;
-    const unassignedPlaygroupTutorCount = tutors.length - availablePlaygroupTutorCount;
+    const assignedPlaygroupTutorCount = tutors.filter((tutor) => assignedPlaygroupTutorIds.has(tutor.userId)).length;
+    const unassignedPlaygroupTutorCount = tutors.length - assignedPlaygroupTutorCount;
+    const upcomingPlaygroupDates = [...new Set((s.db.cohorts || []).flatMap((cohort) => cohortSessionDates(cohort).filter((date) => date >= today)))];
+    const availablePlaygroupTutorCount = tutors.filter((tutor) => upcomingPlaygroupDates.some((date) => tutorWorksPlaygroupDate(s.db, tutor.userId, date) && !onApprovedLeave(s.db, tutor.userId, date) && !tutorBusy(s.db, tutor.userId, date, "10:00"))).length;
     const tutorHandled = useMemo(() => {
       const rows = new Map(tutors.map((tutor) => [tutor.userId, { tutor, counts: { 1: 0, 3: 0, 5: 0 } }]));
       (s.db.cohorts || []).forEach((cohort) => {
@@ -157,7 +164,7 @@ export default function Classes({ embedded = false } = {}) {
       const result = await s.deleteCohort(cohort.id);
       if (!result.ok) setPageError(result.error || "The cohort could not be deleted.");
     };
-    const replaceTutorOnDate = async (cohort, date, tutorId) => {
+    const replaceTutorOnDate = async (cohort, date, tutorId, reload = true) => {
       if (!tutorId) return;
       const key = `${cohort.id}:${date}`;
       setReplacementErrors((current) => ({ ...current, [key]: "" }));
@@ -169,16 +176,43 @@ export default function Classes({ embedded = false } = {}) {
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.error || "Tutor replacement could not be saved.");
-        window.location.reload();
+        if (reload) window.location.reload();
+        return true;
       } catch (error) {
         setReplacementErrors((current) => ({ ...current, [key]: error.message || "Tutor replacement could not be saved." }));
+        throw error;
       } finally {
         setReplacementBusy((current) => ({ ...current, [key]: false }));
       }
     };
+    const saveSchedule = async (cohort) => {
+      setScheduleSaveBusy((current) => ({ ...current, [cohort.id]: true }));
+      setScheduleSaveErrors((current) => ({ ...current, [cohort.id]: "" }));
+      try {
+        const nextWeekdays = weekdayDrafts[cohort.id] || cohort.weekdayTutorIds || {};
+        for (const day of COHORT_WEEKDAYS) {
+          const tutorId = nextWeekdays[day] || "";
+          if (tutorId && tutorId !== (cohort.weekdayTutorIds?.[day] || "")) {
+            const result = await s.assignPlaygroupWeekday(cohort.id, day, tutorId);
+            if (result === false || result?.ok === false) throw new Error(result.error || "Tutor assignment could not be saved.");
+          }
+        }
+        for (const replacement of replacementDrafts[cohort.id] || []) {
+          if (replacement.date && replacement.tutorId && cohort.dateTutorOverrides?.[replacement.date] !== replacement.tutorId) {
+            const saved = await replaceTutorOnDate(cohort, replacement.date, replacement.tutorId, false);
+            if (saved === false) throw new Error("The replacement tutor could not be saved.");
+          }
+        }
+        setEditingAssignments((current) => ({ ...current, [cohort.id]: false }));
+        window.location.reload();
+      } catch (error) {
+        setScheduleSaveErrors((current) => ({ ...current, [cohort.id]: error.message || "The schedule could not be saved." }));
+      } finally { setScheduleSaveBusy((current) => ({ ...current, [cohort.id]: false })); }
+    };
     return (<>
       {!embedded && <PageHeader title="Playgroup Class" subtitle="Manage tutors, cohorts and booking requests." action={<Button onClick={openCohortForm}>Schedule Cohort</Button>}/>}
-      {embedded && <div className="mb-4 flex justify-end"><Button onClick={openCohortForm}>Schedule Cohort</Button></div>}
+      {embedded && <h1 className="mb-7 text-3xl font-extrabold text-slate-800">Playgroup Class</h1>}
+
       {pageError && <div className="mb-4"><Alert kind="error">{pageError}</Alert></div>}
       <div className="space-y-6">
         <Card className="space-y-4">
@@ -188,8 +222,9 @@ export default function Classes({ embedded = false } = {}) {
             <div className="rounded-2xl bg-amber-100 px-6 py-5 text-amber-600"><div className="text-4xl font-extrabold">{unassignedPlaygroupTutorCount}</div><div className="text-lg font-extrabold">Not Assigned Yet</div></div>
           </div>
           <h2 className="pt-2 text-xl font-extrabold">Playgroup Tutor Monitoring</h2>
-          <div className="max-h-[65vh] overflow-auto rounded-xl border border-slate-200"><table className="w-full min-w-[560px] border-collapse text-center"><thead className="sticky top-0 z-10 bg-blue-600 text-white"><tr><th colSpan={5} className="border-b border-blue-300 px-4 py-3">Playgroup Sessions Handled</th></tr><tr>{["Tutor", "Monday", "Wednesday", "Friday", "Total"].map((label) => <th key={label} className="px-4 py-3">{label}</th>)}</tr></thead><tbody>{tutorHandled.map(({ tutor, counts, total }, index) => <tr key={tutor.userId} className={index % 2 ? "bg-blue-100" : "bg-white"}><td className="border border-slate-200 px-4 py-3">{tutor.fullName}</td><td className="border border-slate-200 px-4 py-3">{counts[1]}</td><td className="border border-slate-200 px-4 py-3">{counts[3]}</td><td className="border border-slate-200 px-4 py-3">{counts[5]}</td><td className="border border-slate-200 px-4 py-3">{total}</td></tr>)}</tbody></table></div>
+          <div className="overflow-x-auto rounded-2xl bg-white shadow-lg"><table className="w-full min-w-[620px] border-collapse text-center"><thead className="bg-slate-50 text-slate-500"><tr>{["Tutor", "Monday", "Wednesday", "Friday", "Total"].map((label) => <th key={label} className="px-4 py-3">{label}</th>)}</tr></thead><tbody>{tutorHandled.map(({ tutor, counts, total }, index) => <tr key={tutor.userId} className={index % 2 ? "bg-blue-100" : "bg-white"}><td className="border-t border-slate-200 px-5 py-4">{tutor.fullName}</td><td className="border border-slate-200 px-4 py-3">{counts[1]}</td><td className="border border-slate-200 px-4 py-3">{counts[3]}</td><td className="border border-slate-200 px-4 py-3">{counts[5]}</td><td className="border border-slate-200 px-4 py-3">{total}</td></tr>)}</tbody></table></div>
         </Card>
+        <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-2xl font-extrabold">Playgroup Cohorts</h2><Button onClick={openCohortForm}>Schedule Cohort</Button></div>
         {s.db.cohorts.length === 0 && <Card><p className="text-sm text-slate-500">No cohorts scheduled yet. Create a cohort to open six slots for the next four-week playgroup cycle.</p></Card>}
         {s.db.cohorts.map((cohort) => {
           const dates = cohortSessionDates(cohort).slice().sort();
@@ -201,13 +236,13 @@ export default function Classes({ embedded = false } = {}) {
           const startDate = dates[0];
           const endDate = dates[dates.length - 1];
           const canChangeTutors = dates.some((date) => date >= today);
-          return <Card key={cohort.id} className="space-y-4 border-2 border-slate-200 p-5 sm:p-6">
+          return <Card key={cohort.id} className="space-y-4 border-0 bg-neutral-100 p-5 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div><h2 className="text-lg font-extrabold">{cohort.label}</h2><p className="text-sm text-slate-500">12 sessions · Monday, Wednesday and Friday · {fmtTime(cohort.time || "10:00")} · {fmtDate(startDate)}–{fmtDate(endDate)}</p></div>
-              <div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => openEditForm(cohort)}>Edit</Button><Button size="sm" variant="danger" onClick={() => deleteCohort(cohort)}>Delete</Button></div>
+              <div className="flex gap-2"><Button size="sm" variant={editingAssignments[cohort.id] ? "success" : "secondary"} onClick={() => { if (editingAssignments[cohort.id]) void saveSchedule(cohort); else { setWeekdayDrafts((current) => ({ ...current, [cohort.id]: { ...(cohort.weekdayTutorIds || {}) } })); setReplacementDrafts((current) => ({ ...current, [cohort.id]: [...Object.entries(cohort.dateTutorOverrides || {}).map(([date,tutorId]) => ({ date, tutorId })), { date: "", tutorId: "" }] })); setEditingAssignments((current) => ({ ...current, [cohort.id]: true })); } }}>{scheduleSaveBusy[cohort.id] ? "Saving…" : editingAssignments[cohort.id] ? "Save" : "Edit"}</Button><Button size="sm" variant="danger" onClick={() => deleteCohort(cohort)}>Delete</Button></div>
             </div>
 
-            <section className="space-y-3 rounded-2xl bg-neutral-100 p-4 sm:p-6">
+            <section className="space-y-3 p-1 sm:p-2">
               <div>
                 <h3 className="text-lg font-extrabold">Assign Tutor</h3>
                 <p className="text-xs text-slate-500">Each tutor must be scheduled to work and available on every date for that weekday.</p>
@@ -218,7 +253,7 @@ export default function Classes({ embedded = false } = {}) {
                   const assignedId = cohort.weekdayTutorIds?.[day] || "";
                   const assignedIsAvailable = options.some((tutor) => tutor.userId === assignedId);
                   return <Field key={day} label={DAY_NAMES[day]}>
-                    <Select disabled={!canChangeTutors} value={assignedIsAvailable ? assignedId : ""} onChange={(event) => event.target.value && s.assignPlaygroupWeekday(cohort.id, day, event.target.value)}>
+                    <Select disabled={!canChangeTutors || !editingAssignments[cohort.id]} value={(weekdayDrafts[cohort.id] || cohort.weekdayTutorIds || {})[day] || (assignedIsAvailable ? assignedId : "")} onChange={(event) => setWeekdayDrafts((current) => ({ ...current, [cohort.id]: { ...(current[cohort.id] || cohort.weekdayTutorIds || {}), [day]: event.target.value } }))}>
                       <option value="">{options.length ? "Select tutor" : "No available tutor"}</option>
                       {options.map((tutor) => <option key={tutor.userId} value={tutor.userId}>{tutor.fullName}</option>)}
                     </Select>
@@ -227,7 +262,7 @@ export default function Classes({ embedded = false } = {}) {
                   </Field>;
                 })}
               </div>
-              <div className="space-y-2 pt-1">
+              {editingAssignments[cohort.id] && <div className="space-y-2 pt-1">
                 <h4 className="text-sm font-bold text-slate-600">Replace Tutor on Specific Dates</h4>
                 {(replacementDrafts[cohort.id] || [...Object.entries(cohort.dateTutorOverrides || {}).map(([date, tutorId]) => ({ date, tutorId })), { date: "", tutorId: "" }]).map((replacement, index) => {
                   const key = `${cohort.id}:${replacement.date}`;
@@ -240,7 +275,7 @@ export default function Classes({ embedded = false } = {}) {
                     && !tutorBusy(s.db, tutor.userId, replacement.date, cohort.time || "10:00")
                   )));
                   return <div key={index} className="grid gap-2 sm:max-w-3xl sm:grid-cols-[1fr_1fr_auto]">
-                    <Select value={(replacement.date ? (cohort.dateTutorOverrides?.[replacement.date] || replacement.tutorId) : "") || ""} disabled={!replacement.date || replacementBusy[key]} onChange={(event) => replaceTutorOnDate(cohort, replacement.date, event.target.value)}><option value="">Select Tutor</option>{options.map((tutor) => <option value={tutor.userId} key={tutor.userId}>{tutor.fullName}</option>)}</Select>
+                    <Select value={replacement.tutorId || ""} disabled={!replacement.date || replacementBusy[key]} onChange={(event) => setReplacementDrafts((current) => ({ ...current, [cohort.id]: rows.map((row, rowIndex) => rowIndex === index ? { ...row, tutorId: event.target.value } : row) }))}><option value="">Select Tutor</option>{options.map((tutor) => <option value={tutor.userId} key={tutor.userId}>{tutor.fullName}</option>)}</Select>
                     <Select value={replacement.date || ""} onChange={(event) => {
                       const nextRows = [...rows];
                       nextRows[index] = { date: event.target.value, tutorId: "" };
@@ -250,7 +285,9 @@ export default function Classes({ embedded = false } = {}) {
                     {replacementErrors[key] && <p className="text-xs text-red-600 sm:col-span-3">{replacementErrors[key]}</p>}
                   </div>;
                 })}
-              </div>
+              </div>}
+              {scheduleSaveErrors[cohort.id] && <Alert kind="error">{scheduleSaveErrors[cohort.id]}</Alert>}
+              {!editingAssignments[cohort.id] && <div className="overflow-x-auto rounded-2xl bg-white shadow-sm"><table className="w-full min-w-[650px] text-center text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Tutor", "Day & Time", "Date", "Status"].map((label) => <th key={label} className="px-4 py-3">{label}</th>)}</tr></thead><tbody>{COHORT_WEEKDAYS.filter((day) => cohort.weekdayTutorIds?.[day]).map((day) => { const tutorId=cohort.weekdayTutorIds[day]; const start=dates.find((date)=>weekday(date)===day); const end=[...dates].reverse().find((date)=>weekday(date)===day); return <tr key={day} className="border-t border-slate-200"><td className="px-4 py-3">{tutors.find((t)=>t.userId===tutorId)?.fullName||"Tutor"}</td><td className="px-4 py-3">{DAY_NAMES[day]} at {fmtTime(cohort.time||"10:00")}–11:30 AM</td><td className="px-4 py-3">{bookedDateLabel(start)} until {bookedDateLabel(end)}</td><td className="px-4 py-3"><span className="rounded-full bg-green-100 px-4 py-1.5 text-xs font-bold text-green-700">Assigned</span></td></tr>}).concat(Object.entries(cohort.dateTutorOverrides||{}).map(([date,tutorId])=><tr key={date} className="border-t border-slate-200"><td className="px-4 py-3">{tutors.find((t)=>t.userId===tutorId)?.fullName||"Tutor"}</td><td className="px-4 py-3">{DAY_NAMES[weekday(date)]} at {fmtTime(cohort.time||"10:00")}–11:30 AM</td><td className="px-4 py-3">{bookedDateLabel(date)}</td><td className="px-4 py-3"><span className="rounded-full bg-amber-100 px-4 py-1.5 text-xs font-bold text-amber-700">Replacement</span></td></tr>))}{!Object.keys(cohort.weekdayTutorIds||{}).length&&!Object.keys(cohort.dateTutorOverrides||{}).length&&<tr><td colSpan={4} className="px-4 py-5 text-slate-400">No tutors assigned yet.</td></tr>}</tbody></table></div>}
             </section>
 
             <section className="space-y-2 rounded-2xl bg-neutral-100 p-4 sm:p-6" aria-label={`Enrolled students in ${cohort.label}`}>

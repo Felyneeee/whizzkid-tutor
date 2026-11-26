@@ -5,12 +5,14 @@ import { Badge, Card, Empty, PageHeader } from "@/components/ui";
 import { firstName, fmtDate, fmtTime, todayISO, weekday } from "@/lib/dates";
 import { onApprovedLeave } from "@/lib/logic";
 import { useStore } from "@/lib/store";
+import { loadStateWhenRevisionChanges } from "@/lib/state-revision";
 export default function TutorCalendar() {
     const s = useStore();
     const { bookings, sessions, cohorts: cohortRows } = s.db;
     const id = s.me.id;
     const [sel, setSel] = useState(todayISO());
     useEffect(() => {
+      let knownRevision = s.revision;
       const signatureOf = (db) => JSON.stringify({
         sessions: (db?.sessions || [])
           .filter((session) => session.tutorId === id)
@@ -26,10 +28,9 @@ export default function TutorCalendar() {
       const refreshIfChanged = async () => {
         if (document.visibilityState !== "visible") return;
         try {
-          const response = await fetch("/api/state", { credentials: "same-origin", cache: "no-store" });
-          if (!response.ok) return;
-          const payload = await response.json();
-          if (signatureOf(payload.db) !== signature) window.location.reload();
+          const refreshed = await loadStateWhenRevisionChanges(knownRevision);
+          knownRevision = refreshed.revision;
+          if (refreshed.db && signatureOf(refreshed.db) !== signature) window.location.reload();
         } catch { /* Keep the current page if the refresh check cannot reach the server. */ }
       };
       const timer = window.setInterval(refreshIfChanged, 8000);
@@ -39,7 +40,7 @@ export default function TutorCalendar() {
         window.clearInterval(timer);
         document.removeEventListener("visibilitychange", handleVisibility);
       };
-    }, [id, sessions, bookings, cohortRows]);
+    }, [id, sessions, bookings, cohortRows, s.revision]);
     const mine = s.db.sessions.filter((x) => x.tutorId === id && x.status !== "cancelled" && x.status !== "needs_reassignment");
     const day = mine.filter((x) => x.date === sel).sort((a, b) => a.time.localeCompare(b.time));
     const playgroupBookings = s.db.bookings.filter((booking) => booking.program === "playgroup" && ["approved", "confirmed", "to_pay", "awaiting_payment_approval"].includes(booking.status));

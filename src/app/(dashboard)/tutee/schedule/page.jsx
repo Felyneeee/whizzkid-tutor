@@ -5,6 +5,7 @@ import { Calendar } from "@/components/Calendar";
 import { Badge, Button, Card, Empty, Modal, PageHeader, Textarea, cn } from "@/components/ui";
 import { addDays, firstName, fmtDate, fmtDateTime, fmtTime, todayISO, weekday } from "@/lib/dates";
 import { useStore } from "@/lib/store";
+import { loadStateWhenRevisionChanges } from "@/lib/state-revision";
 export default function TuteeSchedule() {
     const s = useStore();
     const { bookings, sessions: sessionRows } = s.db;
@@ -15,6 +16,7 @@ export default function TuteeSchedule() {
     const statusOf = (booking) => String(booking.status || booking.bookingStatus || "").toLowerCase();
     const isPlaygroup = (booking) => String(booking.program || "").toLowerCase() === "playgroup";
     useEffect(() => {
+      let knownRevision = s.revision;
       const signatureOf = (db) => JSON.stringify({
         playgroups: (db?.bookings || [])
           .filter((booking) => booking.tuteeId === id && isPlaygroup(booking))
@@ -29,10 +31,9 @@ export default function TuteeSchedule() {
       const refreshIfChanged = async () => {
         if (document.visibilityState !== "visible") return;
         try {
-          const response = await fetch("/api/state", { credentials: "same-origin", cache: "no-store" });
-          if (!response.ok) return;
-          const payload = await response.json();
-          if (signatureOf(payload.db) !== signature) window.location.reload();
+          const refreshed = await loadStateWhenRevisionChanges(knownRevision);
+          knownRevision = refreshed.revision;
+          if (refreshed.db && signatureOf(refreshed.db) !== signature) window.location.reload();
         } catch { /* Keep the current page if the refresh check cannot reach the server. */ }
       };
       const timer = window.setInterval(refreshIfChanged, 8000);
@@ -42,7 +43,7 @@ export default function TuteeSchedule() {
         window.clearInterval(timer);
         document.removeEventListener("visibilitychange", handleVisibility);
       };
-    }, [id, bookings, sessionRows]);
+    }, [id, bookings, sessionRows, s.revision]);
     const sessions = s.db.sessions.filter((x) => {
       const booking = s.db.bookings.find((entry) => entry.id === x.bookingId);
       return x.tuteeId === id && !!booking && booking.paymentStatus === "paid" && ["confirmed", "completed"].includes(booking.status);

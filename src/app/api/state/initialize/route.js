@@ -12,8 +12,8 @@ export async function POST(request) {
       return NextResponse.json({ error: "Only an administrator can initialize shared app data." }, { status: 403 });
     }
     const body = await readJson(request, 2 * 1024 * 1024);
-    const state = await initializeApplicationState(body.db, user);
-    return NextResponse.json({ db: stateVisibleToUser(state, user), initialized: true });
+    const { state, revision } = await initializeApplicationState(body.db, user);
+    return NextResponse.json({ db: stateVisibleToUser(state, user), initialized: true, revision }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof RequestBodyError) return NextResponse.json({ error: error.message }, { status: error.status });
     console.error("[state/initialize]", error?.code ?? "UNKNOWN", error?.message ?? "No error detail");

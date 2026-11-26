@@ -10,6 +10,7 @@ import { PLAYGROUP_SESSION_RATE, PROGRAMS, READING_SKILLS, SUBJECTS } from "@/li
 import { addMonths, assessmentExpiresAt, fmtDate, fmtTime, isAssessmentOutdated, parseISO, todayISO } from "@/lib/dates";
 import { cohortSessionDates } from "@/lib/logic";
 import { useStore } from "@/lib/store";
+import { loadStateWhenRevisionChanges } from "@/lib/state-revision";
 const GRADE_CHOICES = ["Nursery", "Preschool", "Kinder", ...Array.from({ length: 10 }, (_, index) => `Grade ${index + 1}`)];
 const gradeChoiceForProfile = (grade) => {
     if (GRADE_CHOICES.includes(grade)) return grade;
@@ -170,6 +171,7 @@ function PlaygroupFlow() {
     const myEnrolledBooking = myPlaygroupBookings.find((booking) => ["approved", "confirmed", "to_pay", "awaiting_payment_approval"].includes(String(booking.status || booking.bookingStatus || "").toLowerCase()));
     const myPendingBooking = myPlaygroupBookings.find((booking) => ["pending", "awaiting_admin"].includes(String(booking.status || booking.bookingStatus || "").toLowerCase()));
     useEffect(() => {
+      let knownRevision = s.revision;
       const signature = JSON.stringify(s.db.bookings
         .filter((booking) => booking.tuteeId === id && String(booking.program || "").toLowerCase() === "playgroup")
         .map((booking) => [booking.id, booking.cohortId || "", booking.status || booking.bookingStatus || ""])
@@ -177,10 +179,10 @@ function PlaygroupFlow() {
       const refreshIfChanged = async () => {
         if (document.visibilityState !== "visible") return;
         try {
-          const response = await fetch("/api/state", { credentials: "same-origin", cache: "no-store" });
-          if (!response.ok) return;
-          const payload = await response.json();
-          const nextSignature = JSON.stringify((payload.db?.bookings || [])
+          const refreshed = await loadStateWhenRevisionChanges(knownRevision);
+          knownRevision = refreshed.revision;
+          if (!refreshed.db) return;
+          const nextSignature = JSON.stringify((refreshed.db.bookings || [])
             .filter((booking) => booking.tuteeId === id && String(booking.program || "").toLowerCase() === "playgroup")
             .map((booking) => [booking.id, booking.cohortId || "", booking.status || booking.bookingStatus || ""])
             .sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
@@ -194,7 +196,7 @@ function PlaygroupFlow() {
         window.clearInterval(timer);
         document.removeEventListener("visibilitychange", handleVisibility);
       };
-    }, [id, s.db.bookings]);
+    }, [id, s.db.bookings, s.revision]);
     const cohorts = s.db.cohorts
         .map((c) => ({ c, dates: cohortSessionDates(c).slice().sort() }))
         .filter(({ dates }) => dates[0] >= today && dates[0] <= bookingDeadline)

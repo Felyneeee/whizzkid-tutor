@@ -105,6 +105,7 @@ create table if not exists public.bookings (
   tutor_id text references public.users(id) on delete set null,
   recommendations jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
+  cancelled_at timestamptz,
   terminated_at timestamptz,
   termination_reason text,
   cohort_id text references public.cohorts(id) on delete set null,

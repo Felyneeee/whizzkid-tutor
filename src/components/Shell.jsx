@@ -1,9 +1,9 @@
 "use client";
-import { Bell, CheckCheck, ChevronDown, LoaderCircle, LogOut, Menu, UserRound, X } from "lucide-react";
+import { Bell, CheckCheck, ChevronDown, LoaderCircle, LogOut, Menu, MessageCircle, UserRound, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { cn } from "./ui";
 import { Logo } from "./ui";
@@ -12,30 +12,49 @@ import { fmtDateTime } from "@/lib/dates";
 export function homeFor(role) {
     return role === "admin" ? "/admin" : role === "tutor" ? "/tutor" : "/tutee";
 }
+function LiveMessageToast({ role }) {
+    const s = useStore();
+    const [notification, setNotification] = useState(null);
+    const seenIds = useRef(new Set());
+    const initialized = useRef(false);
+    const timeout = useRef(null);
+    const me = s.me;
+    useEffect(() => {
+        if (!s.ready || !me) return;
+        const unreadMessages = (s.db.notifications || []).filter((item) =>
+            item.userId === me.id && !item.read && String(item.text || "").startsWith("New message"),
+        );
+        if (!initialized.current) {
+            unreadMessages.forEach((item) => seenIds.current.add(item.id));
+            initialized.current = true;
+            return;
+        }
+        const incoming = unreadMessages.find((item) => !seenIds.current.has(item.id));
+        unreadMessages.forEach((item) => seenIds.current.add(item.id));
+        if (!incoming) return;
+        setNotification(incoming);
+        clearTimeout(timeout.current);
+        timeout.current = setTimeout(() => setNotification(null), 6000);
+    }, [s.ready, me, s.db.notifications]);
+    useEffect(() => () => clearTimeout(timeout.current), []);
+    if (!notification) return null;
+    return <div role="status" aria-live="polite" className="fixed bottom-5 right-5 z-[100] w-[min(24rem,calc(100vw-2.5rem))] rounded-2xl border border-brand-200 bg-white p-4 shadow-xl">
+      <div className="flex items-start gap-3">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-600"><MessageCircle className="h-5 w-5"/></span>
+        <div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-wide text-brand-600">New message</p><p className="mt-1 text-sm font-semibold text-slate-800">{notificationDisplayText(notification, s.db)}</p><Link href={notificationDestination(notification, role)} onClick={() => setNotification(null)} className="mt-2 inline-block text-sm font-bold text-brand-700 hover:underline">Open messages</Link></div>
+        <button type="button" onClick={() => setNotification(null)} aria-label="Dismiss new message alert" className="rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">×</button>
+      </div>
+    </div>;
+}
 export function DashboardShell({ role, nav, children, gate }) {
     const s = useStore();
-    const { me, refreshState } = s;
+    const { me } = s;
     const router = useRouter();
     const path = usePathname();
     const [menuState, setMenuState] = useState({ path, open: false });
     const open = menuState.path === path && menuState.open;
     const [notificationsOpen, setNotificationsOpen] = useState(false);
     const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-    useEffect(() => {
-      if (!me) return;
-      let stopped = false;
-      const refreshNotifications = async () => {
-        if (stopped || document.visibilityState !== "visible") return;
-        await refreshState(me);
-      };
-      const timer = window.setInterval(() => void refreshNotifications(), 8000);
-      document.addEventListener("visibilitychange", refreshNotifications);
-      return () => {
-        stopped = true;
-        window.clearInterval(timer);
-        document.removeEventListener("visibilitychange", refreshNotifications);
-      };
-    }, [me, refreshState]);
     useEffect(() => {
         if (!s.ready)
             return;
@@ -71,6 +90,7 @@ export function DashboardShell({ role, nav, children, gate }) {
       </nav>
     </div>);
     return (<div className="min-h-screen">
+      {path !== `${base}/chat` && <LiveMessageToast role={role}/>}
       <div className="mx-auto max-w-6xl px-4 py-3">
       <header className="sticky top-3 z-40 mx-auto flex min-h-[76px] w-full max-w-6xl items-center justify-between gap-3 rounded-2xl bg-white/95 px-5 text-slate-600 shadow-[0_12px_35px_rgba(50,72,110,0.09)] sm:px-8">
         <div className="flex shrink-0 items-center gap-2">

@@ -2,15 +2,17 @@
 
 import Image from "next/image";
 import { Check, Pencil, UserRound, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Button, Field, Input } from "@/components/ui";
 import { readFileAsDataURL } from "@/lib/files";
 import { ageFromBirthday } from "@/lib/dates";
 import { useStore } from "@/lib/store";
 
+const adminDraftKey = (id) => `whizzkids-admin-profile-draft-${id}`;
+
 function Avatar({ photo, onChange }) {
   return <div className="relative h-40 w-40 shrink-0">
-    <div className="relative grid h-full w-full place-items-center overflow-hidden rounded-full bg-[#dce2f0] text-[#a5a9b3] ring-8 ring-[#fbf9eb]">
+    <div className="relative grid h-full w-full place-items-center overflow-hidden rounded-full bg-[#dce2f0] text-[#a5a9b3]">
       {photo ? <Image src={photo} alt="Admin profile" fill unoptimized className="object-cover"/> : <UserRound className="h-20 w-20 fill-[#a5a9b3] stroke-[#a5a9b3]" aria-hidden="true"/>}
     </div>
     <label className="absolute -bottom-1 -right-1 z-10 grid h-8 w-8 cursor-pointer place-items-center rounded-lg bg-white text-slate-600 shadow" aria-label="Change profile photo"><Pencil className="h-5 w-5"/><input className="sr-only" type="file" accept="image/*" onChange={onChange}/></label>
@@ -24,6 +26,7 @@ export default function AdminProfilePage() {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [draftReady, setDraftReady] = useState(false);
   const [form, setForm] = useState(() => ({
     fullName: profile?.fullName || s.me.username || "Administrator",
     age: profile?.age == null ? "" : String(profile.age),
@@ -31,6 +34,32 @@ export default function AdminProfilePage() {
     birthday: profile?.birthday || "",
     photo: profile?.photo || "",
   }));
+  const initialForm = () => ({
+    fullName: profile?.fullName || s.me.username || "Administrator",
+    age: profile?.age == null ? "" : String(profile.age),
+    contact: profile?.contact || "",
+    birthday: profile?.birthday || "",
+    photo: profile?.photo || "",
+  });
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        const raw = localStorage.getItem(adminDraftKey(s.me.id));
+        if (raw) {
+          const draft = JSON.parse(raw);
+          if (draft?.fields) { setForm({ ...initialForm(), ...draft.fields }); setEditing(true); }
+        }
+      } catch { /* Ignore an unavailable or invalid local draft. */ }
+      setDraftReady(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  // The profile is loaded before this page is available, and the draft is read once per user.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.me.id]);
+  useEffect(() => {
+    if (!draftReady || !editing) return;
+    try { localStorage.setItem(adminDraftKey(s.me.id), JSON.stringify({ fields: form })); } catch { /* Storage may be unavailable. */ }
+  }, [draftReady, editing, form, s.me.id]);
   const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
   const changePhoto = async (event) => {
     const file = event.target.files?.[0];
@@ -40,6 +69,7 @@ export default function AdminProfilePage() {
       setForm((current) => ({ ...current, photo: "" }));
       const photo = await readFileAsDataURL(file);
       setForm((current) => ({ ...current, photo }));
+      setEditing(true);
       setError("");
     } catch (issue) {
       setError(issue instanceof Error ? issue.message : "Could not read the profile photo.");
@@ -51,6 +81,7 @@ export default function AdminProfilePage() {
     try {
       const result = await s.saveAdminProfile(s.me.id, { ...form, age: form.age ? Number(form.age) : null });
       if (!result?.ok) throw new Error(result?.error || "Profile could not be saved. Please try again.");
+      try { localStorage.removeItem(adminDraftKey(s.me.id)); } catch { /* Storage may be unavailable. */ }
       setEditing(false);
       setSaved(true);
     } catch (issue) {
@@ -58,6 +89,12 @@ export default function AdminProfilePage() {
     } finally {
       setSaving(false);
     }
+  };
+  const cancel = () => {
+    setForm(initialForm());
+    setEditing(false);
+    setError("");
+    try { localStorage.removeItem(adminDraftKey(s.me.id)); } catch { /* Storage may be unavailable. */ }
   };
   const age = form.birthday ? ageFromBirthday(form.birthday) : form.age;
   const birthdayLabel = form.birthday ? new Date(`${form.birthday}T00:00:00`).toLocaleDateString("en-US") : "Not provided";
@@ -67,7 +104,7 @@ export default function AdminProfilePage() {
 
     {editing ? <section className="relative mt-28 rounded-2xl bg-white px-6 pb-8 pt-6 shadow-sm sm:px-12">
       <div className="absolute -top-24 left-1/2 -translate-x-1/2"><Avatar photo={form.photo} onChange={changePhoto}/></div>
-      <div className="mb-10 flex justify-end"><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
+      <div className="mb-10 flex justify-end gap-3"><Button disabled={saving} onClick={cancel} className="min-w-32 rounded-2xl bg-slate-200 text-slate-700 hover:bg-slate-300">Cancel</Button><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
       <div className="border-l-4 border-slate-100 pl-5 sm:pl-6">
         <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
           <Field label="Full name"><Input value={form.fullName} onChange={set("fullName")} className="rounded-2xl py-3"/></Field>

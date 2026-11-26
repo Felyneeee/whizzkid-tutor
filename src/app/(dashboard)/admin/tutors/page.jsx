@@ -32,9 +32,8 @@ export default function TutorRecords() {
   }), [s.db.tutors, email, query, statusFilters, subjectFilters, sortBy]);
   const tutor = selected ? s.db.tutors.find((item) => item.userId === selected) : null;
   const students = tutor ? [...new Set(s.db.sessions.filter((session) => session.tutorId === tutor.userId && session.status !== "cancelled").map((session) => s.db.tutees.find((tutee) => tutee.userId === session.tuteeId)?.fullName).filter(Boolean))] : [];
-  const labels = { records: "Tutor Records", schedules: "Tutor Schedules", leaves: "Leave Requests", verification: "Account Verification" };
   return <>
-    <PageHeader title={labels[section]} />
+    <PageHeader title="Tutor Records" />
     <Tabs tabs={[{ id: "records", label: "Tutor Records" }, { id: "schedules", label: "Tutor Schedules" }, { id: "leaves", label: "Leave Request" }, { id: "verification", label: "Account Verification" }]} value={section} onChange={setSection} />
     {section === "schedules" && <Approvals embedded defaultTab="schedules" />}
     {section === "leaves" && <Approvals embedded defaultTab="leaves" />}

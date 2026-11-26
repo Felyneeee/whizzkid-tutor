@@ -213,7 +213,7 @@ function readableHistoryText(value, db) {
     }
     for (const profile of db.adminProfiles || []) if (profile.id && profile.fullName) namesById.set(profile.id, profile.fullName);
     for (const user of db.users || []) {
-        if (!namesById.has(user.id)) namesById.set(user.id, user.role === "admin" ? "System Admin" : user.username || (user.role === "tutor" ? "Tutor" : user.role === "tutee" ? "Tutee" : "User"));
+        if (!namesById.has(user.id)) namesById.set(user.id, user.role === "admin" ? "Admin" : user.username || (user.role === "tutor" ? "Tutor" : user.role === "tutee" ? "Tutee" : "User"));
     }
     const readable = [...namesById.entries()].sort(([a], [b]) => b.length - a.length)
         .reduce((text, [id, name]) => text.split(id).join(name), String(value ?? ""));
@@ -272,7 +272,7 @@ export function HistoryView({ userId, isAdmin }) {
               const tutor = s.db.tutors.find((entry) => entry.userId === a.userId);
               const tutee = s.db.tutees.find((entry) => entry.userId === a.userId);
               const adminProfile = s.db.adminProfiles?.find((entry) => entry.id === a.userId);
-              const actorName = tutor?.fullName || tutee?.fullName || adminProfile?.fullName || (actorRole === "admin" ? "System Admin" : actor?.username || "Unknown User");
+              const actorName = tutor?.fullName || tutee?.fullName || adminProfile?.fullName || (actorRole === "admin" ? "Admin" : actor?.username || "Unknown User");
               const photo = tutor?.photo || tutee?.photo || adminProfile?.photo || "";
               const action = historyAction(a);
               return (<Card key={a.id} className="grid grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-3 !p-3">

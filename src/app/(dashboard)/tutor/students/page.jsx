@@ -78,7 +78,7 @@ function StudentSessions({ student, sessions, bookings, onClose }) {
         const isComplete = session.status === "completed";
         const canRecord = !isComplete && session.status === "scheduled" && sessionEnd(session) <= new Date();
         const subject = sessionSubject(session, booking);
-        return <div key={session.id} className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-300 bg-slate-50/70 px-4 py-3">
+        return <div key={session.id} className="flex min-w-0 flex-col items-stretch gap-3 rounded-2xl border border-slate-300 bg-slate-50/70 px-4 py-3 sm:flex-row sm:items-center">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="font-bold">{subject}</span>
@@ -86,12 +86,12 @@ function StudentSessions({ student, sessions, bookings, onClose }) {
             </div>
             <div className="mt-1 text-xs text-slate-600">{fmtTime(session.time)} – {fmtTime(sessionEnd(session).toTimeString().slice(0, 5))}</div>
           </div>
-          {isComplete ? <span className={cn("rounded-full px-3 py-2 text-xs font-semibold", session.attended === false ? "bg-coral-100 text-coral-700" : "bg-mint-100 text-mint-700")}>
+          {isComplete ? <span className={cn("w-fit rounded-full px-3 py-2 text-xs font-semibold", session.attended === false ? "bg-coral-100 text-coral-700" : "bg-mint-100 text-mint-700")}>
             {session.attended === false ? "No-show" : "Completed"}
-          </span> : canRecord ? <div className="flex flex-wrap gap-2">
+          </span> : canRecord ? <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
             <Button size="sm" disabled={savingId === session.id} onClick={() => markAttendance(session, true)}><Check className="h-3.5 w-3.5"/> Mark as Complete</Button>
             <Button size="sm" variant="secondary" disabled={savingId === session.id} onClick={() => markAttendance(session, false)}>Mark as No-show</Button>
-          </div> : <span className="rounded-full bg-slate-200 px-3 py-2 text-xs font-medium text-slate-600">{session.status === "scheduled" ? "Available after session" : session.status.replace(/_/g, " ")}</span>}
+          </div> : <span className="w-fit max-w-full rounded-full bg-slate-200 px-3 py-2 text-xs font-medium text-slate-600">{session.status === "scheduled" ? "Available after session" : session.status.replace(/_/g, " ")}</span>}
         </div>;
       })}
     </div>}

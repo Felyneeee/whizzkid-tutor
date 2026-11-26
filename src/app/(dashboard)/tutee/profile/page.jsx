@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { Check, Pencil, UserRound, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Button, Field, Input, Select } from "@/components/ui";
 import { ageFromBirthday } from "@/lib/dates";
 import { readFileAsDataURL } from "@/lib/files";
@@ -15,6 +15,8 @@ const gradeChoiceForProfile = (grade) => {
   if (grade === "High School") return "Grade 7";
   return "";
 };
+const draftKey = (id) => `whizzkids-tutee-profile-draft-${id}`;
+const profileFields = (profile) => ({ fullName: profile.fullName, birthday: profile.birthday || "", gradeLevel: gradeChoiceForProfile(profile.gradeLevel), contact: profile.contact || "", guardianName: profile.guardianName || "", photo: profile.photo || "" });
 
 function Avatar({ photo, onPhotoChange }) {
   return <div className="relative h-40 w-40 shrink-0">
@@ -29,11 +31,34 @@ export default function TuteeProfile() {
   const s = useStore();
   const id = s.me.id;
   const p = s.db.tutees.find((t) => t.userId === id);
-  const [f, setF] = useState({ fullName: p.fullName, birthday: p.birthday || "", gradeLevel: gradeChoiceForProfile(p.gradeLevel), contact: p.contact || "", guardianName: p.guardianName || "", photo: p.photo || "" });
+  const [f, setF] = useState(() => profileFields(p));
   const [editing, setEditing] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
   const [savedModal, setSavedModal] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        const raw = localStorage.getItem(draftKey(id));
+        if (raw) {
+          const draft = JSON.parse(raw);
+          if (draft?.fields) {
+            setF({ ...profileFields(p), ...draft.fields });
+            setEditing(true);
+          }
+        }
+      } catch { /* Ignore an unavailable or invalid local draft. */ }
+      setDraftReady(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  // The profile is loaded before this page is available, and the draft is read once per user.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+  useEffect(() => {
+    if (!draftReady || !editing) return;
+    try { localStorage.setItem(draftKey(id), JSON.stringify({ fields: f })); } catch { /* Storage may be unavailable. */ }
+  }, [draftReady, editing, f, id]);
   const set = (key) => (event) => setF((previous) => ({ ...previous, [key]: event.target.value }));
   const changePhoto = async (event) => {
     const file = event.target.files?.[0];
@@ -41,6 +66,7 @@ export default function TuteeProfile() {
     try {
       const photo = await readFileAsDataURL(file);
       setF((previous) => ({ ...previous, photo }));
+      setEditing(true);
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not read the profile photo.");
@@ -55,6 +81,7 @@ export default function TuteeProfile() {
     try {
       const result = await s.saveTuteeProfile(id, { ...f });
       if (!result?.ok) throw new Error(result?.error || "Profile could not be saved. Please try again.");
+      try { localStorage.removeItem(draftKey(id)); } catch { /* Storage may be unavailable. */ }
       setEditing(false);
       setSavedModal(true);
     } catch (e) {
@@ -64,13 +91,20 @@ export default function TuteeProfile() {
     }
   };
 
+  const cancel = () => {
+    setF(profileFields(p));
+    setEditing(false);
+    setError("");
+    try { localStorage.removeItem(draftKey(id)); } catch { /* Storage may be unavailable. */ }
+  };
+
   return <div className="mx-auto max-w-5xl pb-10">
     <h1 className="mb-8 text-3xl font-extrabold tracking-tight text-black">Profile</h1>
 
     {editing ? <section className="relative mt-28 rounded-2xl bg-white px-6 pb-10 pt-6 shadow-sm sm:px-12">
       <div className="absolute -top-24 left-1/2 -translate-x-1/2"><Avatar photo={f.photo} onPhotoChange={changePhoto}/></div>
-      <div className="mb-8 hidden justify-end sm:flex"><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
-      <div className="mb-6 mt-14 flex justify-center sm:hidden"><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
+      <div className="mb-8 hidden justify-end gap-3 sm:flex"><Button disabled={saving} onClick={cancel} className="min-w-32 rounded-2xl bg-slate-200 text-slate-700 hover:bg-slate-300">Cancel</Button><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
+      <div className="mb-6 mt-14 flex justify-center gap-3 sm:hidden"><Button disabled={saving} onClick={cancel} className="min-w-32 rounded-2xl bg-slate-200 text-slate-700 hover:bg-slate-300">Cancel</Button><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
       <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
         <Field label="Name"><Input required value={f.fullName} onChange={set("fullName")} className="rounded-2xl py-3"/></Field>
         <Field label="Birthday"><Input type="date" required value={f.birthday} onChange={set("birthday")} className="rounded-2xl py-3"/></Field>

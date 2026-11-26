@@ -5,6 +5,7 @@ import { buildSeed } from "./seed";
 import { addDays, rangeDates } from "./dates";
 
 const Ctx = createContext(null);
+const pendingGetRequests = new Map();
 
 const BUSINESS_ACTIONS = [
   "notify", "markNotificationsRead", "markBookingNotificationsRead", "markMessageNotificationsRead", "sendMessage",
@@ -19,6 +20,9 @@ const BUSINESS_ACTIONS = [
 ];
 
 async function requestJson(path, { method = "GET", body } = {}) {
+  const dedupeKey = method === "GET" ? path : null;
+  if (dedupeKey && pendingGetRequests.has(dedupeKey)) return pendingGetRequests.get(dedupeKey);
+  const request = (async () => {
   try {
     const response = await fetch(path, {
       method,
@@ -32,6 +36,13 @@ async function requestJson(path, { method = "GET", body } = {}) {
     return { ok: true, payload };
   } catch {
     return { ok: false, error: "Could not reach the server. Check that the app is running and try again." };
+  }
+  })();
+  if (dedupeKey) pendingGetRequests.set(dedupeKey, request);
+  try {
+    return await request;
+  } finally {
+    if (dedupeKey && pendingGetRequests.get(dedupeKey) === request) pendingGetRequests.delete(dedupeKey);
   }
 }
 
@@ -58,17 +69,25 @@ export function useStore() {
 
 export function StoreProvider({ children }) {
   const [db, setDb] = useState(() => buildSeed());
+  const [revision, setRevision] = useState(null);
   const [ready, setReady] = useState(false);
   const [meId, setMeId] = useState(null);
   const [actionFeedback, setActionFeedback] = useState("idle");
   const dbRef = useRef(db);
+  const revisionRef = useRef(null);
+  const liveRefreshInFlight = useRef(false);
   const legacyDbRef = useRef(null);
   const pendingActions = useRef(0);
   const actionFeedbackTimers = useRef([]);
 
-  const acceptState = useCallback((next) => {
+  const acceptState = useCallback((next, nextRevision) => {
     dbRef.current = next;
     setDb(next);
+    if (nextRevision != null && Number.isFinite(Number(nextRevision))) {
+      const normalizedRevision = Number(nextRevision);
+      revisionRef.current = normalizedRevision;
+      setRevision(normalizedRevision);
+    }
   }, []);
 
   const runBusinessAction = useCallback(async (name, args) => {
@@ -82,10 +101,10 @@ export function StoreProvider({ children }) {
     try {
       const result = await requestJson("/api/state/action", { method: "POST", body: { action: name, args } });
       if (!result.ok) {
-        if (result.payload?.db) acceptState(result.payload.db);
+        if (result.payload?.db) acceptState(result.payload.db, result.payload.revision);
         return { ...(result.payload?.result || {}), ok: false, error: result.error };
       }
-      if (result.payload.db) acceptState(result.payload.db);
+      if (result.payload.db) acceptState(result.payload.db, result.payload.revision);
       return result.payload.result ?? { ok: true };
     } finally {
       pendingActions.current = Math.max(0, pendingActions.current - 1);
@@ -115,7 +134,7 @@ export function StoreProvider({ children }) {
     if (migratedLegacy) {
       try { localStorage.removeItem("whizzkids-app-db"); } catch { /* storage may be unavailable */ }
     }
-    acceptState(data.db);
+    acceptState(data.db, data.revision);
     return { ok: true, payload: data };
   }, [acceptState]);
 
@@ -130,6 +149,8 @@ export function StoreProvider({ children }) {
     if (!response.ok) return { ok: false, error: response.error };
     return { ok: true, available: response.payload.available || {} };
   }, []);
+
+  const me = useMemo(() => db.users?.find((user) => user.id === meId) ?? null, [db, meId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -155,7 +176,32 @@ export function StoreProvider({ children }) {
     return () => { cancelled = true; };
   }, [acceptState, loadState]);
 
-  const me = useMemo(() => db.users?.find((user) => user.id === meId) ?? null, [db, meId]);
+  useEffect(() => {
+    if (!ready || !me || revision == null) return;
+    let stopped = false;
+    const refreshIfChanged = async () => {
+      if (stopped || document.visibilityState !== "visible" || liveRefreshInFlight.current) return;
+      liveRefreshInFlight.current = true;
+      try {
+        const response = await requestJson("/api/state/revision");
+        if (!response.ok || !response.payload) return;
+        const latestRevision = Number(response.payload.revision);
+        if (Number.isFinite(latestRevision) && latestRevision > (revisionRef.current ?? 0)) {
+          await loadState(me);
+        }
+      } finally {
+        liveRefreshInFlight.current = false;
+      }
+    };
+    const timer = window.setInterval(() => void refreshIfChanged(), 2000);
+    document.addEventListener("visibilitychange", refreshIfChanged);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshIfChanged);
+    };
+  }, [ready, me, revision, loadState]);
+
   const store = useMemo(() => {
     const login = async (identifier, password) => {
       const result = await requestJson("/api/auth/login", { method: "POST", body: { identifier, password } });
@@ -178,11 +224,12 @@ export function StoreProvider({ children }) {
     const actions = Object.fromEntries(BUSINESS_ACTIONS.map((name) => [name, (...args) => runBusinessAction(name, args)]));
 
     return {
-      db, ready, me, actionFeedback, refreshSlotAvailability, refreshState,
+      db, ready, me, revision, actionFeedback, refreshSlotAvailability, refreshState,
       login,
       logout() {
         void requestJson("/api/auth/logout", { method: "POST" });
         setMeId(null);
+        setRevision(null);
         void loadPublicState().then(acceptState);
       },
       resetDemo() { this.logout(); },
@@ -190,7 +237,7 @@ export function StoreProvider({ children }) {
       registerTutor(value) { return register("/api/auth/register/tutor", value); },
       ...actions,
     };
-  }, [acceptState, actionFeedback, db, ready, me, refreshSlotAvailability, refreshState, runBusinessAction]);
+  }, [acceptState, actionFeedback, db, ready, me, revision, refreshSlotAvailability, refreshState, runBusinessAction]);
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }

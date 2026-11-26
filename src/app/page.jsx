@@ -101,7 +101,7 @@ export default function Home() {
       <section id="programs" className="mx-auto max-w-6xl scroll-mt-28 px-4 py-7 sm:py-10">
         <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">Our Programs</h2>
         <div className="mt-5 grid items-stretch gap-5 md:grid-cols-3 md:gap-7">
-          {PROGRAM_DETAILS.map((program) => <article key={program.title} className="rounded-2xl border-2 border-slate-300 bg-white/90 px-6 py-5 sm:px-7 sm:py-6">
+          {PROGRAM_DETAILS.map((program) => <article key={program.title} className="rounded-2xl border-2 border-slate-300 bg-white/90 px-6 py-5 transition duration-200 ease-out hover:-translate-y-1 hover:border-brand-300 hover:bg-white hover:shadow-[0_12px_28px_rgba(37,99,235,0.12)] motion-reduce:transition-none sm:px-7 sm:py-6">
             <h3 className="text-xl font-bold text-slate-800">{program.title}</h3><p className="text-sm font-bold text-brand-600">{program.ages}</p>
             <div className="mt-6 space-y-4 text-sm leading-[1.4rem] text-slate-700">{program.sections.map(([heading, description], index) => <p key={`${program.title}-${index}`}>{heading && <><b>{heading}</b><br/></>}{description}</p>)}</div>
           </article>)}

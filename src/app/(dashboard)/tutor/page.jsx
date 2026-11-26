@@ -20,7 +20,6 @@ export default function TutorHome() {
   const upcomingThisWeek = upcoming.filter((x) => dateIsThisWeek(x.date)).length;
   const students = new Set(s.db.sessions.filter((x) => x.tutorId === id && x.status !== "cancelled").map((x) => x.tuteeId));
   const studentsThisWeek = new Set(upcoming.filter((x) => dateIsThisWeek(x.date)).map((x) => x.tuteeId));
-  const pendingLeaves = s.db.leaves.filter((l) => l.tutorId === id && l.status === "pending").length;
   const nm = (tid) => firstName(s.db.tutees.find((x) => x.userId === tid)?.fullName, "Student");
   const subj = (bid, date, time) => { const booking = s.db.bookings.find((b) => b.id === bid); return booking?.sessionSlots?.find((slot) => slot.date === date && slot.time === time)?.subject || booking?.sessionSubjects?.[date] || booking?.subject || "Tutoring session"; };
   const date = parseISO(today);
@@ -54,8 +53,6 @@ export default function TutorHome() {
         <div className="mt-1 text-xs font-semibold opacity-75">+{studentsThisWeek.size} this week</div>
       </div>
     </section>
-
-    {pendingLeaves > 0 && <p className="text-sm text-slate-500">You have {pendingLeaves} leave request(s) awaiting admin approval. <Link href="/tutor/leave" className="font-bold text-brand-600">View leave requests →</Link></p>}
 
     <section>
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">

@@ -92,18 +92,18 @@ export default function Approvals({ embedded = false, defaultTab = "schedules" }
       { id: "leaves", label: "Tutor leaves", count: leaves.filter((leave) => leave.status === "pending").length },
     ]} value={tab} onChange={setTab} />}
 
-    {tab === "schedules" && <Card className="space-y-8 !p-6 sm:!p-8">
+    {tab === "schedules" && <Card className={`${embedded ? "!rounded-[22px] !border-0 !bg-[#f7fbfd] !p-6 shadow-[0_12px_36px_rgba(15,23,42,0.08)] sm:!p-8" : "!p-6 sm:!p-8"} space-y-8`}>
       <section>
         <h2 className="mb-4 text-2xl font-extrabold tracking-tight text-slate-900">Tutor Weekly Schedule</h2>
         {activeTutors.length === 0 ? <Empty>No active tutors to edit.</Empty> : <>
-          <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+          <div className="mb-5 flex flex-wrap items-end gap-4">
             <Field label="Tutor">
               <Select className="min-w-[240px] !rounded-2xl !border-2 !border-slate-300 !px-4 !py-3 !text-base font-semibold" value={scheduleTutor} onChange={(event) => { setScheduleTutorSelection(event.target.value); setScheduleResult(null); }}>
                 <option value="">Select Tutor</option>
                 {activeTutors.map((tutor) => <option key={tutor.userId} value={tutor.userId}>{tutor.fullName}</option>)}
               </Select>
             </Field>
-            <Button variant="secondary" className="!rounded-full !border-2 !border-slate-300 !px-6" onClick={() => { setScheduleDays({}); setScheduleResult(null); }}>Clear</Button>
+            {!embedded && <Button variant="secondary" className="!rounded-full !border-2 !border-slate-300 !px-6" onClick={() => { setScheduleDays({}); setScheduleResult(null); }}>Clear</Button>}
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {WEEK.map((day) => {
@@ -118,7 +118,7 @@ export default function Approvals({ embedded = false, defaultTab = "schedules" }
             })}
           </div>
           <div className="mt-6 flex flex-wrap items-center justify-end gap-4">
-            <Button disabled={!scheduleTutor || Object.keys(scheduleDays).length !== 5} className="!rounded-2xl !px-6 !py-3 !text-base" onClick={async () => {
+            <Button disabled={!scheduleTutor || !Object.keys(scheduleDays).length} className="!rounded-2xl !px-6 !py-3 !text-base" onClick={async () => {
               const modalities = db.tutorSchedules?.[scheduleTutor]?.modalities || ["online", "face-to-face"];
               const result = await s.setTutorWeeklySchedule(scheduleTutor, scheduleDays, modalities);
               setScheduleResult(result.ok
@@ -133,27 +133,27 @@ export default function Approvals({ embedded = false, defaultTab = "schedules" }
       <section>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">Team Schedule Overview</h2>
-          <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 text-sm">
-            <button className="rounded-lg px-2 py-1.5 text-slate-600 hover:bg-white" onClick={() => changeWeek(-1)}>‹ <span className="hidden sm:inline">Prev</span></button>
-            <span className="px-2 font-semibold">{scheduleDateLabel(selectedWeek[0].date).replace(/, \d{4}$/, "")} – {scheduleDateLabel(selectedWeek[5].date)}</span>
-            <button className="rounded-lg px-2 py-1.5 text-slate-600 hover:bg-white" onClick={() => changeWeek(1)}><span className="hidden sm:inline">Next</span> ›</button>
-            {!isCurrentWeek && <button className="rounded-lg bg-brand-600 px-3 py-1.5 font-bold text-white" onClick={() => setWeekStart(mondayOf(new Date()))}>This Week</button>}
+          <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 bg-white p-1 text-sm shadow-sm">
+            <button className="rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-50" onClick={() => changeWeek(-1)}>‹ Prev</button>
+            <button className={`rounded-lg px-3 py-2 font-bold ${isCurrentWeek ? "bg-brand-600 text-white" : "text-slate-600 hover:bg-slate-50"}`} onClick={() => setWeekStart(mondayOf(new Date()))}>This Week</button>
+            <button className="rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-50" onClick={() => changeWeek(1)}>Next ›</button>
           </div>
         </div>
-        <div className="max-h-[65vh] overflow-auto">
+        <div className="max-h-[65vh] overflow-auto rounded-2xl bg-white shadow-[0_8px_28px_rgba(15,23,42,0.08)]">
           <table className="w-full min-w-[760px] border-separate border-spacing-0 text-center">
-            <thead className="sticky top-0 z-10"><tr className="bg-brand-600 text-white">
+            <thead className="sticky top-0 z-10"><tr className="bg-[#f7f9fb] text-slate-500">
               <th className="rounded-tl-xl px-3 py-4 text-left">Tutor</th>
-              {selectedWeek.map(({ day, date }) => <th key={day} className="px-2 py-3"><div className="text-sm font-extrabold uppercase">{day}</div><div className="mt-0.5 text-xs font-medium">{scheduleDateLabel(date)}</div></th>)}
+              {selectedWeek.map(({ day, date }) => <th key={day} className="px-2 py-3"><div className="text-sm font-extrabold">{day}</div><div className="mt-0.5 text-xs font-medium text-slate-400">{scheduleDateLabel(date)}</div></th>)}
             </tr></thead>
-            <tbody>{activeTutors.map((tutor, tutorIndex) => <tr key={tutor.userId} className={tutorIndex % 2 ? "bg-blue-100" : "bg-white"}>
-              <th className="px-3 py-5 text-left font-semibold">{tutor.fullName}</th>
+            <tbody>{activeTutors.map((tutor) => <tr key={tutor.userId} className="bg-white [&:not(:last-child)>*]:border-b [&:not(:last-child)>*]:border-slate-200">
+              <th className="px-3 py-4 text-left font-semibold">{tutor.fullName}</th>
               {selectedWeek.map(({ day }) => {
                 const working = !!db.tutorSchedules?.[tutor.userId]?.days?.[day];
                 const date = selectedWeek.find((item) => item.day === day)?.date;
                 const dateISO = date && asISO(date);
                 const onLeave = dateISO && db.leaves.some((leave) => leave.tutorId === tutor.userId && leave.status === "approved" && (leave.dates ? leave.dates.includes(dateISO) : dateISO >= leave.startDate && dateISO <= leave.endDate));
-                return <td key={day} className={`px-2 py-5 text-sm font-medium ${onLeave ? "text-orange-600" : working ? "text-green-600" : "text-red-500"}`}>{onLeave ? "On Leave" : working ? "Working" : db.tutorSchedules?.[tutor.userId] ? "Day Off" : "—"}</td>;
+                const status = onLeave ? "Leave" : working ? "Working" : db.tutorSchedules?.[tutor.userId] ? "Day Off" : "—";
+                return <td key={day} className="px-2 py-4"><span className={`inline-flex min-w-24 justify-center rounded-full px-3 py-1.5 text-xs font-semibold shadow-[0_3px_10px_rgba(15,23,42,0.08)] ${onLeave ? "bg-red-100 text-red-500" : working ? "bg-[#e1efd6] text-[#6a9f3c]" : "bg-[#d0d0d0] text-slate-600"}`}>{status}</span></td>;
               })}
             </tr>)}</tbody>
           </table>

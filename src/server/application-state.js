@@ -107,6 +107,7 @@ export async function readApplicationState(connection, { lock = false, create = 
   const suffix = lock ? " FOR UPDATE" : "";
   const [rows] = await connection.query(`SELECT state_json, revision FROM application_state WHERE id = 1${suffix}`);
   let initialized = rows.length > 0;
+  let revision = initialized ? Number(rows[0].revision) : 0;
   const legacyState = initialized ? jsonValue(rows[0].state_json, buildSeed()) : null;
   let state = legacyState ?? buildSeed();
   state = { ...buildSeed(), ...state };
@@ -130,6 +131,7 @@ export async function readApplicationState(connection, { lock = false, create = 
       "UPDATE application_state SET state_json = ?, revision = revision + 1 WHERE id = 1",
       [JSON.stringify(normalized.paymentSettings ? { paymentSettings: normalized.paymentSettings } : {})],
     );
+    revision += 1;
   }
 
   if (create && !initialized) {
@@ -137,9 +139,10 @@ export async function readApplicationState(connection, { lock = false, create = 
       "INSERT IGNORE INTO application_state (id, state_json, revision) VALUES (1, '{}', 1)",
     );
     initialized = true;
+    revision = 1;
   }
 
-  return { state, initialized };
+  return { state, initialized, revision };
 }
 
 export async function readCurrentApplicationState() {
@@ -201,6 +204,7 @@ export async function readStateForUser(user) {
         await connection.execute(
           "UPDATE application_state SET revision = revision + 1 WHERE id = 1",
         );
+        current.revision += 1;
       }
       await connection.commit();
       return current;
@@ -226,7 +230,7 @@ export async function initializeApplicationState(importedState, user) {
     if (!insertResult.affectedRows) {
       const current = await readApplicationState(connection, { lock: true });
       await connection.commit();
-      return current.state;
+      return current;
     }
 
     const state = importedState && typeof importedState === "object" ? importedState : initial;
@@ -254,7 +258,7 @@ export async function initializeApplicationState(importedState, user) {
       "UPDATE application_state SET state_json = '{}', revision = revision + 1 WHERE id = 1",
     );
     await connection.commit();
-    return normalized;
+    return { state: normalized, initialized: true, revision: 1 };
   } catch (error) {
     await connection.rollback().catch(() => undefined);
     throw error;

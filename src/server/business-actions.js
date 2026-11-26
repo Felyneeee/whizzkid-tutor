@@ -25,7 +25,7 @@ export function createBusinessActions({ get, mutate, actorId }) {
   const nameOf = (d, id) => {
     const profile = d.tutees.find((t) => t.userId === id) || d.tutors.find((t) => t.userId === id);
     const account = d.users.find((u) => u.id === id);
-    return profile?.fullName || (account?.role === "admin" || id === ADMIN_ID ? "System Admin" : account?.username) || (account?.role === "tutor" ? "Tutor" : account?.role === "tutee" ? "Tutee" : "User");
+    return profile?.fullName || (account?.role === "admin" || id === ADMIN_ID ? "Admin" : account?.username) || (account?.role === "tutor" ? "Tutor" : account?.role === "tutee" ? "Tutee" : "User");
   };
   const firstNameOf = (d, id) => firstName(nameOf(d, id), "User");
   const playgroupTutorFree = (d, tutorId, dates, ignoreBookingId, ignoreCohortId) => dates.every((date) => {
@@ -854,10 +854,12 @@ export function createBusinessActions({ get, mutate, actorId }) {
       const bookings = get().bookings.filter((entry) => bookingIds.includes(entry.id));
       const first = bookings[0];
       if (!first || bookings.length !== bookingIds.length || bookings.some((booking) => booking.program !== "reading" || !["ready_for_matching", "to_pay", "awaiting_payment_approval", "confirmed"].includes(booking.status) || booking.tuteeId !== first.tuteeId || booking.assessmentId !== first.assessmentId)) return { ok: false, error: "This Reading Program assignment is no longer awaiting review." };
+      const rejectedAt = nowISO();
       mutate((n) => {
           bookings.forEach((booking) => {
               const target = n.bookings.find((entry) => entry.id === booking.id);
               target.status = "rejected";
+              target.cancelledAt = rejectedAt;
               target.terminationReason = String(reason || "The requested schedule is not available.");
           });
           pushNotif(n, first.tuteeId, `We couldn't confirm your Reading Program assignment. ${reason} Please choose another schedule.`, ["web", "email", "sms"]);
@@ -920,11 +922,13 @@ export function createBusinessActions({ get, mutate, actorId }) {
       return { ok: true, missing };
   },
   rejectBooking(bookingId, reason) {
+      const rejectedAt = nowISO();
       mutate((n) => {
           const b = n.bookings.find((x) => x.id === bookingId);
           if (!b)
               return;
           b.status = "rejected";
+          b.cancelledAt = rejectedAt;
           b.scheduleProposal = undefined;
           n.sessions.filter((session) => session.bookingId === bookingId && session.status !== "completed").forEach((session) => { session.status = "cancelled"; });
           b.terminationReason = reason;

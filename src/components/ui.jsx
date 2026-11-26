@@ -106,9 +106,9 @@ export function Modal({ open, onClose, title, children, wide }) {
     if (!open)
         return null;
     return (<div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4" onClick={onClose}>
-      <div className={cn("my-8 w-full rounded-2xl bg-white p-6 shadow-xl", wide ? "max-w-3xl" : "max-w-lg")} onClick={(e) => e.stopPropagation()}>
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-extrabold">{title}</h3>
+      <div className={cn("my-3 max-h-[calc(100dvh-1.5rem)] w-full overflow-y-auto rounded-2xl bg-white p-4 shadow-xl sm:my-8 sm:max-h-[calc(100vh-4rem)] sm:p-6", wide ? "max-w-3xl" : "max-w-lg")} onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <h3 className="min-w-0 break-words text-lg font-extrabold">{title}</h3>
           <button onClick={onClose} className="rounded-lg p-1 hover:bg-slate-100" aria-label="Close">
             <X className="h-5 w-5"/>
           </button>

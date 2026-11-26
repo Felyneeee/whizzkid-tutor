@@ -52,7 +52,7 @@ function logActivity(state, userId, text) {
 function personName(state, id) {
   const profile = state.tutors.find((entry) => entry.userId === id) || state.tutees.find((entry) => entry.userId === id);
   const account = state.users.find((entry) => entry.id === id);
-  return profile?.fullName || (account?.role === "admin" ? "System Admin" : account?.username) || "User";
+  return profile?.fullName || (account?.role === "admin" ? "Admin" : account?.username) || "User";
 }
 
 export async function POST(request) {
@@ -68,14 +68,14 @@ export async function POST(request) {
 
     connection = await mysqlPool.getConnection();
     await connection.beginTransaction();
-    let { state, initialized } = await readApplicationState(connection, { lock: true });
+    let { state, initialized, revision } = await readApplicationState(connection, { lock: true });
     state = unpackExtendedState(state);
     if (!initialized && user.role !== "admin") {
       await connection.rollback();
       return NextResponse.json({ error: "An administrator must sign in once to initialize shared app data." }, { status: 409 });
     }
     if (!initialized) {
-    ({ state, initialized } = await readApplicationState(connection, { lock: true, create: true }));
+    ({ state, initialized, revision } = await readApplicationState(connection, { lock: true, create: true }));
       state = unpackExtendedState(state);
     }
     const authorizationState = structuredClone(state);
@@ -532,7 +532,7 @@ export async function POST(request) {
     const result = await handler(...permission.args);
     if (result && result.ok === false) {
       await connection.rollback();
-      return NextResponse.json({ error: result.error, result, db: stateVisibleToUser(nextState, user) }, { status: 409 });
+      return NextResponse.json({ error: result.error, result, db: stateVisibleToUser(nextState, user), revision }, { status: 409 });
     }
     const matchingActions = ["confirmBooking", "confirmBookingSession", "confirmReadingAssignment"];
     const autoPairedIds = body.action === "submitTutorialBooking" && result?.autoPaired ? [result.bookingId] : [];
@@ -571,7 +571,7 @@ export async function POST(request) {
       );
     }
     await connection.commit();
-    return NextResponse.json({ result: result ?? { ok: true }, db: stateVisibleToUser(nextState, user) });
+    return NextResponse.json({ result: result ?? { ok: true }, db: stateVisibleToUser(nextState, user), revision: revision + 1 });
   } catch (error) {
     if (connection) await connection.rollback().catch(() => undefined);
     if (error instanceof RequestBodyError) {

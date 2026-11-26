@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { BookOpen, Check, CloudUpload, FileText, GraduationCap, Pencil, UserRound, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Button, Chips, Field, Input } from "@/components/ui";
 import { SUBJECTS } from "@/lib/constants";
 import { ageFromBirthday } from "@/lib/dates";
@@ -15,6 +15,8 @@ const choicesForGradeBands = (bands = []) => bands.flatMap((band) => {
   if (band === "Junior High") return ["High School"];
   return GRADE_CHOICES.includes(band) ? [band] : [];
 });
+const tutorDraftKey = (id) => `whizzkids-tutor-profile-draft-${id}`;
+const tutorFields = (t) => ({ form: { fullName: t.fullName, age: String(t.age ?? ""), contact: t.contact || "", birthday: t.birthday || "" }, subjects: t.subjects || [], bands: choicesForGradeBands(t.gradeBands), photo: t.photo || "", resume: { name: t.resumeName || "", data: t.resumeData || "" } });
 
 function Avatar({ photo, large = false }) {
   return <div className={`relative grid shrink-0 place-items-center overflow-hidden rounded-full bg-[#dce2f0] text-slate-400 ${large ? "h-40 w-40" : "h-32 w-32"}`}>
@@ -45,13 +47,42 @@ export default function TutorProfilePage() {
   const [msg, setMsg] = useState(null);
   const [saving, setSaving] = useState(false);
   const [savedModal, setSavedModal] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
   const set = (k) => (e) => setF((previous) => ({ ...previous, [k]: e.target.value }));
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        const raw = localStorage.getItem(tutorDraftKey(id));
+        if (raw) {
+          const draft = JSON.parse(raw);
+          if (draft?.fields) {
+            const initial = tutorFields(t);
+            setF({ ...initial.form, ...draft.fields.form });
+            setSubjects(draft.fields.subjects || initial.subjects);
+            setBands(draft.fields.bands || initial.bands);
+            setPhoto(draft.fields.photo ?? initial.photo);
+            setResume(draft.fields.resume || initial.resume);
+            setEditing(true);
+          }
+        }
+      } catch { /* Ignore an unavailable or invalid local draft. */ }
+      setDraftReady(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  // The profile is loaded before this page is available, and the draft is read once per user.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+  useEffect(() => {
+    if (!draftReady || !editing) return;
+    try { localStorage.setItem(tutorDraftKey(id), JSON.stringify({ fields: { form: f, subjects, bands, photo, resume } })); } catch { /* Storage may be unavailable. */ }
+  }, [draftReady, editing, id, f, subjects, bands, photo, resume]);
 
   const up = async (file, kind) => {
     if (!file) return;
     try {
       const data = kind === "photo" ? await readFileAsDataURL(file) : await readPdfAsDataURL(file);
-      if (kind === "photo") setPhoto(data);
+      if (kind === "photo") { setPhoto(data); setEditing(true); }
       else setResume({ name: file.name, data });
     } catch (e) {
       setMsg({ kind: "error", text: e.message });
@@ -64,6 +95,7 @@ export default function TutorProfilePage() {
     try {
       const result = await s.saveTutorProfile(id, { fullName: f.fullName, age: f.age ? Number(f.age) : null, contact: f.contact, birthday: f.birthday || undefined, subjects, gradeBands: [...new Set(bands)], photo, resumeName: resume.name, resumeData: resume.data });
       if (!result?.ok) throw new Error(result?.error || "Profile could not be saved. Please try again.");
+      try { localStorage.removeItem(tutorDraftKey(id)); } catch { /* Storage may be unavailable. */ }
       setEditing(false);
       setSavedModal(true);
     } catch (e) {
@@ -71,6 +103,13 @@ export default function TutorProfilePage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const cancel = () => {
+    const initial = tutorFields(t);
+    setF(initial.form); setSubjects(initial.subjects); setBands(initial.bands); setPhoto(initial.photo); setResume(initial.resume);
+    setEditing(false); setMsg(null);
+    try { localStorage.removeItem(tutorDraftKey(id)); } catch { /* Storage may be unavailable. */ }
   };
 
   const formattedBirthday = f.birthday ? new Date(`${f.birthday}T00:00:00`).toLocaleDateString("en-US") : "Not provided";
@@ -81,8 +120,8 @@ export default function TutorProfilePage() {
 
     {editing ? <section className="relative mt-28 rounded-2xl bg-white px-6 pb-6 pt-6 shadow-sm sm:px-12">
       <div className="absolute -top-24 left-1/2 -translate-x-1/2"><Avatar photo={photo} large/><label className="absolute -bottom-1 -right-1 z-10 grid h-8 w-8 cursor-pointer place-items-center rounded-lg bg-white text-slate-600 shadow" aria-label="Change profile photo"><Pencil className="h-5 w-5"/><input className="sr-only" type="file" accept="image/*" onChange={(e) => up(e.target.files?.[0], "photo")}/></label></div>
-      <div className="mb-8 hidden justify-end sm:flex"><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
-      <div className="mb-6 mt-14 flex justify-center sm:hidden"><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
+      <div className="mb-8 hidden justify-end gap-3 sm:flex"><Button disabled={saving} onClick={cancel} className="min-w-32 rounded-2xl bg-slate-200 text-slate-700 hover:bg-slate-300">Cancel</Button><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
+      <div className="mb-6 mt-14 flex justify-center gap-3 sm:hidden"><Button disabled={saving} onClick={cancel} className="min-w-32 rounded-2xl bg-slate-200 text-slate-700 hover:bg-slate-300">Cancel</Button><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
       <div className="border-l-4 border-slate-100 pl-5 sm:pl-6">
         <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
           <Field label="Full name"><Input value={f.fullName} onChange={set("fullName")} className="rounded-2xl py-3"/></Field>

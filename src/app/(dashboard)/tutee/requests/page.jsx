@@ -7,6 +7,7 @@ import { Alert, Badge, Button, Empty, Field, Input, Modal, PageHeader, Select, T
 import { HOURS } from "@/lib/constants";
 import { fmtDate, fmtTime, todayISO, weekday, isAssessmentOutdated } from "@/lib/dates";
 import { useStore } from "@/lib/store";
+import { loadStateWhenRevisionChanges } from "@/lib/state-revision";
 
 const TABS = [
   { id: "all", label: "All" },
@@ -140,6 +141,7 @@ export default function TuteeRequests() {
   }, [reschedule, bookingRecords, sessionRecords, refreshSlotAvailability]);
 
   useEffect(() => {
+    let knownRevision = s.revision;
     const signatureOf = (db) => JSON.stringify({
       paymentSettings: db?.paymentSettings,
       bookings: (db?.bookings || [])
@@ -155,10 +157,9 @@ export default function TuteeRequests() {
     const refreshIfChanged = async () => {
       if (document.visibilityState !== "visible") return;
       try {
-        const response = await fetch("/api/state", { credentials: "same-origin", cache: "no-store" });
-        if (!response.ok) return;
-        const payload = await response.json();
-        if (signatureOf(payload.db) !== signature) window.location.reload();
+        const refreshed = await loadStateWhenRevisionChanges(knownRevision);
+        knownRevision = refreshed.revision;
+        if (refreshed.db && signatureOf(refreshed.db) !== signature) window.location.reload();
       } catch { /* Keep the current page if the refresh check cannot reach the server. */ }
     };
     const timer = window.setInterval(refreshIfChanged, 8000);
@@ -168,7 +169,7 @@ export default function TuteeRequests() {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [id, s.db, s.db.bookings, s.db.sessions]);
+  }, [id, s.db, s.db.bookings, s.db.sessions, s.revision]);
 
   const bookings = s.db.bookings.filter((booking) => isMyBooking(booking) && statusOf(booking)).slice().reverse();
   const readingAssessment = [...s.db.assessments].reverse().find((assessment) => assessment.tuteeId === id);
@@ -246,8 +247,8 @@ export default function TuteeRequests() {
   return <div className="space-y-6">
     <PageHeader title="My Bookings"/>
     <section className="space-y-4 rounded-3xl bg-white p-4 shadow-sm sm:p-6">
-      <nav className="flex gap-1 overflow-x-auto rounded-2xl bg-slate-100 p-1" aria-label="Program category">
-        {[{id:"academic",label:"Academic Program"},{id:"reading",label:"Reading Program"},{id:"playgroup",label:"Playgroup Program"}].map((item) => <button key={item.id} type="button" onClick={() => setProgram(item.id)} className={`shrink-0 rounded-xl px-3 py-2 text-sm font-bold ${program === item.id ? "bg-white text-brand-600 shadow-sm" : "text-slate-600"}`}>{item.label}{programCounts(item.id) > 0 && <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-extrabold text-white" aria-label={`${programCounts(item.id)} pending requests`}>{programCounts(item.id)}</span>}</button>)}
+      <nav className="grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1" aria-label="Program category">
+        {[{id:"academic",label:"Academic Program"},{id:"reading",label:"Reading Program"},{id:"playgroup",label:"Playgroup Program"}].map((item) => <button key={item.id} type="button" onClick={() => setProgram(item.id)} className={`flex min-w-0 items-center justify-center gap-1 rounded-xl px-1.5 py-2 text-center text-xs font-bold leading-tight sm:gap-2 sm:px-3 sm:text-sm ${program === item.id ? "bg-white text-brand-600 shadow-sm" : "text-slate-600"}`}><span>{item.label}</span>{programCounts(item.id) > 0 && <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-extrabold text-white" aria-label={`${programCounts(item.id)} pending requests`}>{programCounts(item.id)}</span>}</button>)}
       </nav>
       {program === "reading" && readingAssessment && <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-lg sm:p-8" aria-label="Initial assessment">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -260,8 +261,8 @@ export default function TuteeRequests() {
         {readingAssessment.status === "pending_admin_scheduling" && <p className="mt-4 text-center text-sm font-semibold text-slate-500">Waiting for the admin to schedule your initial assessment.</p>}
       </section>}
       {program === "reading" && readingAssessment?.status === "booked" && <p className="text-center text-sm font-semibold text-slate-500">No reading sessions yet? <Link href="/tutee/book?program=reading" className="font-extrabold text-brand-600 hover:underline">Book for a reading session <span aria-hidden="true">⟶</span></Link></p>}
-      <div className="grid grid-cols-5 rounded-full border-2 border-brand-500 p-1 text-center text-xs font-bold sm:text-sm">
-        {TABS.map((item) => { const count = newUpdateCount(item.id); return <button key={item.id} type="button" onClick={() => setTab(item.id)} className={`inline-flex w-full items-center justify-center gap-1.5 rounded-full px-1 py-2 text-center transition sm:px-3 ${tab === item.id ? "bg-brand-600 text-white shadow-sm" : "text-slate-700 hover:bg-brand-50"}`}>{item.label}{count > 0 && <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-extrabold leading-none text-white" aria-label={`${count} new booking updates`}>{count}</span>}</button>; })}
+      <div className="grid grid-cols-3 gap-1 rounded-2xl border-2 border-brand-500 p-1 text-center text-xs font-bold sm:grid-cols-5 sm:gap-0 sm:rounded-full">
+        {TABS.map((item) => { const count = newUpdateCount(item.id); return <button key={item.id} type="button" onClick={() => setTab(item.id)} className={`inline-flex min-w-0 w-full items-center justify-center gap-1 rounded-full px-1 py-2 text-center leading-tight transition sm:gap-1.5 sm:px-3 sm:text-sm ${tab === item.id ? "bg-brand-600 text-white shadow-sm" : "text-slate-700 hover:bg-brand-50"}`}>{item.label}{count > 0 && <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-extrabold leading-none text-white" aria-label={`${count} new booking updates`}>{count}</span>}</button>; })}
       </div>
 
       {filteredBookings.length === 0

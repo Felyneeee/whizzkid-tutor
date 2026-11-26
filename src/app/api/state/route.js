@@ -25,10 +25,10 @@ export async function GET(request) {
   try {
     const user = await authenticatedUser(request);
     if (!user) return NextResponse.json({ error: "Please log in." }, { status: 401 });
-    const { state: loadedState, initialized } = await readStateForUser(user);
+    const { state: loadedState, initialized, revision } = await readStateForUser(user);
     const visibleState = unpackPaymentMetadata(structuredClone(loadedState));
     queueCompletedReadingBookings(visibleState);
-    return NextResponse.json({ db: stateVisibleToUser(visibleState, user), initialized });
+    return NextResponse.json({ db: stateVisibleToUser(visibleState, user), initialized, revision }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("[state/read]", error?.code ?? "UNKNOWN", error?.message ?? "No error detail");
     return NextResponse.json({ error: "Could not load app data from MySQL." }, { status: 503 });

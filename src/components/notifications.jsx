@@ -15,6 +15,7 @@ export function notificationDestination(notification, role) {
 
 export function notificationDisplayText(notification, db) {
   let text = String(notification.text || "");
+  text = text.replace(/^(New message from )System$/i, "$1Admin");
   const names = new Map();
   for (const user of db.users || []) {
     const profile = user.role === "tutor"
@@ -22,7 +23,7 @@ export function notificationDisplayText(notification, db) {
       : user.role === "tutee"
         ? db.tutees?.find((entry) => entry.userId === user.id)
         : null;
-    names.set(user.id, profile?.fullName || user.username || (user.role === "admin" ? "System Admin" : user.role === "tutor" ? "Tutor" : "Tutee"));
+    names.set(user.id, profile?.fullName || user.username || (user.role === "admin" ? "Admin" : user.role === "tutor" ? "Tutor" : "Tutee"));
   }
   for (const [id, name] of [...names.entries()].sort(([a], [b]) => b.length - a.length)) {
     const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
