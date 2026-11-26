@@ -215,15 +215,31 @@ export default function Classes({ embedded = false } = {}) {
 
       {pageError && <div className="mb-4"><Alert kind="error">{pageError}</Alert></div>}
       <div className="space-y-6">
-        <Card className="space-y-4">
-          <h2 className="text-xl font-extrabold">Playgroup Tutor Monitoring</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-2xl bg-amber-100 px-6 py-5 text-amber-600"><div className="text-4xl font-extrabold">{availablePlaygroupTutorCount}</div><div className="text-lg font-extrabold">Available Tutors</div></div>
-            <div className="rounded-2xl bg-amber-100 px-6 py-5 text-amber-600"><div className="text-4xl font-extrabold">{unassignedPlaygroupTutorCount}</div><div className="text-lg font-extrabold">Not Assigned Yet</div></div>
+        <section className="space-y-4">
+          <h2 className="text-2xl font-extrabold text-slate-800">Playgroup Tutor Monitoring</h2>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="flex min-h-[102px] items-center gap-5 rounded-2xl bg-[#cfe2ff] px-7 py-5 text-[#2463eb] shadow-sm">
+              <svg aria-hidden="true" viewBox="0 0 48 48" className="h-12 w-12 fill-current"><circle cx="24" cy="13" r="10"/><path d="M5 45c1-12 7-19 19-19s18 7 19 19H5z"/></svg>
+              <div><div className="text-3xl font-extrabold">{tutors.length}</div><div className="font-extrabold">Total Tutors</div></div>
+            </div>
+            <div className="flex min-h-[102px] items-center gap-5 rounded-2xl bg-[#dceecd] px-7 py-5 text-[#70aa48] shadow-sm">
+              <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-full bg-[#78b84b] text-3xl font-black text-white">✓</span>
+              <div><div className="text-3xl font-extrabold">{availablePlaygroupTutorCount}</div><div className="font-extrabold">Available Tutors</div></div>
+            </div>
+            <div className="flex min-h-[102px] items-center gap-5 rounded-2xl bg-[#fbefca] px-7 py-5 text-[#d49a00] shadow-sm">
+              <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-full bg-[#efa900] text-3xl font-black text-white">×</span>
+              <div><div className="text-3xl font-extrabold">{unassignedPlaygroupTutorCount}</div><div className="font-extrabold">Not Assigned Yet</div></div>
+            </div>
           </div>
-          <h2 className="pt-2 text-xl font-extrabold">Playgroup Tutor Monitoring</h2>
-          <div className="overflow-x-auto rounded-2xl bg-white shadow-lg"><table className="w-full min-w-[620px] border-collapse text-center"><thead className="bg-slate-50 text-slate-500"><tr>{["Tutor", "Monday", "Wednesday", "Friday", "Total"].map((label) => <th key={label} className="px-4 py-3">{label}</th>)}</tr></thead><tbody>{tutorHandled.map(({ tutor, counts, total }, index) => <tr key={tutor.userId} className={index % 2 ? "bg-blue-100" : "bg-white"}><td className="border-t border-slate-200 px-5 py-4">{tutor.fullName}</td><td className="border border-slate-200 px-4 py-3">{counts[1]}</td><td className="border border-slate-200 px-4 py-3">{counts[3]}</td><td className="border border-slate-200 px-4 py-3">{counts[5]}</td><td className="border border-slate-200 px-4 py-3">{total}</td></tr>)}</tbody></table></div>
-        </Card>
+          <h2 className="pt-5 text-2xl font-extrabold text-slate-800">Playgroup Sessions Handled</h2>
+          <div className="overflow-hidden rounded-2xl bg-white shadow-lg">
+            <div className="overflow-x-auto"><table className="w-full min-w-[620px] border-collapse text-center text-sm">
+              <thead className="bg-slate-50 text-slate-500"><tr>{["Tutor", "Monday", "Wednesday", "Friday", "Total"].map((label) => <th key={label} className="px-5 py-4 font-bold">{label}</th>)}</tr></thead>
+              <tbody>{tutorHandled.map(({ tutor, counts, total }) => <tr key={tutor.userId} className="border-t border-[#d1d1d1] text-slate-700"><td className="px-5 py-4">{tutor.fullName}</td><td className="px-5 py-4">{counts[1] ? counts[1] + (counts[1] === 1 ? " session" : " sessions") : "0"}</td><td className="px-5 py-4">{counts[3] ? counts[3] + (counts[3] === 1 ? " session" : " sessions") : "0"}</td><td className="px-5 py-4">{counts[5] ? counts[5] + (counts[5] === 1 ? " session" : " sessions") : "0"}</td><td className="px-5 py-4">{total ? total + (total === 1 ? " session" : " sessions") : "0"}</td></tr>)}</tbody>
+            </table></div>
+          </div>
+        </section>
+        <section className="space-y-4 rounded-3xl bg-white/80 p-5 shadow-lg sm:p-8">
         <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-2xl font-extrabold">Playgroup Cohorts</h2><Button onClick={openCohortForm}>Schedule Cohort</Button></div>
         {s.db.cohorts.length === 0 && <Card><p className="text-sm text-slate-500">No cohorts scheduled yet. Create a cohort to open six slots for the next four-week playgroup cycle.</p></Card>}
         {s.db.cohorts.map((cohort) => {
@@ -238,7 +254,7 @@ export default function Classes({ embedded = false } = {}) {
           const canChangeTutors = dates.some((date) => date >= today);
           return <Card key={cohort.id} className="space-y-4 border-0 bg-neutral-100 p-5 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div><h2 className="text-lg font-extrabold">{cohort.label}</h2><p className="text-sm text-slate-500">12 sessions · Monday, Wednesday and Friday · {fmtTime(cohort.time || "10:00")} · {fmtDate(startDate)}–{fmtDate(endDate)}</p></div>
+              <div><h2 className="text-lg font-extrabold">{cohort.label}</h2><p className="text-sm text-slate-500">{fmtDate(startDate)} until {fmtDate(endDate)} · Mon | Wed | Fri · {dates.length} sessions</p></div>
               <div className="flex gap-2"><Button size="sm" variant={editingAssignments[cohort.id] ? "success" : "secondary"} onClick={() => { if (editingAssignments[cohort.id]) void saveSchedule(cohort); else { setWeekdayDrafts((current) => ({ ...current, [cohort.id]: { ...(cohort.weekdayTutorIds || {}) } })); setReplacementDrafts((current) => ({ ...current, [cohort.id]: [...Object.entries(cohort.dateTutorOverrides || {}).map(([date,tutorId]) => ({ date, tutorId })), { date: "", tutorId: "" }] })); setEditingAssignments((current) => ({ ...current, [cohort.id]: true })); } }}>{scheduleSaveBusy[cohort.id] ? "Saving…" : editingAssignments[cohort.id] ? "Save" : "Edit"}</Button><Button size="sm" variant="danger" onClick={() => deleteCohort(cohort)}>Delete</Button></div>
             </div>
 
@@ -252,7 +268,7 @@ export default function Classes({ embedded = false } = {}) {
                   const options = tutorOptionsForDay(cohort, day, dates);
                   const assignedId = cohort.weekdayTutorIds?.[day] || "";
                   const assignedIsAvailable = options.some((tutor) => tutor.userId === assignedId);
-                  return <Field key={day} label={DAY_NAMES[day]}>
+                  return <Field key={day} label={DAY_NAMES[day].slice(0, 3).toUpperCase()}>
                     <Select disabled={!canChangeTutors || !editingAssignments[cohort.id]} value={(weekdayDrafts[cohort.id] || cohort.weekdayTutorIds || {})[day] || (assignedIsAvailable ? assignedId : "")} onChange={(event) => setWeekdayDrafts((current) => ({ ...current, [cohort.id]: { ...(current[cohort.id] || cohort.weekdayTutorIds || {}), [day]: event.target.value } }))}>
                       <option value="">{options.length ? "Select tutor" : "No available tutor"}</option>
                       {options.map((tutor) => <option key={tutor.userId} value={tutor.userId}>{tutor.fullName}</option>)}
@@ -301,6 +317,7 @@ export default function Classes({ embedded = false } = {}) {
             </section>
           </Card>;
         })}
+        </section>
       </div>
       <Modal open={cohortOpen} onClose={() => setCohortOpen(false)} title={editingCohortId ? "Edit playgroup cohort" : "Schedule a playgroup cohort"}>
         <form className="space-y-4" onSubmit={saveCohort}>
