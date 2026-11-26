@@ -355,7 +355,7 @@ export default function TuteeRequests() {
             ];
             return <article key={booking.id} className="rounded-2xl border-2 border-slate-300 bg-white p-4 sm:p-6">
               <header className="flex flex-wrap items-start justify-between gap-3">
-                <div><div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-extrabold">{title}</h2>{hasUnreadUpdate && <button type="button" onClick={() => s.markBookingNotificationsRead(booking.id)} className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-[10px] font-extrabold text-red-700 hover:bg-red-100"><span className="h-2 w-2 rounded-full bg-red-500"/>New update · Mark viewed</button>}</div><p className="text-sm font-semibold text-slate-500">{bookingSubtitle}</p></div>
+                <div><h2 className="text-lg font-extrabold">{title}</h2><p className="text-sm font-semibold text-slate-500">{bookingSubtitle}</p></div>
                 <div className="flex flex-wrap items-center gap-2">
                   {canReschedule && <Button size="sm" variant="secondary" onClick={() => {
                     const proposal = booking.rescheduleProposal;
