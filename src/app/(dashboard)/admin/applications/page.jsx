@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useMemo, useState } from "react";
 import { Alert, Badge, Button, Card, Empty, Field, FilterPopover, FilterTrigger, Input, Modal, PageHeader, Tabs, Textarea } from "@/components/ui";
-import { fmtDate, fmtDateTime, todayISO } from "@/lib/dates";
+import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { openPdfDataUrl } from "@/lib/files";
 import { useStore } from "@/lib/store";
 export default function Applications({ embedded = false } = {}) {
@@ -15,18 +15,11 @@ export default function Applications({ embedded = false } = {}) {
     const [search, setSearch] = useState("");
     const [filterOpen, setFilterOpen] = useState(false);
     const [sort, setSort] = useState("name-asc");
-    const [reassignTarget, setReassignTarget] = useState(null);
-    const [reassigning, setReassigning] = useState(false);
-    const [reassignMessage, setReassignMessage] = useState(null);
     const tutors = s.db.tutors;
     const newApps = tutors.filter((t) => t.applicantType === "new" && ["pending_review", "interview"].includes(t.status));
     const existing = tutors.filter((t) => t.status === "pending_verification");
     const email = useCallback((id) => s.db.users.find((u) => u.id === id)?.email, [s.db.users]);
     const tabList = tab === "new" ? newApps : tab === "existing" ? existing : tutors;
-    const upcomingSessionCount = (tutorId) => s.db.sessions.filter((session) => session.tutorId === tutorId && session.status === "scheduled" && session.date >= todayISO()).length + s.db.bookings.filter((booking) => booking.program === "playgroup" && ["approved", "confirmed", "to_pay", "awaiting_payment_approval"].includes(booking.status)).reduce((total, booking) => {
-      const cohort = s.db.cohorts.find((entry) => entry.id === booking.cohortId);
-      return total + (booking.dates || []).filter((date) => date >= todayISO() && !booking.reassignmentPendingDates?.[date] && (booking.tutorAssignments?.[date] || cohort?.weekdayTutorIds?.[new Date(`${date}T12:00:00`).getDay()] || booking.tutorId) === tutorId).length;
-    }, 0);
     const list = useMemo(() => [...tabList].sort((a, b) => {
       if (sort === "name-asc" || sort === "name-desc") {
         const result = String(a.fullName || "").localeCompare(String(b.fullName || ""), undefined, { sensitivity: "base" });
@@ -56,7 +49,6 @@ export default function Applications({ embedded = false } = {}) {
           </FilterPopover>}
         </div>
       </div>
-      {reassignMessage && <div className="mb-4"><Alert kind={reassignMessage.kind}>{reassignMessage.text}</Alert></div>}
       {list.length === 0 ? (<Empty>Nothing to review.</Empty>) : (<div className="grid gap-4 md:grid-cols-2">
           {list.map((t) => (<Card key={t.userId} className="space-y-2">
               <div className="flex items-start justify-between">
@@ -98,27 +90,10 @@ export default function Applications({ embedded = false } = {}) {
                     <Button size="sm" variant="danger" onClick={() => setReject(t)}>Reject / request corrections</Button>
                   </>)}
                 {t.status === "rejected" && (<Button size="sm" variant="secondary" onClick={() => s.verifyExistingTutor(t.userId, true)}>Reactivate</Button>)}
-                {t.status === "active" && tab === "all" && <Button size="sm" variant="secondary" disabled={upcomingSessionCount(t.userId) === 0} onClick={() => { setReassignMessage(null); setReassignTarget(t); }}>Reassign all sessions</Button>}
                 {t.status === "active" && (<Button size="sm" variant="secondary" onClick={() => setReject(t)}>Deactivate</Button>)}
               </div>
             </Card>))}
         </div>)}
-
-      <Modal open={!!reassignTarget} onClose={() => !reassigning && setReassignTarget(null)} title="Reassign tutor sessions">
-        {reassignTarget && <div className="space-y-4 text-sm text-slate-600">
-          <p>Flag all {upcomingSessionCount(reassignTarget.userId)} upcoming scheduled session(s) handled by <b>{reassignTarget.fullName}</b> for reassignment?</p>
-          <p>They will appear in the Calendar’s reassignment queue. Their current dates and times will stay the same until an admin assigns another tutor.</p>
-          <div className="flex justify-end gap-2"><Button variant="secondary" disabled={reassigning} onClick={() => setReassignTarget(null)}>Cancel</Button><Button disabled={reassigning || upcomingSessionCount(reassignTarget.userId) === 0} onClick={async () => {
-            setReassigning(true);
-            const result = await s.flagTutorSessionsForReassignment(reassignTarget.userId);
-            setReassigning(false);
-            setReassignTarget(null);
-            setReassignMessage(result.ok
-              ? { kind: result.count ? "success" : "info", text: result.count ? `${result.count} session(s) flagged for reassignment. Manage them in Calendar.` : "This tutor has no upcoming scheduled sessions to reassign." }
-              : { kind: "error", text: result.error || "Sessions could not be flagged for reassignment." });
-          }}>{reassigning ? "Flagging…" : "Reassign all sessions"}</Button></div>
-        </div>}
-      </Modal>
 
       <Modal open={!!interview} onClose={() => setInterview(null)} title={`Interview: ${interview?.fullName}`}>
         <div className="space-y-4">

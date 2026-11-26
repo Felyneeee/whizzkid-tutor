@@ -104,7 +104,7 @@ export default function AdminProfilePage() {
 
     {editing ? <section className="relative mt-28 rounded-2xl bg-white px-6 pb-8 pt-6 shadow-sm sm:px-12">
       <div className="absolute -top-24 left-1/2 -translate-x-1/2"><Avatar photo={form.photo} onChange={changePhoto}/></div>
-      <div className="mb-10 flex justify-end gap-3"><Button disabled={saving} onClick={cancel} className="min-w-32 rounded-2xl bg-slate-200 text-slate-700 hover:bg-slate-300">Cancel</Button><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
+      <div className="mb-10 flex flex-wrap items-center justify-center gap-2 sm:justify-end"><Button size="sm" disabled={saving} onClick={cancel} className="rounded-2xl bg-slate-200 text-slate-700 hover:bg-slate-300">Cancel</Button><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
       <div className="border-l-4 border-slate-100 pl-5 sm:pl-6">
         <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
           <Field label="Full name"><Input value={form.fullName} onChange={set("fullName")} className="rounded-2xl py-3"/></Field>
