@@ -93,7 +93,6 @@ export default function Home() {
         <div className="relative z-10 max-w-xl pb-4 md:pb-10">
           <h1 className="text-4xl font-extrabold leading-[1.03] tracking-tight text-slate-900 sm:text-5xl lg:text-[3.35rem]">Where little <span className="text-brand-600">Whizzes</span><br/>grow big.</h1>
           <p className="mt-5 max-w-lg text-base leading-6 text-slate-700 sm:text-lg sm:leading-7">We create a nurturing space where young minds can explore their potential, build confidence, and discover the joy of learning every step of the way.</p>
-          {!user && s.ready && <div className="mt-7 flex flex-wrap gap-4"><Link href="/register/tutee"><Button size="md" className="min-w-48 rounded-2xl !px-8 !py-3.5 text-base">Enroll</Button></Link><Link href="/register/tutor"><Button variant="secondary" className="min-w-48 rounded-2xl border-2 border-slate-300 !px-8 !py-3.5 text-base">Apply</Button></Link></div>}
         </div>
         <div aria-hidden="true" className="min-h-36 md:min-h-72"/>
       </section>

@@ -7,7 +7,7 @@ import { mysqlPool } from "@/server/mysql";
 import { persistRelationalState } from "@/server/relational-state";
 import { isValidPdfDataUrl } from "@/lib/resumes";
 import { GRADE_LEVELS, HOURS, SUBJECTS } from "@/lib/constants";
-import { nowISO, todayISO, uid } from "@/lib/dates";
+import { ageFromBirthday, ageMonthsFromBirthday, nowISO, todayISO, uid } from "@/lib/dates";
 import { expandBookingDates, matchTutors, slotRequestable } from "@/lib/logic";
 import { queueCompletedReadingBookings } from "../reading-bookings";
 import { readJson, RequestBodyError } from "@/server/request-guards";
@@ -96,10 +96,37 @@ export async function POST(request) {
       return NextResponse.json({ error: permission.error }, { status: 403 });
     }
     if (body.action === "saveTutorProfile") {
-      const resumeData = permission.args[1]?.resumeData;
+      const profile = permission.args[1] || {};
+      const ageMonths = ageMonthsFromBirthday(profile.birthday);
+      const age = profile.birthday && ageMonths !== null ? ageFromBirthday(profile.birthday) : null;
+      if (age === null || age < 20 || age > 60) {
+        await connection.rollback();
+        return NextResponse.json({ error: "Tutors must be between 20 and 60 years old." }, { status: 400 });
+      }
+      profile.age = age;
+      const resumeData = profile.resumeData;
       if (resumeData && !isValidPdfDataUrl(resumeData)) {
         await connection.rollback();
         return NextResponse.json({ error: "Upload a valid PDF resume no larger than 1.5 MB." }, { status: 400 });
+      }
+    }
+    if (body.action === "saveTuteeProfile") {
+      const profile = permission.args[1] || {};
+      const ageMonths = ageMonthsFromBirthday(profile.birthday);
+      if (ageMonths === null || ageMonths < 32) {
+        await connection.rollback();
+        return NextResponse.json({ error: "Children must be at least 2 years and 8 months old to enroll." }, { status: 400 });
+      }
+    }
+    if (body.action === "bookPlaygroup" || body.action === "requestAssessment" || body.action === "submitTutorialBooking") {
+      const tuteeId = permission.args[0]?.tuteeId || permission.args[0];
+      const tutee = state.tutees.find((entry) => entry.userId === tuteeId);
+      const ageMonths = ageMonthsFromBirthday(tutee?.birthday);
+      const program = body.action === "bookPlaygroup" ? "playgroup" : body.action === "requestAssessment" ? "reading" : permission.args[0]?.program;
+      const minimumMonths = program === "playgroup" ? 32 : 36;
+      if (ageMonths === null || ageMonths < minimumMonths) {
+        await connection.rollback();
+        return NextResponse.json({ error: program === "playgroup" ? "Playgroup enrollment starts at age 2 years and 8 months." : "Academic and Reading programs are available from age 3." }, { status: 400 });
       }
     }
     if (body.action === "saveAdminProfile") {
@@ -160,7 +187,7 @@ export async function POST(request) {
         && (booking.sessionType === undefined || ["one-on-one", "group"].includes(booking.sessionType))
         && (booking.program !== "reading" || !booking.sessionType || booking.sessionType === "one-on-one")
         && Array.isArray(booking.dates) && booking.dates.length > 0 && booking.dates.length <= 60
-        && booking.dates.every((date) => validDate(date) && date >= todayISO())
+        && booking.dates.every((date) => validDate(date) && date > todayISO())
         && new Set(booking.dates).size === booking.dates.length
         && (booking.program === "academic" ? booking.dates.every((date) => HOURS.includes(booking.sessionTimes?.[date]) && booking.subjects.includes(booking.sessionSubjects?.[date])) : HOURS.includes(booking.time))
         && academicLimitValid()

@@ -53,8 +53,8 @@ export default function RegisterTutor({ initialType = "new" }) {
                 return setErr("Password must be at least 12 characters.");
             if (f.password !== confirm)
                 return setErr("Passwords do not match.");
-            if (calculatedAge === null || calculatedAge < 18 || calculatedAge > 80)
-                return setErr("Enter a birthday that makes you between 18 and 80 years old.");
+            if (calculatedAge === null || calculatedAge < 20 || calculatedAge > 60)
+                return setErr("Enter a birthday that makes you between 20 and 60 years old.");
             if (!subjects.length || !bands.length)
                 return setErr("Pick at least one subject and one grade band.");
             if (type === "new" && !resume.data)
@@ -99,7 +99,7 @@ export default function RegisterTutor({ initialType = "new" }) {
           <Field label="Confirm password">
             <div className="relative"><Input type={showConfirm ? "text" : "password"} required minLength={12} value={confirm} onChange={(e) => setConfirm(e.target.value)} className="pr-11"/><button type="button" onClick={() => setShowConfirm((visible) => !visible)} className="absolute inset-y-0 right-0 grid w-10 place-items-center text-slate-700" aria-label={showConfirm ? "Hide password" : "Show password"}>{showConfirm ? <Eye className="h-4 w-4"/> : <EyeOff className="h-4 w-4"/>}</button></div>
           </Field>
-          <Field label="Birthday">
+          <Field label="Birthday" hint="Tutors must be between 20 and 60 years old.">
             <Input type="date" required max={todayISO()} value={f.birthday} onChange={set("birthday")}/>
           </Field>
           <Field label="Contact number">

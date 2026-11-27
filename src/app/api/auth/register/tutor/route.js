@@ -4,6 +4,7 @@ import { hashPassword, issueSession } from "@/server/auth";
 import { mysqlPool } from "@/server/mysql";
 import { isValidPdfDataUrl } from "@/lib/resumes";
 import { checkRateLimit, readJson, RequestBodyError } from "@/server/request-guards";
+import { ageFromBirthday, ageMonthsFromBirthday } from "@/lib/dates";
 export const runtime = "nodejs";
 export async function POST(request) {
     let connection;
@@ -19,8 +20,10 @@ export async function POST(request) {
         const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
         const contact = typeof body.contact === "string" ? body.contact.trim() : "";
         const applicantType = body.applicantType === "existing" ? "existing" : "new";
-        const age = Number.isInteger(body.age) && body.age >= 18 && body.age <= 80 ? body.age : null;
         const birthday = typeof body.birthday === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.birthday) ? body.birthday : null;
+        const ageMonths = birthday ? ageMonthsFromBirthday(birthday) : null;
+        const calculatedAge = birthday && ageMonths !== null ? ageFromBirthday(birthday) : null;
+        const age = calculatedAge !== null && calculatedAge >= 20 && calculatedAge <= 60 ? calculatedAge : null;
         const photo = typeof body.photo === "string" ? body.photo : "";
         const resumeName = typeof body.resumeName === "string" ? body.resumeName.slice(0, 255) : "";
         const resumeData = typeof body.resumeData === "string" ? body.resumeData : "";

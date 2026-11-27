@@ -7,7 +7,7 @@ import { Calendar } from "@/components/Calendar";
 import { TutorialBooking } from "@/components/TutorialBooking";
 import { Alert, Badge, Button, Card, Chips, Field, PageHeader, ProgramIcon, Select, Textarea, cn, peso } from "@/components/ui";
 import { PLAYGROUP_SESSION_RATE, PROGRAMS, READING_SKILLS, SUBJECTS } from "@/lib/constants";
-import { addMonths, assessmentExpiresAt, fmtDate, fmtTime, isAssessmentOutdated, parseISO, todayISO } from "@/lib/dates";
+import { addMonths, ageMonthsFromBirthday, assessmentExpiresAt, fmtDate, fmtTime, isAssessmentOutdated, todayISO } from "@/lib/dates";
 import { cohortSessionDates } from "@/lib/logic";
 import { useStore } from "@/lib/store";
 import { loadStateWhenRevisionChanges } from "@/lib/state-revision";
@@ -23,13 +23,6 @@ const gradeLevelForBooking = (grade) => ({
     Preschool: "Kinder",
     Kinder: "Kinder",
 }[grade] || (GRADE_CHOICES.includes(grade) && grade.startsWith("Grade ") ? grade : ""));
-function ageMonths(bday) {
-    if (!bday)
-        return null;
-    const b = parseISO(bday);
-    const n = new Date();
-    return (n.getFullYear() - b.getFullYear()) * 12 + (n.getMonth() - b.getMonth()) - (n.getDate() < b.getDate() ? 1 : 0);
-}
 function ModalityPicker({ value, onChange }) {
     return (<div className="grid grid-cols-2 gap-2">
       {["online", "face-to-face"].map((m) => (<button key={m} type="button" onClick={() => onChange(m)} className={cn("rounded-xl border-2 p-3 text-sm font-bold capitalize", value === m ? "border-brand-500 bg-brand-50" : "border-slate-200")}>
@@ -87,6 +80,8 @@ function AcademicFlow() {
     const s = useStore();
     const id = s.me.id;
     const profile = s.db.tutees.find((t) => t.userId === id);
+    const ageMonths = ageMonthsFromBirthday(profile.birthday);
+    const eligibleByAge = ageMonths !== null && ageMonths >= 36;
     const [subjects, setSubjects] = useState([SUBJECTS[0]]);
     const [grade, setGrade] = useState(gradeChoiceForProfile(profile.gradeLevel));
     const [modality, setModality] = useState("online");
@@ -97,6 +92,7 @@ function AcademicFlow() {
         return <TutorialBooking params={params} tuteeId={id} onBack={() => setParams(null)}/>;
     return (<Card className="max-w-2xl space-y-4">
       <h2 className="text-lg font-extrabold">Academic Tutorials</h2>
+      {!eligibleByAge && <Alert kind="warn">Academic tutorials are available from age 3. Update the child’s birthday in the profile when eligible.</Alert>}
       <Field label="Subjects">
         <Chips options={SUBJECTS} value={subjects} multi onChange={(next) => setSubjects(next.slice(0, 5))}/>
       </Field>
@@ -115,7 +111,7 @@ function AcademicFlow() {
       <Field label="Learning needs / areas of difficulty">
         <Textarea value={needs} onChange={(e) => setNeeds(e.target.value)} placeholder="e.g. struggles with fractions, needs help with reading comprehension…"/>
       </Field>
-      <Button disabled={!grade || !subjects.length} onClick={() => setParams({ program: "academic", subject: subjects[0], subjects, gradeLevel: gradeLevelForBooking(grade), modality, sessionType, learningNeeds: needs })}>Proceed to booking & matching</Button>
+      <Button disabled={!eligibleByAge || !grade || !subjects.length} onClick={() => setParams({ program: "academic", subject: subjects[0], subjects, gradeLevel: gradeLevelForBooking(grade), modality, sessionType, learningNeeds: needs })}>Proceed to booking & matching</Button>
     </Card>);
 }
 /* ---------------- Reading ---------------- */
@@ -131,8 +127,8 @@ function ReadingFlow() {
     const [params, setParams] = useState(null);
     const [modality, setModality] = useState("online");
     const [needs, setNeeds] = useState("");
-    const age = profile.age;
-    const ageWarn = age !== null && (age < 3 || age > 15);
+    const ageMonths = ageMonthsFromBirthday(profile.birthday);
+    const eligibleByAge = ageMonths !== null && ageMonths >= 36;
     if (params)
         return <TutorialBooking params={params} tuteeId={id} onBack={() => setParams(null)}/>;
     if (booking) {
@@ -143,13 +139,13 @@ function ReadingFlow() {
     return (<div className="space-y-4">
       <Card>
         <h2 className="text-lg font-extrabold">Reading Programs</h2>
-        {ageWarn && <div className="mt-3"><Alert kind="warn">Reading Programs are for ages 3–15; your child is {age}. You can still book — the admin will review.</Alert></div>}
+        {!eligibleByAge && <div className="mt-3"><Alert kind="warn">Reading Programs are available from age 3. Update the child’s birthday in the profile when eligible.</Alert></div>}
         {latestCompletedAssessment && <div className="mt-3"><Alert kind={assessmentOutdated ? "warn" : "success"}>{assessmentOutdated ? "Your initial assessment is outdated. A new assessment will be scheduled with this booking and must be completed before tutor matching." : `Your initial assessment is current through ${assessmentExpiresAt(latestCompletedAssessment) ? fmtDate(assessmentExpiresAt(latestCompletedAssessment).toISOString().slice(0, 10)) : "—"}. You can book without retaking it.`}</Alert></div>}
       </Card>
       <Card className="max-w-xl space-y-4">
         <Field label="Modality"><ModalityPicker value={modality} onChange={setModality}/></Field>
         <Field label="Reading goals or areas of concern" hint={`Areas include: ${READING_SKILLS.join(", ")}`}><Textarea value={needs} onChange={(e) => setNeeds(e.target.value)} placeholder="Tell us what your child would like help with…"/></Field>
-        <Button disabled={!gradeLevelForBooking(gradeChoiceForProfile(profile.gradeLevel))} onClick={() => setParams({ program: "reading", subject: "Reading", gradeLevel: gradeLevelForBooking(gradeChoiceForProfile(profile.gradeLevel)), modality, learningNeeds: needs })}>Choose schedule</Button>
+        <Button disabled={!eligibleByAge || !gradeLevelForBooking(gradeChoiceForProfile(profile.gradeLevel))} onClick={() => setParams({ program: "reading", subject: "Reading", gradeLevel: gradeLevelForBooking(gradeChoiceForProfile(profile.gradeLevel)), modality, learningNeeds: needs })}>Choose schedule</Button>
       </Card>
     </div>);
 }
@@ -161,8 +157,8 @@ function PlaygroupFlow() {
     const [selectedCohortId, setSelectedCohortId] = useState("");
     const [msg, setMsg] = useState(null);
     const [confirmation, setConfirmation] = useState(null);
-    const months = ageMonths(profile.birthday);
-    const eligible = months !== null && months >= 34 && months < 60; // 2.8 – 4.x yrs
+    const months = ageMonthsFromBirthday(profile.birthday);
+    const eligible = months !== null && months >= 32 && months < 60; // 2 years 8 months – under 5
     const today = todayISO();
     const bookingDeadline = addMonths(today, 1);
     const myPlaygroupBookings = s.db.bookings
@@ -232,7 +228,7 @@ function PlaygroupFlow() {
         <p className="mt-1 text-sm text-slate-600">Reserve one slot in a six-student cohort. The slot covers all 12 Monday, Wednesday and Friday sessions over four weeks.</p>
         {!eligible && (<div className="mt-3">
             <Alert kind="warn">
-              {months === null ? "Add your child's birthday in the profile to check eligibility." : `Playgroup is for ages 2.8–4. Your child is ${(months / 12).toFixed(1)} years old, so booking is disabled.`}
+              {months === null ? "Add a valid birthday in the profile to check eligibility." : `Playgroup enrollment is for children from 2 years and 8 months up to age 5. Your child does not meet the age requirement yet.`}
             </Alert>
           </div>)}
       </Card>

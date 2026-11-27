@@ -4,7 +4,7 @@ import Image from "next/image";
 import { Check, Pencil, UserRound, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Alert, Button, Field, Input, Select } from "@/components/ui";
-import { ageFromBirthday } from "@/lib/dates";
+import { ageFromBirthday, ageMonthsFromBirthday } from "@/lib/dates";
 import { readFileAsDataURL } from "@/lib/files";
 import { useStore } from "@/lib/store";
 
@@ -76,6 +76,11 @@ export default function TuteeProfile() {
   const birthday = f.birthday ? new Date(`${f.birthday}T00:00:00`).toLocaleDateString("en-US") : "Not provided";
 
   const save = async () => {
+    const ageMonths = ageMonthsFromBirthday(f.birthday);
+    if (ageMonths === null || ageMonths < 32) {
+      setError("Children must be at least 2 years and 8 months old to enroll.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -107,7 +112,7 @@ export default function TuteeProfile() {
       <div className="mb-6 mt-14 flex justify-center gap-3 sm:hidden"><Button disabled={saving} onClick={cancel} className="min-w-32 rounded-2xl bg-slate-200 text-slate-700 hover:bg-slate-300">Cancel</Button><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-brand-600 hover:bg-brand-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
       <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
         <Field label="Name"><Input required value={f.fullName} onChange={set("fullName")} className="rounded-2xl py-3"/></Field>
-        <Field label="Birthday"><Input type="date" required value={f.birthday} onChange={set("birthday")} className="rounded-2xl py-3"/></Field>
+        <Field label="Birthday" hint="Children must be at least 2 years and 8 months old to enroll."><Input type="date" required value={f.birthday} onChange={set("birthday")} className="rounded-2xl py-3"/></Field>
         <Field label="Grade level"><Select required value={f.gradeLevel} onChange={set("gradeLevel")} className="rounded-2xl py-3"><option value="">Select…</option>{GRADE_CHOICES.map((grade) => <option key={grade}>{grade}</option>)}</Select></Field>
         <Field label="Contact number"><Input required value={f.contact} onChange={set("contact")} className="rounded-2xl py-3"/></Field>
         <div className="sm:col-span-2"><Field label="Parent / guardian name"><Input value={f.guardianName} onChange={set("guardianName")} className="rounded-2xl py-3"/></Field></div>

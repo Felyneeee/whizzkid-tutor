@@ -90,6 +90,11 @@ export default function TutorProfilePage() {
   };
 
   const save = async () => {
+    const calculatedAge = f.birthday ? ageFromBirthday(f.birthday) : null;
+    if (calculatedAge === null || calculatedAge < 20 || calculatedAge > 60) {
+      setMsg({ kind: "error", text: "Tutors must be between 20 and 60 years old." });
+      return;
+    }
     setSaving(true);
     setMsg(null);
     try {
@@ -127,7 +132,7 @@ export default function TutorProfilePage() {
           <Field label="Full name"><Input value={f.fullName} onChange={set("fullName")} className="rounded-2xl py-3"/></Field>
           <Field label="Age"><Input type="number" value={f.age} onChange={set("age")} className="rounded-2xl py-3"/></Field>
           <Field label="Contact"><Input value={f.contact} onChange={set("contact")} className="rounded-2xl py-3"/></Field>
-          <Field label="Birthday"><Input type="date" value={f.birthday} onChange={set("birthday")} className="rounded-2xl py-3"/></Field>
+          <Field label="Birthday" hint="Tutors must be between 20 and 60 years old."><Input type="date" value={f.birthday} onChange={set("birthday")} className="rounded-2xl py-3"/></Field>
         </div>
         <div className="mt-5 space-y-5">
           <Field label="Subject expertise"><Chips multi options={[...SUBJECTS, "Reading"]} value={subjects} onChange={setSubjects}/></Field>

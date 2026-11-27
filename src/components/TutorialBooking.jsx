@@ -223,8 +223,8 @@ export function TutorialBooking({ params, tuteeId, onBack }) {
         <Calendar selected={dates} onSelect={toggleDay} isDisabled={(date) => {
           const day = weekday(date);
           const selected = selectedDays.includes(day);
-          return weeks === null || date < todayISO() || date > bookingDeadline || day === 0 || (start && (date < start || date > end)) || (!selected && !calendarDateAvailable(date));
-        }} mark={(date) => weeks !== null && weekday(date) !== 0 && (!start || (date >= start && date <= end)) && calendarDateAvailable(date) ? { text: "open", tone: "mint" } : null}/>
+          return weeks === null || date <= todayISO() || date > bookingDeadline || day === 0 || (start && (date < start || date > end)) || (!selected && !calendarDateAvailable(date));
+        }} mark={(date) => date <= todayISO() ? { text: "closed", tone: "slate" } : weeks !== null && weekday(date) !== 0 && (!start || (date >= start && date <= end)) && calendarDateAvailable(date) ? { text: "open", tone: "mint" } : null}/>
         <div className="space-y-4">
           <Field label="First day"><Input type="date" value={firstDate} readOnly/>{weeks !== null && !firstDate && <p className="mt-1 text-xs text-red-600">Select a weekday on the calendar to set the first day.</p>}</Field>
           <Field label="Last day"><Input type="date" value={lastDate} readOnly/>{weeks !== null && !lastDate && <p className="mt-1 text-xs text-red-600">The last day will appear after you select a weekday.</p>}</Field>

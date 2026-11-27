@@ -76,6 +76,14 @@ export const ageFromBirthday = (bday) => {
         age--;
     return age;
 };
+export const ageMonthsFromBirthday = (bday, now = new Date()) => {
+    if (!bday || !/^\d{4}-\d{2}-\d{2}$/.test(bday))
+        return null;
+    const b = parseISO(bday);
+    if (Number.isNaN(b.getTime()) || toISO(b) !== bday || b > now)
+        return null;
+    return (now.getFullYear() - b.getFullYear()) * 12 + (now.getMonth() - b.getMonth()) - (now.getDate() < b.getDate() ? 1 : 0);
+};
 export const isBirthdayToday = (bday) => {
     if (!bday)
         return false;
