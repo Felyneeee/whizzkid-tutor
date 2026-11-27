@@ -1,7 +1,7 @@
 import "./globals.css";
 import { StoreProvider } from "@/lib/store";
 export const metadata = {
-    title: "Whizzkids Academic Center",
+    title: "TooTee Academic Center",
     description: "Playgroup, Reading Programs and Academic Tutorials — online and face-to-face.",
 };
 export default function RootLayout({ children }) {

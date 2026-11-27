@@ -71,10 +71,10 @@ export const PROGRAMS = {
     },
 };
 export const CENTER = {
-    name: "Whizzkids Academic Center",
-    address: "Kalayaan Rd, Barangay San Sebastian, Kawit, 4104 Cavite",
-    phone: "0956-567-1315",
-    email: "whizzkids2022@gmail.com",
+    name: "TooTee Academic Center",
+    address: "Buhay na Tubig, Imus, 4103 Cavite",
+    phone: "0945-413-4851",
+    email: "TooTee@gmail.com",
     hours: "Mon–Sat, 9:00 AM – 6:00 PM",
 };
 export const FAQS = [

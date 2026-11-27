@@ -95,7 +95,7 @@ export function DashboardShell({ role, nav, children, gate }) {
       <header className="sticky top-3 z-40 mx-auto flex min-h-[76px] w-full max-w-6xl items-center justify-between gap-3 rounded-2xl bg-white/95 px-5 text-slate-600 shadow-[0_12px_35px_rgba(50,72,110,0.09)] sm:px-8">
         <div className="flex shrink-0 items-center gap-2">
           <button className="rounded-lg p-2 hover:bg-slate-100 lg:hidden" onClick={() => setMenuState({ path, open: !open })} aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open}>{open ? <X className="h-5 w-5"/> : <Menu className="h-5 w-5"/>}</button>
-          <Link href="/" aria-label="Whizzkids home"><Logo className="text-lg sm:text-xl"/></Link>
+          <Link href="/" aria-label="TooTee home"><Logo className="text-lg sm:text-xl"/></Link>
         </div>
         <nav className="hidden flex-1 items-center justify-center gap-7 text-sm font-bold text-slate-600 md:flex lg:gap-10" aria-label="Main navigation">
           <Link href="/" className="hover:text-brand-600">Home</Link><Link href="/#about" className="hover:text-brand-600">About</Link><Link href="/#faqs" className="hover:text-brand-600">FAQs</Link><Link href="/#contact" className="hover:text-brand-600">Contacts</Link>

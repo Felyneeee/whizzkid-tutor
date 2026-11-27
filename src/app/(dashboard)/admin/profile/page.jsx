@@ -104,7 +104,7 @@ export default function AdminProfilePage() {
 
     {editing ? <section className="relative mt-28 rounded-2xl bg-white px-6 pb-8 pt-6 shadow-sm sm:px-12">
       <div className="absolute -top-24 left-1/2 -translate-x-1/2"><Avatar photo={form.photo} onChange={changePhoto}/></div>
-      <div className="mb-10 flex flex-wrap items-center justify-center gap-2 sm:justify-end"><Button size="sm" disabled={saving} onClick={cancel} className="rounded-2xl bg-slate-200 text-slate-700 hover:bg-slate-300">Cancel</Button><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
+      <div className="mb-10 flex flex-wrap items-center justify-center gap-2 sm:justify-end"><Button size="sm" disabled={saving} onClick={cancel} className="rounded-2xl bg-slate-200 text-slate-700 hover:bg-slate-300">Cancel</Button><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-brand-600 hover:bg-brand-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
       <div className="border-l-4 border-slate-100 pl-5 sm:pl-6">
         <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
           <Field label="Full name"><Input value={form.fullName} onChange={set("fullName")} className="rounded-2xl py-3"/></Field>
@@ -116,9 +116,9 @@ export default function AdminProfilePage() {
       {error && <div className="mt-5"><Alert kind="error">{error}</Alert></div>}
     </section> : <section className="relative mt-24 rounded-2xl bg-white shadow-sm">
       <div className="absolute -top-16 left-1/2 -translate-x-1/2"><Avatar photo={form.photo} onChange={changePhoto}/></div>
-      <div className="relative z-10 flex justify-end px-6 pt-6 sm:px-12"><Button onClick={() => setEditing(true)} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">Edit Profile</Button></div>
+      <div className="relative z-10 flex justify-end px-6 pt-6 sm:px-12"><Button onClick={() => setEditing(true)} className="min-w-44 rounded-2xl bg-brand-600 hover:bg-brand-700">Edit Profile</Button></div>
       <div className="px-6 pb-5 pt-12 text-center"><h2 className="text-2xl font-bold text-[#5d5b5a]">{form.fullName || "Administrator"}</h2><p className="mt-1 text-lg font-semibold text-slate-400">Admin</p></div>
-      <div className="rounded-b-2xl bg-blue-600 px-8 py-5 text-white sm:px-12">
+      <div className="rounded-b-2xl bg-brand-600 px-8 py-5 text-white sm:px-12">
         <p><b>Birthday:</b> <span className="ml-2">{birthdayLabel}</span></p>
         <p><b>Age:</b> <span className="ml-2">{age || "Not provided"}{age ? " y/o" : ""}</span></p>
         <p><b>Contact Number:</b> <span className="ml-2">{form.contact || "Not provided"}</span></p>

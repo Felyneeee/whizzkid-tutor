@@ -12,17 +12,17 @@ export async function POST(request) {
         if (!identifier || !password) {
             return NextResponse.json({ error: "Enter your email/username and password." }, { status: 400 });
         }
-        const ipLimit = rateLimitStatus(request, "login-ip", "all", 100, 15 * 60 * 1000);
+        const ipLimit = await rateLimitStatus(request, "login-ip", "all", 100, 15 * 60 * 1000);
         const normalizedIdentifier = identifier.trim().toLowerCase();
-        const accountLimit = rateLimitStatus(request, "login-account", normalizedIdentifier, 5, 15 * 60 * 1000);
+        const accountLimit = await rateLimitStatus(request, "login-account", normalizedIdentifier, 5, 15 * 60 * 1000);
         if (!ipLimit.allowed || !accountLimit.allowed) {
             const retryAfter = Math.max(ipLimit.retryAfter, accountLimit.retryAfter);
             return NextResponse.json({ error: "Too many login attempts. Try again later." }, { status: 429, headers: { "Retry-After": String(retryAfter) } });
         }
         const row = await findLoginUser(identifier);
         if (!row?.password_hash || !(await verifyPassword(password, row.password_hash))) {
-            checkRateLimit(request, "login-ip", "all", 100, 15 * 60 * 1000);
-            checkRateLimit(request, "login-account", normalizedIdentifier, 5, 15 * 60 * 1000);
+            await checkRateLimit(request, "login-ip", "all", 100, 15 * 60 * 1000);
+            await checkRateLimit(request, "login-account", normalizedIdentifier, 5, 15 * 60 * 1000);
             return NextResponse.json({ error: "Email/username or password is incorrect." }, { status: 401 });
         }
         await mysqlPool.query(

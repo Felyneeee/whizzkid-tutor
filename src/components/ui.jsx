@@ -185,7 +185,7 @@ export function Logo({ className }) {
     return (<span className={cn("inline-flex items-center gap-2 font-extrabold tracking-tight", className)}>
       <span className="grid h-9 w-9 place-items-center rounded-xl bg-sunny-400 shadow-sm"><GraduationCap className="h-5 w-5 text-slate-900" aria-hidden="true"/></span>
       <span>
-        Whizz<span className="text-brand-600">kids</span>
+        <span className="text-slate-950">Too</span><span className="text-brand-600">Tee</span>
       </span>
     </span>);
 }

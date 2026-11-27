@@ -3,6 +3,39 @@ import { createHash } from "node:crypto";
 const buckets = new Map();
 let requestsSinceCleanup = 0;
 
+const redisScript = `
+local current = tonumber(redis.call('GET', KEYS[1]) or '0')
+if ARGV[1] == 'increment' then
+  current = redis.call('INCR', KEYS[1])
+  if current == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[2]) end
+end
+local ttl = redis.call('PTTL', KEYS[1])
+if ttl < 0 then ttl = tonumber(ARGV[2]) end
+return { current, ttl }
+`;
+
+async function sharedBucket(key, windowMs, increment) {
+  const url = process.env.UPSTASH_REDIS_REST_URL?.replace(/\/$/, "");
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("Shared rate limiting requires UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN.");
+    }
+    return null;
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(["EVAL", redisScript, "1", `whizzkids:rate:${key}`, increment ? "increment" : "read", String(windowMs)]),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Shared rate-limit store returned HTTP ${response.status}.`);
+  const payload = await response.json();
+  if (payload.error || !Array.isArray(payload.result)) throw new Error("Shared rate-limit store returned an invalid response.");
+  return { count: Number(payload.result[0]), retryAfter: Math.max(1, Math.ceil(Number(payload.result[1]) / 1000)) };
+}
+
 export class RequestBodyError extends Error {
   constructor(status, message) {
     super(message);
@@ -79,17 +112,22 @@ function getBucket(key, windowMs, now) {
   return bucket;
 }
 
-export function rateLimitStatus(request, scope, subject, limit, windowMs) {
+export async function rateLimitStatus(request, scope, subject, limit, windowMs) {
+  const digest = rateLimitKey(request, scope, subject);
+  const shared = await sharedBucket(digest, windowMs, false);
+  if (shared) return { allowed: shared.count < limit, retryAfter: shared.retryAfter };
   const now = Date.now();
-  const bucket = getBucket(rateLimitKey(request, scope, subject), windowMs, now);
+  const bucket = getBucket(digest, windowMs, now);
   return {
     allowed: bucket.count < limit,
     retryAfter: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)),
   };
 }
 
-export function checkRateLimit(request, scope, subject, limit, windowMs) {
+export async function checkRateLimit(request, scope, subject, limit, windowMs) {
   const digest = rateLimitKey(request, scope, subject);
+  const shared = await sharedBucket(digest, windowMs, true);
+  if (shared) return { allowed: shared.count <= limit, retryAfter: shared.retryAfter };
   const now = Date.now();
   const bucket = getBucket(digest, windowMs, now);
   bucket.count += 1;

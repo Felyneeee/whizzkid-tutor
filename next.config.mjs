@@ -1,8 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Allow phones on the local network to load Next.js dev assets and HMR.
-  allowedDevOrigins: ["192.168.254.104"],
+  // Allow phones on the local network and the current ngrok host to load
+  // Next.js dev assets and HMR.
+  allowedDevOrigins: ["192.168.254.104", "cycling-disposal-goldsmith.ngrok-free.dev"],
   async headers() {
     const headers = [
       { key: "X-Content-Type-Options", value: "nosniff" },

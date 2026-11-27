@@ -68,7 +68,7 @@ export default function Home() {
     <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-[42rem] bg-[position:68%_top] bg-cover bg-no-repeat md:bg-center" style={{ backgroundImage: "url('/bg.png')" }}/>
     <header className="relative z-30 mx-auto max-w-6xl px-4 pt-5 sm:pt-8">
       <div className="flex min-h-[76px] items-center justify-between gap-4 rounded-2xl bg-white/95 px-5 shadow-[0_12px_35px_rgba(50,72,110,0.09)] sm:px-8">
-        <Link href="/" aria-label="Whizzkids home"><Logo className="text-lg sm:text-xl"/></Link>
+        <Link href="/" aria-label="TooTee home"><Logo className="text-lg sm:text-xl"/></Link>
         <nav className="hidden items-center gap-7 text-sm font-bold text-slate-600 md:flex lg:gap-10" aria-label="Main navigation">
           <a href="#top" className="hover:text-brand-600">Home</a><a href="#about" className="hover:text-brand-600">About</a><a href="#faqs" className="hover:text-brand-600">FAQs</a><a href="#contact" className="hover:text-brand-600">Contacts</a>
         </nav>

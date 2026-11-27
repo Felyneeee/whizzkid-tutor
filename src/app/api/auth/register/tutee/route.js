@@ -8,7 +8,7 @@ export async function POST(request) {
     let connection;
     try {
         const body = await readJson(request, 16 * 1024);
-        const limit = checkRateLimit(request, "register-tutee", "all", 10, 60 * 60 * 1000);
+        const limit = await checkRateLimit(request, "register-tutee", "all", 10, 60 * 60 * 1000);
         if (!limit.allowed) {
             return NextResponse.json({ error: "Too many registration attempts. Try again later." }, { status: 429, headers: { "Retry-After": String(limit.retryAfter) } });
         }

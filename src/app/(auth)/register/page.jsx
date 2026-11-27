@@ -9,18 +9,18 @@ const choices = [
         href: "/register/tutee",
         title: "Register as a parent/tutee",
         description: "Enroll your child in Playgroup, Reading Program, or Academic Tutorials",
-        color: "border-blue-600 hover:bg-blue-50/50",
+        color: "border-brand-600 hover:bg-brand-50/50",
     },
     {
         href: "/register/tutor/activation",
         title: "Register as a tutor",
-        description: "Already an existing Whizzkids tutor? Register and wait for the verification of your account.",
+        description: "Already an existing TooTee tutor? Register and wait for the verification of your account.",
         color: "border-amber-400 hover:bg-amber-50/50",
     },
     {
         href: "/register/tutor/application",
         title: "Apply as a tutor",
-        description: "Apply as a new Whizzkids tutor.",
+        description: "Apply as a new TooTee tutor.",
         color: "border-black hover:bg-slate-50",
     },
 ];
@@ -30,7 +30,7 @@ export default function RegisterChoice() {
     return (<>
       <Card className="space-y-4 p-7 sm:p-8">
         <div className="mb-5">
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">Join Whizzkids</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight"><span className="text-slate-950">Join Too</span><span className="text-brand-600">Tee</span></h1>
           <p className="text-sm text-slate-500">Select which account to create:</p>
         </div>
         {choices.map((choice) => (

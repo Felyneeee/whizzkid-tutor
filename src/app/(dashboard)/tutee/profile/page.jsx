@@ -103,8 +103,8 @@ export default function TuteeProfile() {
 
     {editing ? <section className="relative mt-28 rounded-2xl bg-white px-6 pb-10 pt-6 shadow-sm sm:px-12">
       <div className="absolute -top-24 left-1/2 -translate-x-1/2"><Avatar photo={f.photo} onPhotoChange={changePhoto}/></div>
-      <div className="mb-8 hidden justify-end gap-3 sm:flex"><Button disabled={saving} onClick={cancel} className="min-w-32 rounded-2xl bg-slate-200 text-slate-700 hover:bg-slate-300">Cancel</Button><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
-      <div className="mb-6 mt-14 flex justify-center gap-3 sm:hidden"><Button disabled={saving} onClick={cancel} className="min-w-32 rounded-2xl bg-slate-200 text-slate-700 hover:bg-slate-300">Cancel</Button><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
+      <div className="mb-8 hidden justify-end gap-3 sm:flex"><Button disabled={saving} onClick={cancel} className="min-w-32 rounded-2xl bg-slate-200 text-slate-700 hover:bg-slate-300">Cancel</Button><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-brand-600 hover:bg-brand-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
+      <div className="mb-6 mt-14 flex justify-center gap-3 sm:hidden"><Button disabled={saving} onClick={cancel} className="min-w-32 rounded-2xl bg-slate-200 text-slate-700 hover:bg-slate-300">Cancel</Button><Button disabled={saving} onClick={save} className="min-w-44 rounded-2xl bg-brand-600 hover:bg-brand-700">{saving ? "Saving…" : "Save Profile"}</Button></div>
       <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
         <Field label="Name"><Input required value={f.fullName} onChange={set("fullName")} className="rounded-2xl py-3"/></Field>
         <Field label="Birthday"><Input type="date" required value={f.birthday} onChange={set("birthday")} className="rounded-2xl py-3"/></Field>
@@ -115,10 +115,10 @@ export default function TuteeProfile() {
       {error && <div className="mt-5"><Alert kind="error">{error}</Alert></div>}
     </section> : <section className="relative mt-24 rounded-2xl bg-white shadow-sm">
       <div className="absolute -top-16 left-1/2 -translate-x-1/2"><Avatar photo={f.photo} onPhotoChange={changePhoto}/></div>
-      <div className="relative z-10 hidden justify-end px-6 pt-6 sm:flex sm:px-12"><Button onClick={() => setEditing(true)} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">Edit Profile</Button></div>
+      <div className="relative z-10 hidden justify-end px-6 pt-6 sm:flex sm:px-12"><Button onClick={() => setEditing(true)} className="min-w-44 rounded-2xl bg-brand-600 hover:bg-brand-700">Edit Profile</Button></div>
       <div className="px-6 pb-5 pt-28 text-center sm:pt-12"><h2 className="text-2xl font-bold text-[#5d5b5a]">{f.fullName || "Student"}</h2><p className="mt-1 text-lg font-semibold text-slate-400">{f.gradeLevel || "Grade not set"}</p></div>
-      <div className="relative z-10 mb-5 flex justify-center px-6 sm:hidden"><Button onClick={() => setEditing(true)} className="min-w-44 rounded-2xl bg-blue-600 hover:bg-blue-700">Edit Profile</Button></div>
-      <div className="rounded-b-2xl bg-blue-600 px-8 py-5 text-white sm:px-12">
+      <div className="relative z-10 mb-5 flex justify-center px-6 sm:hidden"><Button onClick={() => setEditing(true)} className="min-w-44 rounded-2xl bg-brand-600 hover:bg-brand-700">Edit Profile</Button></div>
+      <div className="rounded-b-2xl bg-brand-600 px-8 py-5 text-white sm:px-12">
         <p><b>Birthday:</b> <span className="ml-2">{birthday}</span>{age !== null && <span className="ml-2">({age} y/o)</span>}</p>
         <p><b>Parent/Guardian Name:</b> <span className="ml-2">{f.guardianName || "Not provided"}</span></p>
         <p><b>Contact Number:</b> <span className="ml-2">{f.contact || "Not provided"}</span></p>

@@ -120,7 +120,7 @@ export function ChatView({ meId, isAdmin }) {
     if (!isAdmin) {
         return (<>
         <PageHeader title="Chat with Admin" subtitle="Messages are delivered instantly to the admin team."/>
-        <Thread threadId={meId} meId={meId} title="Whizzkids Admin"/>
+        <Thread threadId={meId} meId={meId} title="TooTee Admin"/>
       </>);
     }
     const roleTabs = ["All", "Unread"];
